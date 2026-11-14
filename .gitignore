@@ -1,0 +1,26 @@
+# build output
+probe/build/
+__pycache__/
+*.pyc
+
+# MechWarrior 5 assets (Piranha Games): never in the repository, never distributed
+cockpits/
+mw5export/
+*.mwc
+*.uasset
+*.gltf
+*.props.txt
+
+# third-party tools, downloaded separately
+tools/umodel/
+tools/fmodel/
+
+# diagnosis output from the game folder
+*.log
+*.bmp
+*.mp4
+*.dxbc
+*.cso
+mw4vr_dump_*
+mw4vr_frame_*.txt
+mw4vr_shots/

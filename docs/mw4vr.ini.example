@@ -1,0 +1,120 @@
+; MW4VR probe - eye offset experiment. Ctrl+F7 cycles: off -> right eye -> left eye -> alternating.
+; Read again every 2 seconds while the game runs.
+[eye]
+; distance of the eye from the centre in metres (real: 0.032; large values make the shift obvious)
+offset_m=10.0
+; which matrices are moved: meshes and terrain (Mlr), the deferred view (View), particles (Cards),
+; water reflections (Reflect)
+apply_mlr=1
+apply_view=1
+apply_cards=1
+apply_reflect=0
+; start mode: 0 off, 1 right, 2 left, 3 alternating
+mode=0
+
+[vr]
+; 1 = start OpenXR (active 32-bit runtime) and show the game as a stereo screen; the eyes alternate
+enabled=1
+; half the distance between the eyes in metres
+eye_offset_m=0.032
+; the screen in the headset: distance and width in metres
+screen_distance=2.5
+screen_width=4.0
+; distance between your eyes in metres: each eye's screen sits in front of that eye (infinity stays at infinity)
+ipd_m=0.064
+; apparent distance of the HUD and the 2D overlay in metres (0 = at infinity); Ctrl+PgUp farther, Ctrl+PgDn nearer, Ctrl+End infinity
+hud_distance_m=0.00
+; 1 = head tracking: the game camera follows the headset (Ctrl+Home recentres); 0 = the fixed stereo screen
+tracking=1
+; head movement in the game times this (1 = real size)
+world_scale=0.505
+; the rendered field of view: the headset's, times this (smaller = sharper, more culling margin)
+fov_scale=1.0
+; 1 = the head pose moves the game camera itself (culling, effects, target marks follow); 0 = matrices patched
+source_camera=1
+; 1 = the HUD as its own layer fixed to the mech: the middle (cross-hair, target marks) at hud_distance_m,
+; the top and bottom strips (panels, radar) at hud_panel_distance_m; hud_top / hud_bottom: where the strips end / begin (0..1 of the height)
+hud_layer=1
+hud_panel_distance_m=1.5
+hud_top=0.12
+hud_bottom=0.78
+; size of the top and bottom HUD strips against the game image (smaller = closer to the middle)
+hud_panel_scale=0.6
+; sides of the far middle (0..1 of the width); left and right of it the HUD is near, like the strips
+hud_left=0.25
+hud_right=0.72
+; zoomed in: the image is shown at this share of the full view (smaller = weaker zoom)
+zoom_scale=0.9
+; 1 = the near HUD frame (panels, radar) sways with the cockpit; hud_sway_gain: how much (1 = as the cockpit)
+hud_sway=1
+hud_sway_gain=1.0
+seat_forward_m=-0.60
+seat_up_m=0.00
+; the cockpit's size (Ctrl+Ins / Ctrl+Del): larger = the cockpit looks smaller; the world keeps its size.
+; world_scale (Ctrl+Shift+Ins / Del): larger = the whole world looks smaller, the ground nearer
+cockpit_scale=2.647
+; the cockpit is the CPU-path geometry nearer than this (game metres)
+cockpit_range_m=8.0
+; 1 = the older eye image is turned by what the mech turned since (less ghosting in fast turns)
+mech_reproject=1
+; the near HUD frame moved right / up, metres
+hud_panel_x_m=0
+hud_panel_y_m=0
+; the game renders at this height whatever the size of its window (the width follows the window's shape);
+; 0 = at the window's size. More pixels = sharper and slower. Read at the start
+render_height=2600
+; 1 = both eyes are drawn in every frame (no trails on moving things, no ghosting; costs GPU time);
+; 0 = the eyes alternate frame by frame
+double_draw=1
+; the zoom window's size against the game's picture (smaller = weaker zoom, less of the cockpit covered)
+zoom_window_scale=0.45
+; cockpit profiles (mw4vr_mechs.ini): each cockpit is recognised by its shape at the start of a battle and gets its own
+; cockpit scale, seat and HUD panel place. Ctrl+F10 = this cockpit fits as it is (becomes the measure for the others).
+; mech_auto_fit: cockpits not set by hand are fitted from those that are. 0 = the [vr] values for all
+mech_profiles=1
+mech_auto_fit=1
+
+; own cockpit mesh in place of the game's (mw4vr_cockpits\<name>.mwc, from MW5 via tools\cockpit_convert.py). Prototype.
+; Ctrl+F11 switches it on / off in a battle; mw5_on=1 starts with it on.
+; Ctrl+Alt+arrows: eye forward / back / up / down in the mesh (2 cm); Ctrl+Alt+PgUp / PgDn: its size (2 %)
+; mw5_emissive: brightness of lit displays; mw5_ambient: 0..1 base light; mw5_linear_output=1 if it looks washed out
+mw5_cockpit=arcticwolf
+mw5_on=0
+mw5_scale=1.000
+mw5_eye_right_m=0.000
+mw5_eye_up_m=0.000
+mw5_eye_forward_m=0.000
+mw5_emissive=1.5
+mw5_ambient=0.45
+mw5_linear_output=1
+mw5_reversed_depth=1
+; monitors of the MW5 cockpit show parts of the game HUD: u0 v0 u1 v1 of the HUD picture (0..1, origin top left)
+; Arctic Wolf: 0 left side, 1 left of centre, 2 centre, 3 right of centre, 4 right side. mw5_screens=0: old floating panels
+mw5_screens=1
+; with the monitors on: the torso mark (below the cross-hair) is cut out of the HUD picture (u0 v0 u1 v1)
+; and shown higher by hud_twist_shift (negative = up; 0 = leave it where it is)
+hud_twist_rect=0.42 0.585 0.58 0.665
+hud_twist_shift=-0.045
+; 1 = in a battle the cursor is kept inside the game's window (no loss of keyboard input at full stick)
+mouse_capture=1
+; diagnosis of things vanishing when the head turns (Ctrl+F6 cycles it in a battle, 1 / 2 / 3 beeps):
+; 0 = the game's camera back right after each picture (as before); 1 = the head's camera stays (HUD marks and
+; aiming may follow the head); 2 = the game's for the HUD, the head's again until the next picture
+cam_keep=0
+mw5_screen_gain=1.0
+; the game's HUD runs past the right edge of a square picture (weapon list, damage display): the HUD picture is
+; this much wider than the game's (1 = not). u beyond 1.000 in the rectangles below = beyond the game's right edge
+hud_extra_width=1.02
+; a monitor's second part: mw5_screen_<n>_alt = u0 v0 u1 v1 pu pv - shown instead while something is drawn at pu pv
+; of the HUD picture (monitor 0: the lance list with the open orders menu below it)
+mw5_screen_0_alt=0.000 0.000 0.243 0.435 0.210 0.125
+; share of the depth range kept for the own cockpit alone: the ground cannot cut through its floor (0 = off)
+mw5_depth_front=0.5
+mw5_screen_0=0.000 0.000 0.243 0.108
+mw5_screen_1=0.000 0.772 0.180 1.000
+mw5_screen_2=0.320 0.770 0.690 0.990
+mw5_screen_3=0.820 0.772 1.005 1.000
+mw5_screen_4=0.716 0.000 1.000 0.124
+
+; pictures for diagnosis into mw4vr_shots\ (both eyes side by side, and the HUD layer):
+; Ctrl+F12 one picture at full size; Ctrl+Shift+F12 a series for about 5 s (again to stop)
