@@ -1840,9 +1840,35 @@ static void hudWidePost(ID3D11DeviceContext *c) {
     ORIG(PFN_SetCB, c, VT_Ctx_VSSetConstantBuffers)(c, 0, 1, &prev);
 }
 
+// A small camera (the locked target's view, the zoom window) starts with the frame behind its window as
+// its backdrop: mw4hook's PS 3c49bfee copies the scene, twice as large, into the camera's own target. With
+// the HUD as a layer that is a piece of the eye's picture - the cockpit, moving with the head - behind the
+// target. The backdrop is black instead.
+static const uint64_t BACKDROP_PS = 0x3c49bfee1754587bull;
+static bool smallCamBackdrop(ID3D11DeviceContext *c) {
+    if (!g_hudLayerOn) return false;
+    CtxState *s = ctxOf(c);
+    if (s->foreign || s->deferred) return false;
+    ShaderInfo *sh = s->st[ST_PS].sh;
+    if (!sh || sh->hash != BACKDROP_PS) return false;
+    ID3D11RenderTargetView *rtv = nullptr;
+    c->OMGetRenderTargets(1, &rtv, nullptr);
+    if (!rtv) return false;
+    const float black[4] = {0, 0, 0, 1};
+    c->ClearRenderTargetView(rtv, black);
+    rtv->Release();
+    static bool told;
+    if (!told) {
+        told = true;
+        logf("hud: a small camera's backdrop (the frame behind its window) is black now");
+    }
+    return true;
+}
+
 template <int V> static void STDMETHODCALLTYPE HP_Draw(ID3D11DeviceContext *c, UINT a, UINT b) {
     onWork(c, "Draw", false);
     if (eyeHidden(c)) return;
+    if (smallCamBackdrop(c)) return;
     bool sw = eyeTlPre(c);
     if (sw && mechMeasuring()) mechDraw(c, false, a, b, 0);
     if (sw && g_mw5On) mw5Draw(c, (Mw5PFN_DrawIdx)g_tr[SL_DRAWIDX][V]);
@@ -2722,7 +2748,7 @@ BOOL WINAPI DllMain(HINSTANCE h, DWORD reason, LPVOID) {
         g_shlog = _wfsopen((g_dir + L"mw4vr_shaders.txt").c_str(), L"w", _SH_DENYNO);
         wchar_t exe[MAX_PATH];
         GetModuleFileNameW(nullptr, exe, MAX_PATH);
-        logf("mw4vr probe v11.13 (VR stage 5, both eyes per frame, camera head tracking, HUD layer, cockpit profiles, own cockpit mesh with HUD monitors, pictures) loaded into %s", narrow(exe).c_str());
+        logf("mw4vr probe v11.14 (VR stage 5, both eyes per frame, camera head tracking, HUD layer, cockpit profiles, own cockpit mesh with HUD monitors, pictures) loaded into %s", narrow(exe).c_str());
         if (!loadReal()) logf("ERROR: the system d3d11.dll could not be loaded");
     }
     return TRUE;
