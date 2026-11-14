@@ -43,7 +43,7 @@ static UINT g_m5HudW, g_m5HudH;
 static int g_m5Screens;
 static float g_m5Rect[MW5_SCREENS][4]; // u0 v0 u1 v1 of the HUD image; u1 <= u0: dark
 static float g_m5Alt[MW5_SCREENS][6];  // a second part (u0 v0 u1 v1) and its probe point (u v); u1 <= u0: none
-static float g_m5ScreenGain = 1;
+static float g_m5ScreenGain = 1, g_m5RedBoost = 4;
 static int g_mw5ScreensWanted = 1;
 
 static const char g_m5Hlsl[] = R"HLSL(
@@ -58,7 +58,7 @@ cbuffer C : register(b13) {
     float4 lamp;          // xyz: towards the lamp (mesh space); w: the share of the depth range kept for the mesh alone
     float4 par;           // emissive, ambient, linear output, > 0: a monitor
     float4 scr;           // a monitor: the part of the HUD image, u0 v0 u1 v1
-    float4 scr2;          // xy: the monitor's uv (about its middle) -> the part's (about its middle); z: gain
+    float4 scr2;          // xy: the monitor's uv (about its middle) -> the part's (about its middle); z: gain; w: dark red times this at most
     float4 alt;           // a second part, shown while the HUD image is not empty at the probe point (z <= x: none)
     float4 alt2;          // xy: as scr2.xy, for the second part; zw: the probe point
 };
@@ -94,6 +94,8 @@ float4 ps(VSOut i) : SV_Target {
         float2 q = (i.uv - 0.5) * f;
         float3 h = 0;
         if (r.z > r.x && abs(q.x) < 0.5 && abs(q.y) < 0.5) h = th.SampleLevel(sm, lerp(r.xy, r.zw, q + 0.5), 0).rgb * scr2.z;
+        // dark red (an enemy's weapon list: black letters on a translucent red bar, dim without the scene behind it): brighter
+        if (scr2.w > 1 && h.r > 0.06 && h.r > 1.6 * h.g && h.r > 1.6 * h.b) h *= min(scr2.w, max(1.0, 0.75 / h.r));
         h += 0.012;
         if (par.z > 0) h = pow(saturate(h), 2.2);
         return float4(h, 1);
@@ -136,6 +138,7 @@ static void mw5ReadIni() {
     g_mw5Reversed = GetPrivateProfileIntW(L"vr", L"mw5_reversed_depth", 1, ini.c_str());
     g_mw5ScreensWanted = GetPrivateProfileIntW(L"vr", L"mw5_screens", 1, ini.c_str());
     g_m5ScreenGain = mw5GetF(L"mw5_screen_gain", 1);
+    g_m5RedBoost = mw5GetF(L"mw5_screen_red_boost", 4);
     for (int i = 0; i < MW5_SCREENS; ++i) { // mw5_screen_<n> = u0 v0 u1 v1 (of the HUD image, 0..1)
         wchar_t k[32], b[96];
         swprintf(k, 32, L"mw5_screen_%d", i);
@@ -468,7 +471,7 @@ static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw) {
                 float ar = have ? (r[2] - r[0]) * pw / ((r[3] - r[1]) * g_m5HudH) : 1;
                 cb[27] = 1;
                 cb[28] = r[0] * ku, cb[29] = r[1], cb[30] = (have ? r[2] : r[0]) * ku, cb[31] = r[3];
-                cb[32] = ar > g.aspect ? 1 : g.aspect / ar, cb[33] = ar > g.aspect ? ar / g.aspect : 1, cb[34] = g_m5ScreenGain;
+                cb[32] = ar > g.aspect ? 1 : g.aspect / ar, cb[33] = ar > g.aspect ? ar / g.aspect : 1, cb[34] = g_m5ScreenGain, cb[35] = g_m5RedBoost;
                 const float *a = g_m5Alt[g.screen - 1];
                 bool haveA = have && a[2] > a[0] && a[3] > a[1];
                 float aa = haveA ? (a[2] - a[0]) * pw / ((a[3] - a[1]) * g_m5HudH) : 1;

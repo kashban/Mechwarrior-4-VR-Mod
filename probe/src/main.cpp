@@ -639,6 +639,7 @@ static void mw5HudCopy(ID3D11DeviceContext *, ID3D11Texture2D *);
 static bool g_renderOverride;          // the game renders larger than its window ([vr] render_height)
 static void *volatile g_foreignDev;    // the VR runtime's device (shares the vtable with the game's)
 static volatile bool g_inHud;          // inside the top-level "after 3D: HUD, 2D" label
+static volatile bool g_smallCamSide;   // the small camera being drawn is a window at the picture's side (the target's view), not the zoom window
 static volatile float g_hudPx;         // HUD shift per eye in back-buffer pixels (VR), 0 = none // VR session running: the eyes alternate, offset from [vr]
 static volatile bool g_in3D; // inside the top-level "3D" label: the world, not HUD or menus
 static volatile bool g_in3DSeen; // a "3D" label was seen (a battle is running)
@@ -1846,7 +1847,7 @@ static void hudWidePost(ID3D11DeviceContext *c) {
 // target. The backdrop is black instead.
 static const uint64_t BACKDROP_PS = 0x3c49bfee1754587bull;
 static bool smallCamBackdrop(ID3D11DeviceContext *c) {
-    if (!g_hudLayerOn) return false;
+    if (!g_hudLayerOn || !g_smallCamSide) return false; // the zoom window keeps its backdrop
     CtxState *s = ctxOf(c);
     if (s->foreign || s->deferred) return false;
     ShaderInfo *sh = s->st[ST_PS].sh;
@@ -2221,6 +2222,14 @@ static INT STDMETHODCALLTYPE H_BeginEvent(ID3DUserDefinedAnnotation *a, LPCWSTR 
     if (s->depth == 1 && !s->deferred && g_in3D && name && g_hudW) {
         // inside "3D": a camera smaller than the frame (drawn with "SSAA 2x2") is a window of the HUD
         bool smallCam = wcsncmp(name, L"SSAA 2x2", 8) == 0;
+        if (smallCam) { // "... a camera at twice the resolution, 225x170 at 0,1188": where its window lies
+            const wchar_t *v = wcsstr(name, L"resolution, ");
+            int x = 0, y = 0, w = 0, hh = 0;
+            if (v && swscanf(v + 12, L"%dx%d at %d,%d", &w, &hh, &x, &y) == 4 && w > 0) {
+                float cu = (x + 0.5f * w) / g_hudW;
+                g_smallCamSide = cu < 0.3f || cu > 0.7f;
+            }
+        }
         if (!smallCam && wcsncmp(name, L"camera:", 7) == 0) {
             const wchar_t *v = wcsstr(name, L"viewport ");
             int x = 0, y = 0, w = 0, hh = 0;
@@ -2255,6 +2264,7 @@ static INT STDMETHODCALLTYPE H_EndEvent(ID3DUserDefinedAnnotation *a) {
     if (!s->labels.empty()) s->labels.pop_back();
     if (s->depth == 0 && !s->deferred) {
         if (g_in3D) hudEnd((ID3D11DeviceContext *)s->self); // a small camera's redirect ends with its "3D"
+        g_smallCamSide = false;
         g_in3D = false;
         if (g_inHud && (hudShift() != 0 || hudWideNow())) applyViewports((ID3D11DeviceContext *)s->self, s, false);
         if (g_inHud) hudEnd((ID3D11DeviceContext *)s->self);
@@ -2748,7 +2758,7 @@ BOOL WINAPI DllMain(HINSTANCE h, DWORD reason, LPVOID) {
         g_shlog = _wfsopen((g_dir + L"mw4vr_shaders.txt").c_str(), L"w", _SH_DENYNO);
         wchar_t exe[MAX_PATH];
         GetModuleFileNameW(nullptr, exe, MAX_PATH);
-        logf("mw4vr probe v11.14 (VR stage 5, both eyes per frame, camera head tracking, HUD layer, cockpit profiles, own cockpit mesh with HUD monitors, pictures) loaded into %s", narrow(exe).c_str());
+        logf("mw4vr probe v11.15 (VR stage 5, both eyes per frame, camera head tracking, HUD layer, cockpit profiles, own cockpit mesh with HUD monitors, pictures) loaded into %s", narrow(exe).c_str());
         if (!loadReal()) logf("ERROR: the system d3d11.dll could not be loaded");
     }
     return TRUE;
