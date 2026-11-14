@@ -111,7 +111,7 @@ cam_planes=1
 water_both_eyes=1
 mw5_screen_gain=1.0
 ; dark red on the monitors (an enemy's weapon list) is shown up to this many times brighter; 1 = as it is
-mw5_screen_red_boost=4
+mw5_screen_red_boost=6
 ; the game's HUD runs past the right edge of a square picture (weapon list, damage display): the HUD picture is
 ; this much wider than the game's (1 = not). u beyond 1.000 in the rectangles below = beyond the game's right edge
 hud_extra_width=1.02

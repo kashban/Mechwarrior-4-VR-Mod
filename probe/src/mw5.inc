@@ -43,7 +43,7 @@ static UINT g_m5HudW, g_m5HudH;
 static int g_m5Screens;
 static float g_m5Rect[MW5_SCREENS][4]; // u0 v0 u1 v1 of the HUD image; u1 <= u0: dark
 static float g_m5Alt[MW5_SCREENS][6];  // a second part (u0 v0 u1 v1) and its probe point (u v); u1 <= u0: none
-static float g_m5ScreenGain = 1, g_m5RedBoost = 4;
+static float g_m5ScreenGain = 1, g_m5RedBoost = 6;
 static int g_mw5ScreensWanted = 1;
 
 static const char g_m5Hlsl[] = R"HLSL(
@@ -95,7 +95,11 @@ float4 ps(VSOut i) : SV_Target {
         float3 h = 0;
         if (r.z > r.x && abs(q.x) < 0.5 && abs(q.y) < 0.5) h = th.SampleLevel(sm, lerp(r.xy, r.zw, q + 0.5), 0).rgb * scr2.z;
         // dark red (an enemy's weapon list: black letters on a translucent red bar, dim without the scene behind it): brighter
-        if (scr2.w > 1 && h.r > 0.06 && h.r > 1.6 * h.g && h.r > 1.6 * h.b) h *= min(scr2.w, max(1.0, 0.75 / h.r));
+        // (a weapon's state is its bar's colour - green, yellow, red: the red stays clearly red, less of its green)
+        if (scr2.w > 1 && h.r > 0.06 && h.r > 1.6 * h.g && h.r > 1.6 * h.b) {
+            float k = min(scr2.w, max(1.0, 0.9 / h.r));
+            h *= float3(k, 1 + (k - 1) * 0.4, k);
+        }
         h += 0.012;
         if (par.z > 0) h = pow(saturate(h), 2.2);
         return float4(h, 1);
@@ -138,7 +142,7 @@ static void mw5ReadIni() {
     g_mw5Reversed = GetPrivateProfileIntW(L"vr", L"mw5_reversed_depth", 1, ini.c_str());
     g_mw5ScreensWanted = GetPrivateProfileIntW(L"vr", L"mw5_screens", 1, ini.c_str());
     g_m5ScreenGain = mw5GetF(L"mw5_screen_gain", 1);
-    g_m5RedBoost = mw5GetF(L"mw5_screen_red_boost", 4);
+    g_m5RedBoost = mw5GetF(L"mw5_screen_red_boost", 6);
     for (int i = 0; i < MW5_SCREENS; ++i) { // mw5_screen_<n> = u0 v0 u1 v1 (of the HUD image, 0..1)
         wchar_t k[32], b[96];
         swprintf(k, 32, L"mw5_screen_%d", i);
