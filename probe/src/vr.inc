@@ -974,17 +974,29 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
         float UR = hudWide() ? (float)min(g_hudTexW, hudWideW(g_vr.w)) / (float)g_hudW : 1.0f;
         const float nearRc[4][4] = {{0, 0, UR, T}, {0, B, UR, 1}, {0, T, L, B}, {R, T, UR, B}};
         bool screens = mw5ScreensOn(); // the own cockpit's monitors show the near frame; what none of them shows stays, far
+        // a rectangle without what the zoom window covers of it (that is shown by its own quad, smaller)
+        auto addCut = [&](float u0, float v0, float u1, float v1, float kind) {
+            if (!(zoomWin && zc[0] < u1 && zc[2] > u0 && zc[1] < v1 && zc[3] > v0)) {
+                add(u0, v0, u1, v1, kind);
+                return;
+            }
+            float a0 = zc[0] > u0 ? zc[0] : u0, a1 = zc[1] > v0 ? zc[1] : v0, a2 = zc[2] < u1 ? zc[2] : u1, a3 = zc[3] < v1 ? zc[3] : v1;
+            add(u0, v0, u1, a1, kind);
+            add(u0, a3, u1, v1, kind);
+            add(u0, a1, a0, a3, kind);
+            add(a2, a1, u1, a3, kind);
+        };
         if (screens) {
             float iv[8][2], u = 0; // the top strip between the monitors' parts (the compass, mission texts)
             int ni = mw5TopSpans(T, iv);
             for (int i = 0; i < ni; ++i) {
-                if (iv[i][0] > u) add(u, 0, iv[i][0], T, 1);
+                if (iv[i][0] > u) addCut(u, 0, iv[i][0], T, 1);
                 if (iv[i][1] > u) u = iv[i][1];
             }
-            if (u < UR) add(u, 0, UR, T, 1);
+            if (u < UR) addCut(u, 0, UR, T, 1);
             float lt = mw5LeftAltBottom(L); // the lance orders' menu is on a monitor
-            add(0, lt > T ? lt : T, L, B, 1); // the side columns (messages)
-            add(R, T, UR, B, 1);
+            addCut(0, lt > T ? lt : T, L, B, 1); // the side columns (messages)
+            addCut(R, T, UR, B, 1);
             // the torso mark: cut out of the far middle and shown higher
             const float *tw = g_vr.twist;
             if (!zoomWin && tw[2] > tw[0] && tw[3] > tw[1] && g_vr.twistDv != 0) {
