@@ -103,7 +103,12 @@ mouse_capture=1
 cam_keep=0
 ; 1 = the head's pose is also written into the camera's own matrix in the game's scene: what the game chooses
 ; from the camera before drawing (trees, tiles) follows the head, not the mech's torso; 0 = not (as before)
-cam_local=1
+cam_local=0
+; 1 = the camera's frustum planes (what the game culls trees and tiles with) are made from the head's view for
+; each eye's picture, a little wider than the headset sees; 0 = the game's (the mech's own view)
+cam_planes=1
+; 1 = the water mirrors the scene in both eyes (drawn a second time for the right eye); 0 = in the left eye only
+water_both_eyes=1
 mw5_screen_gain=1.0
 ; the game's HUD runs past the right edge of a square picture (weapon list, damage display): the HUD picture is
 ; this much wider than the game's (1 = not). u beyond 1.000 in the rectangles below = beyond the game's right edge

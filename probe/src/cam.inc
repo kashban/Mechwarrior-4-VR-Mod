@@ -243,7 +243,67 @@ static void camLocalWrite(uint8_t *cam, const float *Rc, const float *tc) {
     memcpy(g_camLocalLast, l, sizeof l);
 }
 
-static void camLocalIni() { g_camLocal = GetPrivateProfileIntW(L"vr", L"cam_local", 1, (g_dir + L"mw4vr.ini").c_str()); }
+static volatile int g_camPlanes = -1;
+static void camLocalIni() {
+    g_camLocal = GetPrivateProfileIntW(L"vr", L"cam_local", 0, (g_dir + L"mw4vr.ini").c_str());
+    g_camPlanes = GetPrivateProfileIntW(L"vr", L"cam_planes", 1, (g_dir + L"mw4vr.ini").c_str());
+}
+
+// The camera's frustum in the world: six planes (normal, d: inside is n.p <= d) at +0x1ac - far, near, right,
+// left, bottom, top - which the game makes from the camera's world matrix when it updates the scene, i.e. from
+// the mech's own view; what is walked and culled with them while the camera is drawn (trees, tiles) then
+// vanished where the head looked past the torso's view. Before each eye's Draw they are made anew from that
+// eye's matrix, a little wider than the headset sees; after it the game's are back.
+static float g_camPlanesSaved[24];
+static bool g_camPlanesIn;
+static void camPlanesWrite(uint8_t *cam, const float *base, const float *out) {
+    float *pl = (float *)(cam + 0x1ac);
+    const float *A = g_camA;
+    auto axis = [&](const float *m, int k, float *v) { // view axis k (right, up, forward) in the world
+        for (int i = 0; i < 3; ++i) v[i] = m[i * 4 + 0] * A[0 * 3 + k] + m[i * 4 + 1] * A[1 * 3 + k] + m[i * 4 + 2] * A[2 * 3 + k];
+    };
+    float fb[3], pb[3] = {base[3], base[7], base[11]};
+    axis(base, 2, fb);
+    // the layout as it is known: plane 0 looks along the mech's view, plane 1 against it
+    float d0 = pl[0] * fb[0] + pl[1] * fb[1] + pl[2] * fb[2], d1 = pl[4] * fb[0] + pl[5] * fb[1] + pl[6] * fb[2];
+    static int told;
+    if (!(d0 > 0.98f && d1 < -0.98f)) {
+        if (told++ < 3) logf("cam: the frustum planes at +0x1ac are not as expected (%.3f %.3f) - left alone", d0, d1);
+        return;
+    }
+    float farD = pl[3] - (fb[0] * pb[0] + fb[1] * pb[1] + fb[2] * pb[2]);
+    float nearD = -pl[7] - (fb[0] * pb[0] + fb[1] * pb[1] + fb[2] * pb[2]);
+    if (!g_camPlanesIn) memcpy(g_camPlanesSaved, pl, sizeof g_camPlanesSaved);
+    g_camPlanesIn = true;
+    float r[3], u[3], f[3], p[3] = {out[3], out[7], out[11]};
+    axis(out, 0, r), axis(out, 1, u), axis(out, 2, f);
+    float t = fabsf(*(float *)(cam + 0x20c));
+    if (!(t > 1.6f && t < 20)) t = 1.6f; // +-58 degrees and more: the headset's widest side is 55
+    float fp = f[0] * p[0] + f[1] * p[1] + f[2] * p[2];
+    float n[24];
+    for (int i = 0; i < 3; ++i) n[i] = f[i], n[4 + i] = -f[i];
+    n[3] = fp + farD, n[7] = -fp - (nearD > 0.05f ? nearD * 0.5f : nearD);
+    const float *side[4] = {r, r, u, u};
+    const float sg[4] = {1, -1, -1, 1};
+    for (int k = 0; k < 4; ++k) {
+        float v[3], l = 0;
+        for (int i = 0; i < 3; ++i) v[i] = sg[k] * side[k][i] - t * f[i], l += v[i] * v[i];
+        l = sqrtf(l);
+        float *o = n + 8 + 4 * k;
+        for (int i = 0; i < 3; ++i) o[i] = v[i] / l;
+        o[3] = o[0] * p[0] + o[1] * p[1] + o[2] * p[2];
+    }
+    memcpy(pl, n, sizeof n);
+    if (told == 0) {
+        told = 100;
+        logf("cam: frustum planes made from the head's view (cam_planes=1): far %.0f, near %.2f, tangent %.3f", farD, nearD, t);
+    }
+}
+static void camPlanesRestore(uint8_t *cam) {
+    if (!g_camPlanesIn) return;
+    g_camPlanesIn = false;
+    memcpy(cam + 0x1ac, g_camPlanesSaved, sizeof g_camPlanesSaved);
+}
 
 static void camPreEye(uint8_t *cam, int eyeOv) {
     InterlockedIncrement(&g_statCamCalls);
@@ -324,6 +384,7 @@ static void camPreEye(uint8_t *cam, int eyeOv) {
         out[i * 4 + 3] = base[i * 4 + 3] + base[i * 4 + 0] * tc[0] + base[i * 4 + 1] * tc[1] + base[i * 4 + 2] * tc[2];
     }
     memcpy(m, out, sizeof out);
+    if (g_camPlanes > 0) camPlanesWrite(cam, base, out);
     memcpy(g_camWritten, out, sizeof out);
     memcpy(g_camBase, base, sizeof base);
     g_camEye = eye;
@@ -364,6 +425,7 @@ static void camAtPresent() {
 }
 
 static void __stdcall camPost(uint8_t *cam) {
+    if (cam && cam == g_camMain) camPlanesRestore(cam);
     if (g_camKeep == 1) return;
     if (cam && cam == g_camMain && g_camEyeFrame == g_frame) {
         float *m = (float *)(cam + 0x80);

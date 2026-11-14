@@ -2121,6 +2121,36 @@ static std::string waterState() {
     return s + "]\n";
 }
 
+// The water's planar reflection (the scene drawn again, mirrored) is drawn once per frame: mw4hook clears its
+// "wanted" flag (a byte at mw4hook+0x43d3e0, asked at +0x9e5f0) when the first pass has used it, and the second
+// eye's water shows the sky alone. When the right eye's pass comes to the water the flag is set again if the
+// left eye's pass had it. Only where mw4hook's code is as known (build 20261107_ea16ef2). [vr] water_both_eyes=0: not.
+static void waterBothEyes() {
+    static int want = -1, ok = -1;
+    static uint8_t *h;
+    static uint8_t left;
+    if (want < 0) want = GetPrivateProfileIntW(L"vr", L"water_both_eyes", 1, (g_dir + L"mw4vr.ini").c_str());
+    if (!want || ok == 0) return;
+    if (ok < 0) {
+        h = (uint8_t *)GetModuleHandleW(L"mw4hook.dll");
+        uint8_t code[7] = {};
+        uint32_t at = h ? (uint32_t)(uintptr_t)(h + 0x43d3e0) : 0;
+        ok = h && camRead(h + 0x9e5f0, code, 7) && code[0] == 0x80 && code[1] == 0x3d && memcmp(code + 2, &at, 4) == 0 && code[6] == 0;
+        logf("water: reflection for both eyes %s", ok ? "on (mw4hook's code as known)" : "off - mw4hook's code is not the known one");
+        if (!ok) return;
+    }
+    uint8_t *flag = h + 0x43d3e0;
+    if (g_camPassEye == 0) left = *flag;
+    else if (g_camPassEye == 1 && left == 1 && *flag == 0) {
+        *flag = 1;
+        static bool told;
+        if (!told) {
+            told = true;
+            logf("water: the reflection's flag set again for the right eye's pass (frame %u)", g_frame);
+        }
+    }
+}
+
 static INT STDMETHODCALLTYPE H_BeginEvent(ID3DUserDefinedAnnotation *a, LPCWSTR name) {
     InterlockedIncrement(&g_statLabels);
     CtxState *s = ctxOfAnn(a);
@@ -2145,6 +2175,11 @@ static INT STDMETHODCALLTYPE H_BeginEvent(ID3DUserDefinedAnnotation *a, LPCWSTR 
         std::lock_guard<std::mutex> lk(g_labelMx);
         std::string &b = g_lblBuf[g_lblEye & 1];
         if (name && wcsncmp(name, L"water (RTIN", 11) == 0) b += waterState(); // diagnosis: the planar reflection's conditions
+    }
+    if (g_camInMain && s->depth <= 6 && !s->deferred && name && wcsncmp(name, L"water (RTIN", 11) == 0) waterBothEyes();
+    if (g_lblDump && g_camInMain && s->depth <= 6) {
+        std::lock_guard<std::mutex> lk(g_labelMx);
+        std::string &b = g_lblBuf[g_lblEye & 1];
         if (b.size() < 60000) {
             b.append(2 * (size_t)s->depth, ' ');
             if (s->deferred) b += "[c" + std::to_string(s->id) + "d] ";
@@ -2687,7 +2722,7 @@ BOOL WINAPI DllMain(HINSTANCE h, DWORD reason, LPVOID) {
         g_shlog = _wfsopen((g_dir + L"mw4vr_shaders.txt").c_str(), L"w", _SH_DENYNO);
         wchar_t exe[MAX_PATH];
         GetModuleFileNameW(nullptr, exe, MAX_PATH);
-        logf("mw4vr probe v11.11 (VR stage 5, both eyes per frame, camera head tracking, HUD layer, cockpit profiles, own cockpit mesh with HUD monitors, pictures) loaded into %s", narrow(exe).c_str());
+        logf("mw4vr probe v11.12 (VR stage 5, both eyes per frame, camera head tracking, HUD layer, cockpit profiles, own cockpit mesh with HUD monitors, pictures) loaded into %s", narrow(exe).c_str());
         if (!loadReal()) logf("ERROR: the system d3d11.dll could not be loaded");
     }
     return TRUE;
