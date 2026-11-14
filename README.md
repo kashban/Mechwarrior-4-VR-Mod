@@ -67,7 +67,7 @@ Visual Studio 2022 Build Tools (x86), then `mod\build.bat`. The result is `mod\b
 
 ## Tests
 
-`testsun_tests.bat` runs the automatic tests (Python, no game files needed). `testsun_tests.bat mutation` also
+`tests\run_tests.bat` runs the automatic tests (Python, no game files needed). `tests\run_tests.bat mutation` also
 plants small errors into the tested code, one at a time, and checks that a test fails for each
 (`tests/mutate.py`); the share found must not fall below the floor in `tests/mutation_floor.json`.
 So far the cockpit converter is covered; the mod itself (C++) is not yet.
