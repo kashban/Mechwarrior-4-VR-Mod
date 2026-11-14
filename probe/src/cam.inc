@@ -115,7 +115,7 @@ static void lblWrite() {
     logf("cam: labels of both eyes' passes written to mw4vr_labels.txt (%u / %u bytes)", (unsigned)a.size(), (unsigned)b.size());
 }
 
-// Diagnosis: the game's code is packed on disk. Once in a battle its image as it runs is written to
+// Diagnosis ([vr] cam_dump=1): the game's code is packed on disk. Once in a battle its image as it runs is written to
 // mw4vr_dump_exe.bin (offset = address - image base), and three times (some seconds apart) the main camera's
 // element and the elements above it to mw4vr_dump_cam_<n>.txt - for finding where the camera's matrix is
 // made and what else looks through it.
@@ -126,7 +126,9 @@ static bool camRead(const void *p, void *out, size_t n) {
 static void camDump(uint8_t *cam) {
     static int done;
     static unsigned first = ~0u;
-    if (done >= 3 || g_menuMode) return;
+    static int want = -1;
+    if (want < 0) want = GetPrivateProfileIntW(L"vr", L"cam_dump", 0, (g_dir + L"mw4vr.ini").c_str());
+    if (!want || done >= 3 || g_menuMode) return;
     if (first == ~0u) first = g_frame;
     static const unsigned when[3] = {300, 1500, 3000};
     if (g_frame - first < when[done]) return;
