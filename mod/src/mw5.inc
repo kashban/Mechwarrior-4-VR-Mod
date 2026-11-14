@@ -7,6 +7,10 @@
 // with the game's projection, depth and TAA jitter. Lighting: a fixed lamp in the cockpit plus the
 // emissive map. Off until Ctrl+F11 ([vr] mw5_cockpit names the file; mw5_on=1 starts with it on).
 // Ctrl+Alt+arrows: the eye forward / back / up / down in the mesh (2 cm); Ctrl+Alt+PgUp / PgDn: its size.
+// A cockpit's own settings - the eye, the size, what its monitors show - are in mw4vr_cockpits\<name>.ini
+// ([cockpit], written by the converter); without that file the [vr] mw5_* values of mw4vr.ini hold.
+// Ctrl+Alt+F11 takes the next cockpit file (with Shift the one before) and remembers it for the mech one sits
+// in (mw4vr_mechs.ini: mw5_cockpit in the mech's section), or as [vr] mw5_cockpit while no mech is known.
 // Included into main.cpp after vr.inc.
 
 typedef void(STDMETHODCALLTYPE *Mw5PFN_DrawIdx)(ID3D11DeviceContext *, UINT, UINT, INT);
@@ -18,7 +22,8 @@ struct Mw5Group {
     int screen;   // 0: the mesh; n + 1: monitor n, shown with a part of the game's HUD
     float aspect; // a monitor's width / height
 };
-static Mw5Group g_m5[16];
+#define MW5_GROUPS 40
+static Mw5Group g_m5[MW5_GROUPS];
 static int g_m5N;
 static int g_mw5State;             // 0: not loaded yet, 1: ready, -1: failed (stays off)
 static volatile bool g_mw5On;
@@ -45,6 +50,10 @@ static float g_m5Rect[MW5_SCREENS][4]; // u0 v0 u1 v1 of the HUD image; u1 <= u0
 static float g_m5Alt[MW5_SCREENS][6];  // a second part (u0 v0 u1 v1) and its probe point (u v); u1 <= u0: none
 static float g_m5ScreenGain = 1, g_m5RedBoost = 6;
 static int g_mw5ScreensWanted = 1;
+static bool g_mw5Own;       // this cockpit has a settings file of its own
+static int g_mw5Mech = -2;  // the mech profile the cockpit was chosen for (-1: none known)
+
+static std::wstring mw5OwnIni() { return g_dir + L"mw4vr_cockpits\\" + g_mw5Name + L".ini"; }
 
 static const char g_m5Hlsl[] = R"HLSL(
 cbuffer Frame : register(b0) {
@@ -114,52 +123,74 @@ float4 ps(VSOut i) : SV_Target {
 
 static inline bool mw5Active() { return g_mw5On && g_mw5State == 1; }
 
+// a cockpit's value: from its own file ([cockpit] <key>) or, without one, from mw4vr.ini ([vr] mw5_<key>)
+static void mw5CockpitStr(const wchar_t *key, wchar_t *b, DWORD n) {
+    if (g_mw5Own) {
+        GetPrivateProfileStringW(L"cockpit", key, L"", b, n, mw5OwnIni().c_str());
+    } else {
+        wchar_t k[48];
+        swprintf(k, 48, L"mw5_%ls", key);
+        GetPrivateProfileStringW(L"vr", k, L"", b, n, (g_dir + L"mw4vr.ini").c_str());
+    }
+}
+static float mw5CockpitF(const wchar_t *key, float def) {
+    wchar_t b[64];
+    mw5CockpitStr(key, b, 64);
+    return b[0] ? (float)_wtof(b) : def;
+}
+static void mw5CockpitPutF(const wchar_t *key, float v) {
+    wchar_t b[32], k[48];
+    swprintf(b, 32, L"%.3f", v);
+    swprintf(k, 48, L"mw5_%ls", key);
+    if (g_mw5Own) WritePrivateProfileStringW(L"cockpit", key, b, mw5OwnIni().c_str());
+    else WritePrivateProfileStringW(L"vr", k, b, (g_dir + L"mw4vr.ini").c_str());
+}
+
 static float mw5GetF(const wchar_t *key, float def) {
     wchar_t b[64], d[32];
     swprintf(d, 32, L"%g", def);
     GetPrivateProfileStringW(L"vr", key, d, b, 64, (g_dir + L"mw4vr.ini").c_str());
     return (float)_wtof(b);
 }
-static void mw5PutF(const wchar_t *key, float v) {
-    wchar_t b[32];
-    swprintf(b, 32, L"%.3f", v);
-    WritePrivateProfileStringW(L"vr", key, b, (g_dir + L"mw4vr.ini").c_str());
-}
-
 static void mw5ReadIni() {
     std::wstring ini = g_dir + L"mw4vr.ini";
-    GetPrivateProfileStringW(L"vr", L"mw5_cockpit", L"", g_mw5Name, 64, ini.c_str());
-    g_mw5Scale = mw5GetF(L"mw5_scale", 1);
+    if (!g_mw5IniRead) GetPrivateProfileStringW(L"vr", L"mw5_cockpit", L"", g_mw5Name, 64, ini.c_str());
+    g_mw5Own = g_mw5Name[0] && GetFileAttributesW(mw5OwnIni().c_str()) != INVALID_FILE_ATTRIBUTES;
+    g_mw5Scale = mw5CockpitF(L"scale", 1);
     if (!(g_mw5Scale > 0.05f)) g_mw5Scale = 1;
-    g_mw5Eye[0] = mw5GetF(L"mw5_eye_right_m", 0);
-    g_mw5Eye[1] = mw5GetF(L"mw5_eye_up_m", 0);
-    g_mw5Eye[2] = mw5GetF(L"mw5_eye_forward_m", 0);
+    g_mw5Eye[0] = mw5CockpitF(L"eye_right_m", 0);
+    g_mw5Eye[1] = mw5CockpitF(L"eye_up_m", 0);
+    g_mw5Eye[2] = mw5CockpitF(L"eye_forward_m", 0);
     g_mw5Ems = mw5GetF(L"mw5_emissive", 1.5f);
     g_mw5Amb = mw5GetF(L"mw5_ambient", 0.45f);
     g_mw5DepthFront = mw5GetF(L"mw5_depth_front", 0.5f);
     if (!(g_mw5DepthFront >= 0 && g_mw5DepthFront <= 0.95f)) g_mw5DepthFront = 0.5f;
     g_mw5LinearOut = GetPrivateProfileIntW(L"vr", L"mw5_linear_output", 0, ini.c_str());
     g_mw5Reversed = GetPrivateProfileIntW(L"vr", L"mw5_reversed_depth", 1, ini.c_str());
-    g_mw5ScreensWanted = GetPrivateProfileIntW(L"vr", L"mw5_screens", 1, ini.c_str());
+    g_mw5ScreensWanted = GetPrivateProfileIntW(L"vr", L"mw5_screens", 1, ini.c_str()) && mw5CockpitF(L"screens", 1) != 0;
     g_m5ScreenGain = mw5GetF(L"mw5_screen_gain", 1);
     g_m5RedBoost = mw5GetF(L"mw5_screen_red_boost", 6);
     for (int i = 0; i < MW5_SCREENS; ++i) { // mw5_screen_<n> = u0 v0 u1 v1 (of the HUD image, 0..1)
         wchar_t k[32], b[96];
-        swprintf(k, 32, L"mw5_screen_%d", i);
-        GetPrivateProfileStringW(L"vr", k, L"", b, 96, ini.c_str());
+        swprintf(k, 32, L"screen_%d", i);
+        mw5CockpitStr(k, b, 96);
         float *r = g_m5Rect[i];
         if (swscanf(b, L"%f %f %f %f", r, r + 1, r + 2, r + 3) != 4) r[0] = r[1] = r[2] = r[3] = 0;
         // mw5_screen_<n>_alt = u0 v0 u1 v1 pu pv: this part instead, while something is drawn at pu pv (an open menu)
-        swprintf(k, 32, L"mw5_screen_%d_alt", i);
-        GetPrivateProfileStringW(L"vr", k, L"", b, 96, ini.c_str());
+        swprintf(k, 32, L"screen_%d_alt", i);
+        mw5CockpitStr(k, b, 96);
         float *a = g_m5Alt[i];
         if (swscanf(b, L"%f %f %f %f %f %f", a, a + 1, a + 2, a + 3, a + 4, a + 5) != 6) a[0] = a[1] = a[2] = a[3] = a[4] = a[5] = 0;
     }
     if (!g_mw5IniRead) {
         g_mw5IniRead = true;
         g_mw5On = g_mw5Name[0] && GetPrivateProfileIntW(L"vr", L"mw5_on", 0, ini.c_str()) != 0;
-        logf("mw5: cockpit '%ls' (%s), size %.2f, eye %.2f m right %.2f m up %.2f m forward", g_mw5Name, g_mw5On ? "on" : "off - Ctrl+F11",
-             g_mw5Scale, g_mw5Eye[0], g_mw5Eye[1], g_mw5Eye[2]);
+    }
+    static wchar_t told[64];
+    if (wcscmp(told, g_mw5Name)) {
+        wcscpy(told, g_mw5Name);
+        logf("mw5: cockpit '%ls' (%s), settings from %s, size %.2f, eye %.2f m right %.2f m up %.2f m forward", g_mw5Name,
+             g_mw5On ? "on" : "off - Ctrl+F11", g_mw5Own ? "its own file" : "mw4vr.ini", g_mw5Scale, g_mw5Eye[0], g_mw5Eye[1], g_mw5Eye[2]);
     }
 }
 
@@ -195,7 +226,7 @@ static bool mw5LoadFile() {
     bool ok = false;
     char magic[4];
     uint32_t n = 0;
-    if (fread(magic, 1, 4, f) == 4 && !memcmp(magic, "MWC1", 4) && fread(&n, 4, 1, f) == 1 && n >= 1 && n <= 16) {
+    if (fread(magic, 1, 4, f) == 4 && !memcmp(magic, "MWC1", 4) && fread(&n, 4, 1, f) == 1 && n >= 1 && n <= MW5_GROUPS) {
         ok = true;
         for (uint32_t i = 0; i < n && ok; ++i) {
             struct { char name[48]; uint32_t nv, ni, cs, es; float k; } h;
@@ -292,7 +323,7 @@ static bool mw5CreateStates() {
 static void mw5Load() {
     g_mw5State = -1;
     __try {
-        if (mw5CreateStates() && mw5LoadFile()) g_mw5State = 1;
+        if ((g_m5VS || mw5CreateStates()) && mw5LoadFile()) g_mw5State = 1;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         logf("mw5: exception 0x%08lx while loading", GetExceptionCode());
     }
@@ -503,13 +534,87 @@ static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw) {
         if (u) u->Release();
 }
 
+// another cockpit file: what is loaded goes, the new one is loaded at its first use
+static void mw5Switch(const wchar_t *name) {
+    if (!_wcsicmp(name, g_mw5Name) && g_mw5State >= 0) return;
+    for (int i = 0; i < g_m5N; ++i) {
+        IUnknown *rel[] = {g_m5[i].vb, g_m5[i].ib, g_m5[i].clr, g_m5[i].ems};
+        for (IUnknown *u : rel)
+            if (u) u->Release();
+        g_m5[i] = {};
+    }
+    g_m5N = g_m5Screens = 0;
+    g_mw5State = 0;
+    wcsncpy(g_mw5Name, name, 63);
+    g_mw5Name[63] = 0;
+    mw5ReadIni();
+}
+
+// the cockpit files there are, in the order of their names
+static std::vector<std::wstring> mw5Files() {
+    std::vector<std::wstring> v;
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW((g_dir + L"mw4vr_cockpits\\*.mwc").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return v;
+    do {
+        std::wstring n = fd.cFileName;
+        v.push_back(n.substr(0, n.size() - 4));
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+    std::sort(v.begin(), v.end(), [](const std::wstring &a, const std::wstring &b) { return _wcsicmp(a.c_str(), b.c_str()) < 0; });
+    return v;
+}
+
+// the cockpit of the mech one sits in: what mw4vr_mechs.ini remembers for it, else [vr] mw5_cockpit
+static void mw5ForMech() {
+    if (g_mechCur == g_mw5Mech) return;
+    g_mw5Mech = g_mechCur;
+    if (g_mechCur < 0) return; // between battles: what is loaded stays
+    wchar_t name[64] = L"", sec[32];
+    swprintf(sec, 32, L"mech_%d", g_mechCur + 1);
+    GetPrivateProfileStringW(sec, L"mw5_cockpit", L"", name, 64, mechIni().c_str());
+    if (!name[0]) GetPrivateProfileStringW(L"vr", L"mw5_cockpit", L"", name, 64, (g_dir + L"mw4vr.ini").c_str());
+    if (!name[0] || !_wcsicmp(name, g_mw5Name)) return;
+    logf("mw5: cockpit '%ls' for mech profile %d", name, g_mechCur + 1);
+    mw5Switch(name);
+}
+
+// Ctrl+Alt+F11: the next cockpit file (Shift: the one before), remembered for this mech
+static void mw5Next(int step) {
+    std::vector<std::wstring> v = mw5Files();
+    if (v.empty()) {
+        logf("mw5: no cockpit files in mw4vr_cockpits");
+        Beep(300, 200);
+        return;
+    }
+    int n = (int)v.size(), at = step > 0 ? -1 : 0;
+    for (int i = 0; i < n; ++i)
+        if (!_wcsicmp(v[i].c_str(), g_mw5Name)) at = i;
+    const std::wstring &name = v[((at + step) % n + n) % n];
+    wchar_t sec[32];
+    swprintf(sec, 32, L"mech_%d", g_mechCur + 1);
+    if (g_mechCur >= 0) WritePrivateProfileStringW(sec, L"mw5_cockpit", name.c_str(), mechIni().c_str());
+    else WritePrivateProfileStringW(L"vr", L"mw5_cockpit", name.c_str(), (g_dir + L"mw4vr.ini").c_str());
+    logf(g_mechCur >= 0 ? "mw5: cockpit '%ls' chosen for mech profile %d" : "mw5: cockpit '%ls' chosen (no mech known: for all)", name.c_str(), g_mechCur + 1);
+    mw5Switch(name.c_str());
+    g_mw5On = true;
+    Beep(1000, 40);
+}
+
 // hot keys, once a frame
 static void mw5OnPresent() {
     if (!g_mw5IniRead) mw5ReadIni();
+    mw5ForMech();
     bool ctrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0, alt = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
     {
         static bool was;
-        bool down = ctrl && (GetAsyncKeyState(VK_F11) & 0x8000);
+        bool down = ctrl && alt && (GetAsyncKeyState(VK_F11) & 0x8000);
+        if (down && !was) mw5Next((GetAsyncKeyState(VK_SHIFT) & 0x8000) ? -1 : 1);
+        was = down;
+    }
+    {
+        static bool was;
+        bool down = ctrl && !alt && (GetAsyncKeyState(VK_F11) & 0x8000);
         if (down && !was) {
             mw5ReadIni();
             if (!g_mw5Name[0] || g_mw5State < 0) {
@@ -535,9 +640,9 @@ static void mw5OnPresent() {
             if (k == 3) g_mw5Eye[1] -= 0.02f;
             if (k == 4) g_mw5Scale *= 1.02f;
             if (k == 5) g_mw5Scale /= 1.02f;
-            mw5PutF(L"mw5_eye_up_m", g_mw5Eye[1]);
-            mw5PutF(L"mw5_eye_forward_m", g_mw5Eye[2]);
-            mw5PutF(L"mw5_scale", g_mw5Scale);
+            mw5CockpitPutF(L"eye_up_m", g_mw5Eye[1]);
+            mw5CockpitPutF(L"eye_forward_m", g_mw5Eye[2]);
+            mw5CockpitPutF(L"scale", g_mw5Scale);
             logf("mw5: eye %.2f m up, %.2f m forward, size %.3f (saved)", g_mw5Eye[1], g_mw5Eye[2], g_mw5Scale);
             Beep(k < 2 ? 800 : k < 4 ? 1000 : 1400, 30);
         }

@@ -39,7 +39,8 @@ To remove it, delete `d3d11.dll` from the game's folder.
 |---|---|
 | Ctrl+Home | recentre |
 | Ctrl+F11 | own cockpit mesh on / off |
-| Ctrl+Alt+arrows, PgUp / PgDn | eye position in the cockpit mesh, its size |
+| Ctrl+Alt+F11 (with Shift: back) | the next cockpit mesh; remembered for the mech you sit in |
+| Ctrl+Alt+arrows, PgUp / PgDn | eye position in the cockpit mesh, its size (remembered per cockpit) |
 | Ctrl+Ins / Del | the cockpit's size |
 | Ctrl+F10 | this cockpit fits: remember it for this mech |
 | Ctrl+F12 | a picture of both eyes and the HUD into `mw4vr_shots\` |
@@ -54,12 +55,17 @@ Everything else is in `mw4vr.ini`, with a comment at each key.
 No MechWarrior 5 content is part of this repository or of any release, and none may be passed on: the
 cockpits belong to Piranha Games. You convert your own:
 
-1. Export a cockpit's static mesh with UE Viewer (umodel) as glTF, with its textures as PNG.
-2. `python tools/cockpit_convert.py <mesh.gltf> <export root> <name>.mwc`
-3. Put the `.mwc` into `mw4vr_cockpits\` in the game's folder and set `mw5_cockpit=<name>` in `mw4vr.ini`.
+1. Put UE Viewer (umodel) into `tools\umodel\`, then export all cockpits (glTF and PNG, about 2 GB):
+   `powershell -File tools\export_cockpits.ps1 -Paks <...\MW5Mercs\Content\Paks>`
+2. `python tools/convert_all.py mw5export <the game's folder>\mw4vr_cockpits` (about 4 GB; one cockpit:
+   `python tools/cockpit_convert.py <mesh.gltf> <export root> <name>.mwc`)
+3. `mw5_cockpit=<name>` in `mw4vr.ini` is the cockpit for every mech; in a battle Ctrl+Alt+F11 steps through
+   the files and remembers the choice for the mech you sit in (`mw4vr_mechs.ini`).
 
-The converter turns the faces of the material `Panels*` into monitors; `mw5_screen_<n>` in `mw4vr.ini` says
-which part of the HUD each one shows.
+The converter turns the larger faces of the material `Panels*` into monitors and writes a `<name>.ini` beside
+each `.mwc`: which part of the HUD each monitor shows (`screen_<n>`), the eye's place, the size. Change it as
+you like; it is not written again. The clan cockpits (about 35) have such monitors; in the others the HUD
+floats in front as it does without a cockpit of our own.
 
 ## Build
 
