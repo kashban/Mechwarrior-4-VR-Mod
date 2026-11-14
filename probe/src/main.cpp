@@ -242,8 +242,9 @@ typedef HRESULT(WINAPI *PFN_D3DCompile)(LPCVOID, SIZE_T, LPCSTR, const void *, v
                                         ID3DBlob **, ID3DBlob **);
 static PFN_D3DCompile g_compile;
 static ID3D11Device *g_dev;
+#include "mw4hook_abi.inc"
+
 static ID3D11VertexShader *g_eyeVS; // replacement for the CPU path's screen-space vertex shader
-static const uint64_t TL_HASH = 0xad8cee09478ddb12ull;
 static void createEyeVS();
 static PFN_D3DDisassemble g_disasm;
 
@@ -351,7 +352,7 @@ static void onShader(char stage, const void *code, SIZE_T len, void *obj) {
         g_shaders[obj] = si;
         ++g_shaderCount;
     }
-    if (stage == 'V' && si->hash == TL_HASH && !g_eyeVS) createEyeVS();
+    if (stage == 'V' && si->hash == HK_VS_TL && !g_eyeVS) createEyeVS();
     std::lock_guard<std::mutex> lk(g_logMx);
     if (!g_shlog) return;
     fprintf(g_shlog, "%cS %016llx  %u bytes%s%s\n", stage, (unsigned long long)si->hash, (unsigned)len,
@@ -668,7 +669,7 @@ static bool recentlyPatched(void *buf) {
 static void auditDraw(CtxState *s) {
     ShaderInfo *sh = s->st[ST_VS].sh;
     if (!sh) return;
-    bool covered = sh->hash == TL_HASH; // the CPU path runs the replacement shader
+    bool covered = sh->hash == HK_VS_TL; // the CPU path runs the replacement shader
     std::string detail;
     bool camCb = false;
     if (!covered) {
@@ -1760,7 +1761,7 @@ static bool eyeTlPre(ID3D11DeviceContext *c) {
     CtxState *s = ctxOf(c);
     if (s->foreign) return false;
     ShaderInfo *sh = s->st[ST_VS].sh;
-    if (!sh || sh->hash != TL_HASH) return false;
+    if (!sh || sh->hash != HK_VS_TL) return false;
     static unsigned cbFrame = ~0u;
     if (cbFrame != g_tlEpoch) {
         D3D11_MAPPED_SUBRESOURCE m;
@@ -1845,13 +1846,12 @@ static void hudWidePost(ID3D11DeviceContext *c) {
 // its backdrop: mw4hook's PS 3c49bfee copies the scene, twice as large, into the camera's own target. With
 // the HUD as a layer that is a piece of the eye's picture - the cockpit, moving with the head - behind the
 // target. The backdrop is black instead.
-static const uint64_t BACKDROP_PS = 0x3c49bfee1754587bull;
 static bool smallCamBackdrop(ID3D11DeviceContext *c) {
     if (!g_hudLayerOn || !g_smallCamSide) return false; // the zoom window keeps its backdrop
     CtxState *s = ctxOf(c);
     if (s->foreign || s->deferred) return false;
     ShaderInfo *sh = s->st[ST_PS].sh;
-    if (!sh || sh->hash != BACKDROP_PS) return false;
+    if (!sh || sh->hash != HK_PS_BACKDROP) return false;
     ID3D11RenderTargetView *rtv = nullptr;
     c->OMGetRenderTargets(1, &rtv, nullptr);
     if (!rtv) return false;
@@ -2123,31 +2123,6 @@ static HRESULT STDMETHODCALLTYPE H_FinishCommandList(ID3D11DeviceContext *c, BOO
 // hooks: annotations
 
 typedef INT(STDMETHODCALLTYPE *PFN_Begin)(ID3DUserDefinedAnnotation *, LPCWSTR);
-// Diagnosis (the water mirrors the scene in the left eye's pass only): mw4hook's variables the planar
-// reflection asks before it is drawn, as they stand when a pass comes to the water (build 20261107_ea16ef2).
-static std::string waterState() {
-    uint8_t *h = (uint8_t *)GetModuleHandleW(L"mw4hook.dll");
-    if (!h) return "  [water state: mw4hook.dll not found]\n";
-    static const struct {
-        uint32_t off;
-        int size;
-        const char *what;
-    } v[] = {{0x4b89e4, 4, "frame"},        {0x4bf3e8, 4, "casters stamp"}, {0x43d550, 4, "view stamp"}, {0x4bf3c4, 1, "failed"},
-             {0x4bf2f0, 1, "2f0"},          {0x4bf43c, 4, "43c"},           {0x4bf36c, 4, "36c"},        {0x43d3e0, 1, "3e0"},
-             {0x4bf1e4, 1, "1e4"},          {0x4bf128, 1, "128"},           {0x4beebc, 1, "eebc"},       {0x4b8fbc, 4, "8fbc"},
-             {0x4bf3d0, 4, "casters list"}, {0x4bf3e0, 4, "3e0q"},          {0x4bf3c8, 4, "3c8"},        {0x4bf3cc, 4, "3cc"},
-             {0x43d3ec, 4, "3ec"},          {0x43d3f0, 4, "3f0"},           {0x4b8a10, 4, "8a10"},       {0x4b8a14, 4, "8a14"}};
-    std::string s = "  [water state:";
-    for (auto &e : v) {
-        uint32_t x = 0;
-        char b[64];
-        if (camRead(h + e.off, &x, e.size)) snprintf(b, sizeof b, " %s=%x", e.what, x);
-        else snprintf(b, sizeof b, " %s=?", e.what);
-        s += b;
-    }
-    return s + "]\n";
-}
-
 // The water's planar reflection (the scene drawn again, mirrored) is drawn once per frame: mw4hook clears its
 // "wanted" flag (a byte at mw4hook+0x43d3e0, asked at +0x9e5f0) when the first pass has used it, and the second
 // eye's water shows the sky alone. When the right eye's pass comes to the water the flag is set again if the
@@ -2159,14 +2134,14 @@ static void waterBothEyes() {
     if (want < 0) want = GetPrivateProfileIntW(L"vr", L"water_both_eyes", 1, (g_dir + L"mw4vr.ini").c_str());
     if (!want || ok == 0) return;
     if (ok < 0) {
-        h = (uint8_t *)GetModuleHandleW(L"mw4hook.dll");
+        h = hkBase();
         uint8_t code[7] = {};
-        uint32_t at = h ? (uint32_t)(uintptr_t)(h + 0x43d3e0) : 0;
-        ok = h && camRead(h + 0x9e5f0, code, 7) && code[0] == 0x80 && code[1] == 0x3d && memcmp(code + 2, &at, 4) == 0 && code[6] == 0;
+        uint32_t at = h ? (uint32_t)(uintptr_t)(h + HK_WATER_REFLECT) : 0;
+        ok = h && camRead(h + HK_AT_WATER_CHECK, code, 7) && code[0] == 0x80 && code[1] == 0x3d && memcmp(code + 2, &at, 4) == 0 && code[6] == 0;
         logf("water: reflection for both eyes %s", ok ? "on (mw4hook's code as known)" : "off - mw4hook's code is not the known one");
         if (!ok) return;
     }
-    uint8_t *flag = h + 0x43d3e0;
+    uint8_t *flag = h + HK_WATER_REFLECT;
     if (g_camPassEye == 0) left = *flag;
     else if (g_camPassEye == 1 && left == 1 && *flag == 0) {
         *flag = 1;
@@ -2194,17 +2169,12 @@ static INT STDMETHODCALLTYPE H_BeginEvent(ID3DUserDefinedAnnotation *a, LPCWSTR 
         }
     }
     if (s->depth == 0 && !s->deferred) {
-        g_in3D = name && wcscmp(name, L"3D") == 0;
+        g_in3D = name && wcscmp(name, HK_LBL_3D) == 0;
         if (g_in3D) g_in3DSeen = true;
     }
-    if (name && wcsstr(name, L"tonemap into the frame")) InterlockedIncrement(&g_tonemapCount);
+    if (name && wcsstr(name, HK_LBL_TONEMAP)) InterlockedIncrement(&g_tonemapCount);
+    if (g_camInMain && s->depth <= 6 && !s->deferred && name && wcsncmp(name, HK_LBL_WATER, 11) == 0) waterBothEyes();
     if (g_lblDump && g_camInMain && s->depth <= 6) { // the labels of both eyes' passes, once (cam.inc)
-        std::lock_guard<std::mutex> lk(g_labelMx);
-        std::string &b = g_lblBuf[g_lblEye & 1];
-        if (name && wcsncmp(name, L"water (RTIN", 11) == 0) b += waterState(); // diagnosis: the planar reflection's conditions
-    }
-    if (g_camInMain && s->depth <= 6 && !s->deferred && name && wcsncmp(name, L"water (RTIN", 11) == 0) waterBothEyes();
-    if (g_lblDump && g_camInMain && s->depth <= 6) {
         std::lock_guard<std::mutex> lk(g_labelMx);
         std::string &b = g_lblBuf[g_lblEye & 1];
         if (b.size() < 60000) {
@@ -2215,23 +2185,23 @@ static INT STDMETHODCALLTYPE H_BeginEvent(ID3DUserDefinedAnnotation *a, LPCWSTR 
         }
     }
     if (s->depth == 0 && !s->deferred) {
-        g_inHud = name && wcsncmp(name, L"after 3D", 8) == 0;
+        g_inHud = name && wcsncmp(name, HK_LBL_HUD, 8) == 0;
         if (g_inHud) hudBegin((ID3D11DeviceContext *)s->self);
         if (g_inHud && (hudShift() != 0 || hudWideNow())) applyViewports((ID3D11DeviceContext *)s->self, s, true);
     }
     if (s->depth == 1 && !s->deferred && g_in3D && name && g_hudW) {
         // inside "3D": a camera smaller than the frame (drawn with "SSAA 2x2") is a window of the HUD
-        bool smallCam = wcsncmp(name, L"SSAA 2x2", 8) == 0;
+        bool smallCam = wcsncmp(name, HK_LBL_SSAA, 8) == 0;
         if (smallCam) { // "... a camera at twice the resolution, 225x170 at 0,1188": where its window lies
-            const wchar_t *v = wcsstr(name, L"resolution, ");
+            const wchar_t *v = wcsstr(name, HK_LBL_SSAA_SIZE);
             int x = 0, y = 0, w = 0, hh = 0;
             if (v && swscanf(v + 12, L"%dx%d at %d,%d", &w, &hh, &x, &y) == 4 && w > 0) {
                 float cu = (x + 0.5f * w) / g_hudW;
                 g_smallCamSide = cu < 0.3f || cu > 0.7f;
             }
         }
-        if (!smallCam && wcsncmp(name, L"camera:", 7) == 0) {
-            const wchar_t *v = wcsstr(name, L"viewport ");
+        if (!smallCam && wcsncmp(name, HK_LBL_CAMERA, 7) == 0) {
+            const wchar_t *v = wcsstr(name, HK_LBL_VIEWPORT);
             int x = 0, y = 0, w = 0, hh = 0;
             if (v && swscanf(v, L"viewport %d,%d %dx%d", &x, &y, &w, &hh) == 4 && w > 0 && (UINT)w * 10 < g_hudW * 7) {
                 smallCam = true;
@@ -2506,7 +2476,7 @@ static volatile bool g_mouseDone;
 // the game window's corner on the screen and render size / window size; false: nothing to do
 static bool mouseScale(POINT *org, float *kx, float *ky) {
     if (!g_renderOverride) return false;
-    HWND w = *(HWND *)(uintptr_t)0x1241050; // the game's window (MW4Mercs.exe)
+    HWND w = *(HWND *)GM_HWND; // the game's window (MW4Mercs.exe)
     RECT r;
     if (!w || !GetClientRect(w, &r) || r.right < 16 || r.bottom < 16) return false;
     org->x = org->y = 0;
@@ -2524,9 +2494,9 @@ static BOOL WINAPI mouseGetCursorPos(POINT *p) {
         static bool logged;
         if (!logged) {
             logged = true;
-            const LONG *pic = (const LONG *)(g_mouseBase + 0x4931dc);
+            const LONG *pic = (const LONG *)(g_mouseBase + HK_PICTURE_RECT);
             logf("mouse: cursor scaled by %.3f x %.3f about %ld,%ld (mw4hook's picture %ld,%ld - %ld,%ld, known %d)", kx, ky, o.x, o.y,
-                 pic[0], pic[1], pic[2], pic[3], (int)*(g_mouseBase + 0x4931d9));
+                 pic[0], pic[1], pic[2], pic[3], (int)*(g_mouseBase + HK_PICTURE_KNOWN));
         }
         p->x = o.x + mouseRound((p->x - o.x) * kx);
         p->y = o.y + mouseRound((p->y - o.y) * ky);
@@ -2558,12 +2528,12 @@ static BOOL WINAPI mouseClipCursor(const RECT *rc) {
 
 static void mouseInstall() {
     if (g_mouseDone) return;
-    uint8_t *base = (uint8_t *)GetModuleHandleW(L"mw4hook.dll");
+    uint8_t *base = hkBase();
     if (!base) return;
     __try {
-        void **pg = (void **)(base + 0x4c7310), **ps = (void **)(base + 0x4c7314), **pc = (void **)(base + 0x4c7318);
+        void **pg = (void **)(base + HK_PTR_GETCURSORPOS), **ps = (void **)(base + HK_PTR_SETCURSORPOS), **pc = (void **)(base + HK_PTR_CLIPCURSOR);
         // this build? "mov eax, [mw4hook+0x4c7310]" in its GetCursorPos, "mov eax, [mw4hook+0x4c7318]" in its clip
-        const uint8_t *i1 = base + 0xbb953, *i2 = base + 0xbc0fd;
+        const uint8_t *i1 = base + HK_AT_GETCURSORPOS, *i2 = base + HK_AT_CLIPCURSOR;
         if (i1[0] != 0xA1 || *(uint32_t *)(i1 + 1) != (uint32_t)(uintptr_t)pg || i2[0] != 0xA1 || *(uint32_t *)(i2 + 1) != (uint32_t)(uintptr_t)pc) {
             logf("mouse: mw4hook's cursor mapping is not where it was - the cursor is not corrected for the render size");
             g_mouseDone = true;
@@ -2591,7 +2561,7 @@ static void mouseInstall() {
 static void mouseCapture() {
     static int want = -1;
     if (want < 0) want = GetPrivateProfileIntW(L"vr", L"mouse_capture", 1, (g_dir + L"mw4vr.ini").c_str());
-    HWND w = *(HWND *)(uintptr_t)0x1241050, fg = GetForegroundWindow();
+    HWND w = *(HWND *)GM_HWND, fg = GetForegroundWindow();
     static HWND lastFg = (HWND)(INT_PTR)-1;
     if (fg != lastFg) {
         lastFg = fg;
@@ -2621,11 +2591,11 @@ static void mouseCapture() {
 
 static void menuModeUpdate() {
     static uint8_t *base;
-    if (!base) base = (uint8_t *)GetModuleHandleW(L"mw4hook.dll");
+    if (!base) base = hkBase();
     if (!base) return;
     __try {
-        const LONG *mode = (const LONG *)(base + 0x43e1c0); // the game's screen mode (what the cursor is mapped to)
-        const RECT *out = (const RECT *)(base + 0x4b90d0);  // mw4hook's output size
+        const LONG *mode = (const LONG *)(base + HK_SCREEN_MODE); // the game's screen mode (what the cursor is mapped to)
+        const RECT *out = (const RECT *)(base + HK_OUT_RECT);  // mw4hook's output size
         LONG mw = mode[0], mh = mode[1], ow = out->right, oh = out->bottom;
         bool menu = false;
         if (mw >= 320 && mh >= 200 && mw <= 16384 && mh <= 16384 && ow > 0 && oh > 0) {
@@ -2643,17 +2613,17 @@ static void menuModeUpdate() {
 }
 
 static void renderSizeSet(int want) {
-    uint8_t *base = (uint8_t *)GetModuleHandleW(L"mw4hook.dll");
+    uint8_t *base = hkBase();
     if (!base) return;
     __try {
         // this build of mw4hook? "mov [mw4hook+0x4b90d8], eax" where the width is stored
-        const uint8_t *ins = base + 0x4e60a;
-        if (ins[0] != 0xA3 || *(uint32_t *)(ins + 1) != (uint32_t)(uintptr_t)(base + 0x4b90d8)) {
+        const uint8_t *ins = base + HK_AT_WIDTH_STORE;
+        if (ins[0] != 0xA3 || *(uint32_t *)(ins + 1) != (uint32_t)(uintptr_t)(base + HK_OUT_WIDTH)) {
             logf("render: mw4hook.dll is not the build this was made for - render_height ignored");
             return;
         }
-        HWND child = *(HWND *)(base + 0x4b90cc);
-        RECT *rc = (RECT *)(base + 0x4b90d0), real;
+        HWND child = *(HWND *)(base + HK_OUT_WINDOW);
+        RECT *rc = (RECT *)(base + HK_OUT_RECT), real;
         if (!child || !GetClientRect(child, &real) || real.right <= 0 || real.bottom <= 0 || rc->right != real.right ||
             rc->bottom != real.bottom) {
             logf("render: mw4hook's output size (%ld x %ld) is not its window's - render_height ignored", rc->right, rc->bottom);
@@ -2663,8 +2633,8 @@ static void renderSizeSet(int want) {
         LONG w = (LONG)((double)real.right * want / real.bottom + 0.5), h = want;
         if (h == real.bottom) return;
         // the import slot of GetClientRect (mw4hook.dll+0x210308), checked by the call that uses it
-        void **slot = (void **)(base + 0x210308);
-        const uint8_t *call = base + 0x571a9;
+        void **slot = (void **)(base + HK_IAT_GETCLIENTRECT);
+        const uint8_t *call = base + HK_AT_SIZE_CALL;
         if (call[0] != 0xFF || call[1] != 0x15 || *(uint32_t *)(call + 2) != (uint32_t)(uintptr_t)slot) {
             logf("render: mw4hook's size check is not where it was - render_height ignored");
             return;
@@ -2679,8 +2649,8 @@ static void renderSizeSet(int want) {
         VirtualProtect(slot, sizeof *slot, old, &old);
         // the picture's size the battles are drawn at (mw4hook.dll+0x4931c8 / +0x4931cc, kept once it is
         // worked out; the function at +0x14700 hands it out): the same
-        LONG *pic = (LONG *)(base + 0x4931c8);
-        const uint8_t *rd = base + 0x14710; // "mov eax, [mw4hook+0x4931c8]"
+        LONG *pic = (LONG *)(base + HK_PICTURE);
+        const uint8_t *rd = base + HK_AT_PICTURE_READ; // "mov eax, [mw4hook+0x4931c8]"
         bool picOk = rd[0] == 0xA1 && *(uint32_t *)(rd + 1) == (uint32_t)(uintptr_t)pic;
         if (picOk && ((pic[0] == real.right && pic[1] == real.bottom) || (pic[0] == 0 && pic[1] == 0))) {
             pic[0] = w;
@@ -2758,7 +2728,7 @@ BOOL WINAPI DllMain(HINSTANCE h, DWORD reason, LPVOID) {
         g_shlog = _wfsopen((g_dir + L"mw4vr_shaders.txt").c_str(), L"w", _SH_DENYNO);
         wchar_t exe[MAX_PATH];
         GetModuleFileNameW(nullptr, exe, MAX_PATH);
-        logf("mw4vr probe v11.17 (VR stage 5, both eyes per frame, camera head tracking, HUD layer, cockpit profiles, own cockpit mesh with HUD monitors, pictures) loaded into %s", narrow(exe).c_str());
+        logf("mw4vr probe v11.18 (VR stage 5, both eyes per frame, camera head tracking, HUD layer, cockpit profiles, own cockpit mesh with HUD monitors, pictures) loaded into %s", narrow(exe).c_str());
         if (!loadReal()) logf("ERROR: the system d3d11.dll could not be loaded");
     }
     return TRUE;

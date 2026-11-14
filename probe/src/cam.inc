@@ -7,7 +7,7 @@
 // The axes of the game's camera space are matched to the view space (x right, y up, z forward) once
 // by comparing the matrix with g_vWorldToClip of the same frame. Included into main.cpp after head.inc.
 
-static const uintptr_t CAM_DRAW = 0x4b6ec0; // CameraElement::Draw
+static const uintptr_t CAM_DRAW = GM_CAMERA_DRAW; // CameraElement::Draw (mw4hook_abi.inc)
 static void *g_camOrig;                       // where its jmp went (mw4hook's detour)
 static volatile bool g_camHooked, g_srcCam;   // hook installed; [vr] source_camera=1
 static float g_camA[9];                       // view-space basis vectors in camera-local coordinates (columns)
@@ -31,7 +31,7 @@ static unsigned g_camAncFrame = ~0u;
 static bool camIsMain(uint8_t *cam) {
     // the viewport (normalised x0 y0 x1 y1 at +0x2c8): the whole screen
     __try {
-        const float *vp = (const float *)(cam + 0x2c8);
+        const float *vp = (const float *)(cam + CAM_VIEWPORT);
         // seen in the game: 1 1 0 0 (far corner first); either order, the full extent on both axes
         return fabsf(fabsf(vp[0] - vp[2]) - 1) < 0.01f && fabsf(fabsf(vp[1] - vp[3]) - 1) < 0.01f;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
@@ -176,7 +176,7 @@ static void camDump(uint8_t *cam) {
                 const float *v = (const float *)(buf + o);
                 fprintf(f, " +%03x: %08x %08x %08x %08x | %12.5g %12.5g %12.5g %12.5g\n", o, u[0], u[1], u[2], u[3], v[0], v[1], v[2], v[3]);
             }
-            e = *(uint8_t **)(buf + 0x10);
+            e = *(uint8_t **)(buf + EL_PARENT);
         }
         fclose(f);
         logf("cam: camera elements written to mw4vr_dump_cam_%d.txt (frame %u)", done, g_frame);
@@ -203,9 +203,9 @@ static void camMul34(const float *a, const float *b, float *out) { // out = a o 
 static void camLocalRestore() {
     if (!g_camLocalCam) return;
     __try {
-        if (memcmp(g_camLocalCam + 0x20, g_camLocalLast, 48) == 0) {
-            memcpy(g_camLocalCam + 0x20, g_camLocalOrig, 48);
-            memcpy(g_camLocalCam + 0x50, g_camLocalOrig, 48);
+        if (memcmp(g_camLocalCam + EL_LOCAL, g_camLocalLast, 48) == 0) {
+            memcpy(g_camLocalCam + EL_LOCAL, g_camLocalOrig, 48);
+            memcpy(g_camLocalCam + EL_LOCAL_COPY, g_camLocalOrig, 48);
         }
     } __except (EXCEPTION_EXECUTE_HANDLER) {
     }
@@ -216,19 +216,19 @@ static void camLocalRestore() {
 // matrix is that already
 static bool camLocalBase(uint8_t *cam, float *base) {
     if (cam != g_camLocalCam) return false;
-    if (memcmp(cam + 0x20, g_camLocalLast, 48) != 0) { // the game wrote its own matrix anew (a moving camera)
-        memcpy(g_camLocalOrig, cam + 0x20, 48);
+    if (memcmp(cam + EL_LOCAL, g_camLocalLast, 48) != 0) { // the game wrote its own matrix anew (a moving camera)
+        memcpy(g_camLocalOrig, cam + EL_LOCAL, 48);
         return false;
     }
-    uint8_t *par = *(uint8_t **)(cam + 0x10);
+    uint8_t *par = *(uint8_t **)(cam + EL_PARENT);
     if (!par) return false;
-    camMul34((const float *)(par + 0x80), g_camLocalOrig, base);
+    camMul34((const float *)(par + EL_WORLD), g_camLocalOrig, base);
     return true;
 }
 static void camLocalWrite(uint8_t *cam, const float *Rc, const float *tc) {
     if (cam != g_camLocalCam) {
         camLocalRestore();
-        memcpy(g_camLocalOrig, cam + 0x20, 48);
+        memcpy(g_camLocalOrig, cam + EL_LOCAL, 48);
         g_camLocalCam = cam;
         const float *o = g_camLocalOrig;
         logf("cam: the head's pose goes into the camera element's own matrix (cam_local=1), frame %u; the game's: [%.3f %.3f %.3f %.2f | %.3f %.3f %.3f %.2f | %.3f %.3f %.3f %.2f]",
@@ -240,8 +240,8 @@ static void camLocalWrite(uint8_t *cam, const float *Rc, const float *tc) {
         h[i * 4 + 3] = tc[i];
     }
     camMul34(g_camLocalOrig, h, l);
-    memcpy(cam + 0x20, l, sizeof l);
-    memcpy(cam + 0x50, l, sizeof l);
+    memcpy(cam + EL_LOCAL, l, sizeof l);
+    memcpy(cam + EL_LOCAL_COPY, l, sizeof l);
     memcpy(g_camLocalLast, l, sizeof l);
 }
 
@@ -259,7 +259,7 @@ static void camLocalIni() {
 static float g_camPlanesSaved[24];
 static bool g_camPlanesIn;
 static void camPlanesWrite(uint8_t *cam, const float *base, const float *out) {
-    float *pl = (float *)(cam + 0x1ac);
+    float *pl = (float *)(cam + CAM_PLANES);
     const float *A = g_camA;
     auto axis = [&](const float *m, int k, float *v) { // view axis k (right, up, forward) in the world
         for (int i = 0; i < 3; ++i) v[i] = m[i * 4 + 0] * A[0 * 3 + k] + m[i * 4 + 1] * A[1 * 3 + k] + m[i * 4 + 2] * A[2 * 3 + k];
@@ -279,7 +279,7 @@ static void camPlanesWrite(uint8_t *cam, const float *base, const float *out) {
     g_camPlanesIn = true;
     float r[3], u[3], f[3], p[3] = {out[3], out[7], out[11]};
     axis(out, 0, r), axis(out, 1, u), axis(out, 2, f);
-    float t = fabsf(*(float *)(cam + 0x20c));
+    float t = fabsf(*(float *)(cam + CAM_TANGENTS));
     if (!(t > 1.6f && t < 20)) t = 1.6f; // +-58 degrees and more: the headset's widest side is 55
     float fp = f[0] * p[0] + f[1] * p[1] + f[2] * p[2];
     float n[24];
@@ -304,7 +304,7 @@ static void camPlanesWrite(uint8_t *cam, const float *base, const float *out) {
 static void camPlanesRestore(uint8_t *cam) {
     if (!g_camPlanesIn) return;
     g_camPlanesIn = false;
-    memcpy(cam + 0x1ac, g_camPlanesSaved, sizeof g_camPlanesSaved);
+    memcpy(cam + CAM_PLANES, g_camPlanesSaved, sizeof g_camPlanesSaved);
 }
 
 static void camPreEye(uint8_t *cam, int eyeOv) {
@@ -314,7 +314,7 @@ static void camPreEye(uint8_t *cam, int eyeOv) {
         if (cam && logs < 24 && g_frame > 200) {
             ++logs;
             __try {
-                const float *vp = (const float *)(cam + 0x2c8), *mm = (const float *)(cam + 0x80);
+                const float *vp = (const float *)(cam + CAM_VIEWPORT), *mm = (const float *)(cam + EL_WORLD);
                 logf("cam: Draw %p frame %u viewport %.3f %.3f %.3f %.3f | +0x80 [%.3f %.3f %.3f %.1f | %.3f %.3f %.3f %.1f | %.3f %.3f %.3f %.1f]",
                      cam, g_frame, vp[0], vp[1], vp[2], vp[3], mm[0], mm[1], mm[2], mm[3], mm[4], mm[5], mm[6], mm[7],
                      mm[8], mm[9], mm[10], mm[11]);
@@ -324,7 +324,7 @@ static void camPreEye(uint8_t *cam, int eyeOv) {
     }
     if (!cam || !camIsMain(cam)) return;
     if (eyeOv <= 0) camDump(cam);
-    float *m = (float *)(cam + 0x80);
+    float *m = (float *)(cam + EL_WORLD);
     // the game's own matrix: what is there, unless it is still what we wrote last time
     float base[12];
     memcpy(base, m, sizeof base);
@@ -339,11 +339,11 @@ static void camPreEye(uint8_t *cam, int eyeOv) {
     g_camLastFrame = g_frame;
     __try { // the scene graph above the camera: parent at +0x10, matrix at +0x80
         int n = 0;
-        uint8_t *e = *(uint8_t **)(cam + 0x10);
+        uint8_t *e = *(uint8_t **)(cam + EL_PARENT);
         while (e && n < CAM_ANC) {
             g_camAncPtr[n] = e;
-            memcpy(g_camAnc[n++], e + 0x80, 48);
-            e = *(uint8_t **)(e + 0x10);
+            memcpy(g_camAnc[n++], e + EL_WORLD, 48);
+            e = *(uint8_t **)(e + EL_PARENT);
         }
         g_camAncN = n;
         g_camAncFrame = g_frame;
@@ -420,7 +420,7 @@ static void camKeepKey() {
 static void camAtPresent() {
     if (g_camKeep != 2 || !g_camMain || g_camEyeFrame != g_frame) return;
     __try {
-        float *m = (float *)((uint8_t *)g_camMain + 0x80);
+        float *m = (float *)((uint8_t *)g_camMain + EL_WORLD);
         if (memcmp(m, g_camBase, sizeof g_camBase) == 0) memcpy(m, g_camWritten, sizeof g_camWritten);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
     }
@@ -430,7 +430,7 @@ static void __stdcall camPost(uint8_t *cam) {
     if (cam && cam == g_camMain) camPlanesRestore(cam);
     if (g_camKeep == 1) return;
     if (cam && cam == g_camMain && g_camEyeFrame == g_frame) {
-        float *m = (float *)(cam + 0x80);
+        float *m = (float *)(cam + EL_WORLD);
         if (memcmp(m, g_camWritten, sizeof g_camWritten) == 0) memcpy(m, g_camBase, sizeof g_camBase);
     }
 }
@@ -527,6 +527,7 @@ static __declspec(naked) void camThunk() {
 
 static void camInstall() {
     if (g_camHooked) return;
+    gmCheck();
     uint8_t *p = (uint8_t *)CAM_DRAW;
     __try {
         if (p[0] != 0xE9) {

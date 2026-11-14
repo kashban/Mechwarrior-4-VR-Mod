@@ -51,7 +51,7 @@ static bool swReadable(const void *p, size_t len) {
     return x + len <= b;
 }
 static inline bool swIsChild(uint8_t *q, uint8_t *parent) {
-    return swReadable(q, 0xb0) && *(uint8_t **)(q + 0x10) == parent && q != parent;
+    return swReadable(q, 0xb0) && *(uint8_t **)(q + EL_PARENT) == parent && q != parent;
 }
 
 // the graph below 'root', breadth first; elements within 'range' of the camera are kept
@@ -87,7 +87,7 @@ static void swayDiscover(uint8_t *root, const float *camPos, float range) {
     }
     for (uint8_t *e : all) {
         if (!swReadable(e, 0xb0) || g_swNodeN >= SW_NODES) continue;
-        const float *m = (const float *)(e + 0x80);
+        const float *m = (const float *)(e + EL_WORLD);
         float dx = m[3] - camPos[3], dy = m[7] - camPos[7], dz = m[11] - camPos[11];
         if (!(dx * dx + dy * dy + dz * dz < range * range)) continue;
         SwNode &n = g_swNodes[g_swNodeN++];
@@ -114,7 +114,7 @@ static void swayOnCamera() {
     for (int i = 0; i < g_swNodeN; ++i) {
         SwNode &n = g_swNodes[i];
         n.read = swReadable(n.e, 0xb0);
-        if (n.read) memcpy(n.m, n.e + 0x80, 48);
+        if (n.read) memcpy(n.m, n.e + EL_WORLD, 48);
     }
     g_swReadFrame = g_frame;
 }
