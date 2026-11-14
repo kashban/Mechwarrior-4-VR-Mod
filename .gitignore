@@ -28,3 +28,6 @@ mw4vr_shots/
 
 # reverse-engineering dumps of the game (its code: not ours to publish)
 re/
+
+# left behind by a mutant of the converter (tests/mutate.py)
+/.mwc.ini
