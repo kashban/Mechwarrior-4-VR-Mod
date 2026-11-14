@@ -101,6 +101,9 @@ mouse_capture=1
 ; 0 = the game's camera back right after each picture (as before); 1 = the head's camera stays (HUD marks and
 ; aiming may follow the head); 2 = the game's for the HUD, the head's again until the next picture
 cam_keep=0
+; 1 = the head's pose is also written into the camera's own matrix in the game's scene: what the game chooses
+; from the camera before drawing (trees, tiles) follows the head, not the mech's torso; 0 = not (as before)
+cam_local=1
 mw5_screen_gain=1.0
 ; the game's HUD runs past the right edge of a square picture (weapon list, damage display): the HUD picture is
 ; this much wider than the game's (1 = not). u beyond 1.000 in the rectangles below = beyond the game's right edge

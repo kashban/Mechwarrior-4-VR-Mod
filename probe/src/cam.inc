@@ -182,6 +182,69 @@ static void camDump(uint8_t *cam) {
     ++done;
 }
 
+// The camera element's own (local) matrix: 3x4 at +0x20, a copy at +0x50; the game makes the element's
+// world matrix (+0x80) from its parent's and this one, every frame. It is the identity in the game. With
+// [vr] cam_local=1 the head's pose (the middle between the eyes) is written there: whatever the game works
+// out from the camera before it is drawn - which trees and tiles exist - then looks where the head looks,
+// not where the mech's torso points. The mech's own view is then the parent's world matrix.
+static volatile int g_camLocal = -1;
+static uint8_t *g_camLocalCam;   // the element whose own matrix holds the head's pose
+static float g_camLocalOrig[12]; // its own matrix as the game had it
+static float g_camLocalLast[12]; // what we wrote
+static void camMul34(const float *a, const float *b, float *out) { // out = a o b (rows: axis x, y, z, translation)
+    for (int i = 0; i < 3; ++i) {
+        for (int j = 0; j < 3; ++j) out[i * 4 + j] = a[i * 4 + 0] * b[0 * 4 + j] + a[i * 4 + 1] * b[1 * 4 + j] + a[i * 4 + 2] * b[2 * 4 + j];
+        out[i * 4 + 3] = a[i * 4 + 3] + a[i * 4 + 0] * b[3] + a[i * 4 + 1] * b[7] + a[i * 4 + 2] * b[11];
+    }
+}
+// the game's own matrix back (the camera left, tracking off, a menu)
+static void camLocalRestore() {
+    if (!g_camLocalCam) return;
+    __try {
+        if (memcmp(g_camLocalCam + 0x20, g_camLocalLast, 48) == 0) {
+            memcpy(g_camLocalCam + 0x20, g_camLocalOrig, 48);
+            memcpy(g_camLocalCam + 0x50, g_camLocalOrig, 48);
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    }
+    logf("cam: the camera element's own matrix is the game's again, frame %u", g_frame);
+    g_camLocalCam = nullptr;
+}
+// the mech's own view of this camera (its world matrix without the head's pose); false: the game's world
+// matrix is that already
+static bool camLocalBase(uint8_t *cam, float *base) {
+    if (cam != g_camLocalCam) return false;
+    if (memcmp(cam + 0x20, g_camLocalLast, 48) != 0) { // the game wrote its own matrix anew (a moving camera)
+        memcpy(g_camLocalOrig, cam + 0x20, 48);
+        return false;
+    }
+    uint8_t *par = *(uint8_t **)(cam + 0x10);
+    if (!par) return false;
+    camMul34((const float *)(par + 0x80), g_camLocalOrig, base);
+    return true;
+}
+static void camLocalWrite(uint8_t *cam, const float *Rc, const float *tc) {
+    if (cam != g_camLocalCam) {
+        camLocalRestore();
+        memcpy(g_camLocalOrig, cam + 0x20, 48);
+        g_camLocalCam = cam;
+        const float *o = g_camLocalOrig;
+        logf("cam: the head's pose goes into the camera element's own matrix (cam_local=1), frame %u; the game's: [%.3f %.3f %.3f %.2f | %.3f %.3f %.3f %.2f | %.3f %.3f %.3f %.2f]",
+             g_frame, o[0], o[1], o[2], o[3], o[4], o[5], o[6], o[7], o[8], o[9], o[10], o[11]);
+    }
+    float h[12], l[12];
+    for (int i = 0; i < 3; ++i) {
+        for (int j = 0; j < 3; ++j) h[i * 4 + j] = Rc[i * 3 + j];
+        h[i * 4 + 3] = tc[i];
+    }
+    camMul34(g_camLocalOrig, h, l);
+    memcpy(cam + 0x20, l, sizeof l);
+    memcpy(cam + 0x50, l, sizeof l);
+    memcpy(g_camLocalLast, l, sizeof l);
+}
+
+static void camLocalIni() { g_camLocal = GetPrivateProfileIntW(L"vr", L"cam_local", 1, (g_dir + L"mw4vr.ini").c_str()); }
+
 static void camPreEye(uint8_t *cam, int eyeOv) {
     InterlockedIncrement(&g_statCamCalls);
     {
@@ -204,6 +267,11 @@ static void camPreEye(uint8_t *cam, int eyeOv) {
     float base[12];
     memcpy(base, m, sizeof base);
     if (cam == g_camMain && memcmp(m, g_camWritten, sizeof base) == 0) memcpy(base, g_camBase, sizeof base);
+    if (g_camLocal < 0) camLocalIni();
+    __try {
+        camLocalBase(cam, base);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    }
     g_camMain = cam;
     memcpy(g_camLast, base, sizeof base);
     g_camLastFrame = g_frame;
@@ -225,9 +293,12 @@ static void camPreEye(uint8_t *cam, int eyeOv) {
     } __except (EXCEPTION_EXECUTE_HANDLER) {
     }
     if (memcmp(m, base, sizeof base)) memcpy(m, base, sizeof base); // our last move undone first
-    if (!g_srcCam || !g_camCal || !g_vrTracking || !g_eyeMode || g_menuMode) return;
+    bool act = g_srcCam && g_camCal && g_vrTracking && g_eyeMode && !g_menuMode;
     int eye = eyeOv >= 0 ? eyeOv : (eyeSign() > 0 ? 1 : 0);
-    if (!g_vrPoseOk[eye]) return;
+    if (!act || !g_vrPoseOk[eye]) {
+        camLocalRestore();
+        return;
+    }
     // head pose in view space (R columns = new axes, t) -> camera-local: Rc = A R A^T, tc = A t
     const float *A = g_camA, *R = g_vrR[eye], *t = g_vrT[eye];
     float AR[9], Rc[9], tc[3];
@@ -236,6 +307,15 @@ static void camPreEye(uint8_t *cam, int eyeOv) {
     for (int i = 0; i < 3; ++i)
         for (int j = 0; j < 3; ++j) Rc[i * 3 + j] = AR[i * 3 + 0] * A[j * 3 + 0] + AR[i * 3 + 1] * A[j * 3 + 1] + AR[i * 3 + 2] * A[j * 3 + 2];
     for (int i = 0; i < 3; ++i) tc[i] = A[i * 3 + 0] * t[0] + A[i * 3 + 1] * t[1] + A[i * 3 + 2] * t[2];
+    if (g_camLocal > 0 && eyeOv <= 0) { // once per frame: the middle between the eyes, for the game's next update
+        float tm[3], tcm[3];
+        bool two = g_vrPoseOk[0] && g_vrPoseOk[1];
+        for (int i = 0; i < 3; ++i) tm[i] = two ? 0.5f * (g_vrT[0][i] + g_vrT[1][i]) : t[i];
+        for (int i = 0; i < 3; ++i) tcm[i] = A[i * 3 + 0] * tm[0] + A[i * 3 + 1] * tm[1] + A[i * 3 + 2] * tm[2];
+        camLocalWrite(cam, Rc, tcm);
+    } else if (g_camLocal <= 0) {
+        camLocalRestore();
+    }
     // camera -> world: M' = M [Rc tc]; rows of m: (M00 M01 M02 Tx)
     float out[12];
     for (int i = 0; i < 3; ++i) {
