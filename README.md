@@ -78,4 +78,6 @@ trademark of Microsoft; the game and MekPak belong to their owners. OpenXR heade
 
 ## License
 
-Not chosen yet.
+Copyright (c) 2026 Kashban. [PolyForm Noncommercial License 1.0.0](LICENSE): use it, change it and pass it on
+for any noncommercial purpose; keep the licence and the copyright notice with it. Commercial use needs the
+author's permission. The OpenXR headers in `probe/include/openxr` stay under Apache 2.0.
