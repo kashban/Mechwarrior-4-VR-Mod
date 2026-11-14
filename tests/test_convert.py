@@ -187,7 +187,7 @@ class Screens(unittest.TestCase):
         self.assertGreater(right[0][:, 0].mean(), 0)
         self.assertAlmostEqual(left[4], 1.0, places=4)   # 0.2 x 0.2
         self.assertAlmostEqual(right[4], 2.0, places=4)  # 0.4 x 0.2
-        for p, n, uv, i, asp in parts:
+        for p, n, uv, i, asp, size in parts:
             self.assertEqual(len(p), 4)
             self.assertEqual(len(i), 6)
             self.assertEqual(i.dtype, np.uint32)
@@ -200,7 +200,7 @@ class Screens(unittest.TestCase):
         # one monitor facing the viewer (normal -z in the mod's space: towards the eye at the origin)
         P = np.array([[-0.2, 0.0, 1.0], [0.2, 0.0, 1.0], [0.2, 0.1, 1.0], [-0.2, 0.1, 1.0]], np.float32)
         N = np.tile(np.array([0, 0, -1], np.float32), (4, 1))
-        (p, n, uv, i, asp), = cc.screens(P, N, np.array([0, 1, 2, 0, 2, 3], np.uint32))
+        (p, n, uv, i, asp, size), = cc.screens(P, N, np.array([0, 1, 2, 0, 2, 3], np.uint32))
         by = {tuple(round(float(x), 3) for x in q): t for q, t in zip(p, uv)}
         np.testing.assert_allclose(by[(-0.2, 0.1, 1.0)], [0, 0], atol=1e-5)  # top left
         np.testing.assert_allclose(by[(0.2, 0.1, 1.0)], [1, 0], atol=1e-5)   # top right
@@ -245,7 +245,7 @@ class Screens(unittest.TestCase):
                    (0, 1): c - r * W / 2 - u * H / 2, (1, 1): c + r * W / 2 - u * H / 2}
         want = list(corners)
         P = np.array([corners[k] for k in want], np.float32)
-        (p, nn, uv, i, asp), = cc.screens(P, np.tile(3 * n, (4, 1)).astype(np.float32), np.array([0, 1, 2, 1, 3, 2], np.uint32))
+        (p, nn, uv, i, asp, size), = cc.screens(P, np.tile(3 * n, (4, 1)).astype(np.float32), np.array([0, 1, 2, 1, 3, 2], np.uint32))
         self.assertAlmostEqual(asp, W / H, places=3)
         for q, t in zip(p, uv):
             k = int(np.argmin(np.abs(P - q).sum(1)))
@@ -260,7 +260,7 @@ class Screens(unittest.TestCase):
         top, w = mid + 0.1 * along(0), np.array([0.5, 0, 0])
         P = np.array([low, low + w, mid, mid + w, top, top + w], np.float32)
         n = np.cross(along(20), [1, 0, 0])
-        (p, nn, uv, i, asp), = cc.screens(P, np.tile(n, (6, 1)).astype(np.float32), np.array([0, 1, 2, 1, 3, 2, 2, 3, 4, 3, 5, 4], np.uint32))
+        (p, nn, uv, i, asp, size), = cc.screens(P, np.tile(n, (6, 1)).astype(np.float32), np.array([0, 1, 2, 1, 3, 2, 2, 3, 4, 3, 5, 4], np.uint32))
         self.assertAlmostEqual(asp, 0.5 / (0.2 * np.cos(np.radians(20))), places=3)
         np.testing.assert_allclose(uv[:, 1], [1, 1, 0.5, 0.5, 0, 0], atol=1e-4)
 
@@ -269,7 +269,7 @@ class Screens(unittest.TestCase):
         s = 0.2 / np.sqrt(2)
         P = np.array([[0, 0, 1], [0.3, 0, 1], [0.3, s, 1 + s], [0, s, 1 + s]], np.float32)
         nrm = np.array([0, 1, -1], np.float32) / np.sqrt(2)
-        (p, n, uv, i, asp), = cc.screens(P, np.tile(nrm, (4, 1)), np.array([0, 1, 2, 0, 2, 3], np.uint32))
+        (p, n, uv, i, asp, size), = cc.screens(P, np.tile(nrm, (4, 1)), np.array([0, 1, 2, 0, 2, 3], np.uint32))
         self.assertAlmostEqual(asp, 1.5, places=3)
 
 
@@ -421,6 +421,184 @@ class Convert(unittest.TestCase):
                 f.write(b'\0')
             with self.assertRaisesRegex(ValueError, '^bytes after the last group$'):
                 cc.read_mwc(out)
+
+
+def rect(x, w, h, z=1.0, y=0.0):
+    """a rectangle w x h facing the viewer (z forward), its left edge at x; indices for vertices from 0"""
+    P = np.array([[x, y, z], [x + w, y, z], [x + w, y + h, z], [x, y + h, z]], np.float32)
+    return P, np.tile(np.array([0, 0, -1], np.float32), (4, 1)), np.array([0, 1, 2, 0, 2, 3], np.uint32)
+
+
+def join(rects):
+    P = np.vstack([r[0] for r in rects])
+    N = np.vstack([r[1] for r in rects])
+    I = np.concatenate([r[2] + 4 * k for k, r in enumerate(rects)]).astype(np.uint32)
+    return P, N, I
+
+
+class Monitors(unittest.TestCase):
+    def test_size_in_metres(self):
+        s = 0.2 / np.sqrt(2)  # leaning back by 45 degrees: 0.3 wide, 0.2 along its slope
+        P = np.array([[0, 0, 1], [0.3, 0, 1], [0.3, s, 1 + s], [0, s, 1 + s]], np.float32)
+        nrm = np.array([0, 1, -1], np.float32) / np.sqrt(2)
+        m = cc.screen(P, np.tile(nrm, (4, 1)), np.array([0, 1, 2, 0, 2, 3], np.uint32), np.array([0, 1]))
+        self.assertAlmostEqual(m[5][0], 0.3, places=5)
+        self.assertAlmostEqual(m[5][1], 0.2, places=5)
+        self.assertAlmostEqual(m[4], 1.5, places=4)
+        self.assertEqual(len(m[3]), 6)
+
+    def test_one_triangle_of_a_part(self):
+        P, N, I = rect(0, 0.4, 0.2)
+        m = cc.screen(P, N, I, np.array([1]))  # the second triangle alone: three vertices, its own numbers
+        self.assertEqual(len(m[0]), 3)
+        self.assertEqual(sorted(m[3].tolist()), [0, 1, 2])
+
+    def test_parts(self):
+        P, N, I = join([rect(0, 0.1, 0.1), rect(0.5, 0.1, 0.1), rect(0.6, 0.1, 0.1)])  # the last two share an edge
+        got = sorted(sorted(ts.tolist()) for ts in cc.parts(P, I))
+        self.assertEqual(got, [[0, 1], [2, 3, 4, 5]])
+
+    def test_small_parts_are_no_monitors(self):
+        # left to right: a button, a monitor, a strip too low, a strip too narrow, a monitor
+        P, N, I = join([rect(-0.9, 0.05, 0.05), rect(-0.5, 0.3, 0.2), rect(0.0, 0.3, 0.06), rect(0.4, 0.06, 0.3), rect(0.6, 0.08, 0.08)])
+        found, rest = cc.monitors(P, N, I)
+        self.assertEqual([round(float(m[0][:, 0].min()), 2) for m in found], [-0.5, 0.6])
+        self.assertEqual(sorted(rest.tolist()), sorted(list(range(0, 4)) * 1 + [0, 2] + [8, 9, 10, 8, 10, 11] + [12, 13, 14, 12, 14, 15]))
+        self.assertEqual(rest.dtype, np.uint32)
+        for m in found:
+            self.assertLess(int(m[3].max()), 4)
+
+    def test_the_limit_counts(self):
+        old = cc.SCREEN_MIN
+        try:
+            cc.SCREEN_MIN = 0.25  # (a number a float holds exactly)
+            P, N, I = join([rect(0, 0.25, 0.5), rect(1, 0.5, 0.25), rect(2, 0.5, 0.2499)])
+            found, rest = cc.monitors(P, N, I)
+            self.assertEqual(len(found), 2)
+            self.assertEqual(len(rest), 6)
+        finally:
+            cc.SCREEN_MIN = old
+        self.assertEqual(old, 0.07)
+
+    def test_the_largest_eight(self):
+        # ten monitors, by area: the two smallest stay with the material (0.08 x 0.3 and 0.1 x 0.1)
+        sizes = [(0.2, 0.2), (0.3, 0.31), (0.21, 0.2), (0.08, 0.3), (0.4, 0.08), (0.22, 0.2), (0.1, 0.1), (0.23, 0.2), (0.24, 0.2), (0.25, 0.2)]
+        P, N, I = join([rect(k - 5.0, w, h) for k, (w, h) in enumerate(sizes)])
+        found, rest = cc.monitors(P, N, I)
+        self.assertEqual(cc.SCREEN_MAX, 8)
+        self.assertEqual([round(float(m[0][:, 0].min())) for m in found], [-5, -4, -3, -1, 0, 2, 3, 4])
+        self.assertEqual(sorted(set(rest.tolist())), [12, 13, 14, 15, 24, 25, 26, 27])
+
+    def test_a_part_without_height(self):
+        P, N, I = join([rect(0, 0.3, 0.0), rect(1, 0.3, 0.2)])
+        found, rest = cc.monitors(P, N, I)  # no warning, and no monitor of the flat one
+        self.assertEqual(len(found), 1)
+        self.assertEqual(len(rest), 6)
+
+
+class Assign(unittest.TestCase):
+    def test_five_in_a_row(self):
+        places = [(-0.64, 0.11, 0.024), (-0.22, 0.57, 0.016), (-0.01, 0.68, 0.037), (0.24, 0.68, 0.019), (0.69, 0.16, 0.024)]
+        self.assertEqual(cc.assign(places), {'lance': 0, 'target': 1, 'radar': 2, 'damage': 3, 'weapons': 4})
+
+    def test_behind_does_not_count(self):
+        places = [(-0.5, 0.4, 0.01), (0.0, 0.4, 0.01), (0.5, 0.0, 0.01), (0.6, -0.3, 0.05)]  # two ahead, one beside, one behind
+        self.assertEqual(cc.assign(places), {})
+        self.assertEqual(cc.assign([]), {})
+        places[2] = (0.5, 0.01, 0.01)
+        self.assertEqual(cc.assign(places), {'target': 0, 'radar': 1, 'damage': 2})
+
+    def test_the_largest_further_out(self):
+        # left of the target three: the largest shows the lance list, not the nearest; right of the damage two
+        places = [(-0.9, 0.3, 0.006), (-0.8, 0.3, 0.015), (-0.7, 0.3, 0.007), (-0.3, 0.4, 0.03), (0.02, 0.4, 0.016), (0.3, 0.4, 0.02),
+                  (0.6, 0.3, 0.004), (0.7, 0.3, 0.009), (0.75, -0.2, 0.5)]
+        self.assertEqual(cc.assign(places), {'lance': 1, 'target': 3, 'radar': 4, 'damage': 5, 'weapons': 7})
+
+    def test_radar_keeps_a_neighbour_on_each_side(self):
+        self.assertEqual(cc.assign([(0.0, 0.5, 0.01), (0.3, 0.5, 0.01), (0.6, 0.5, 0.01)]), {'target': 0, 'radar': 1, 'damage': 2})
+        self.assertEqual(cc.assign([(-0.6, 0.5, 0.01), (-0.3, 0.5, 0.01), (-0.05, 0.5, 0.01)]), {'target': 0, 'radar': 1, 'damage': 2})
+        # four, all to the right of the middle: the second is the radar, the last the weapons
+        self.assertEqual(cc.assign([(0.1, 0.5, 0.01), (0.3, 0.5, 0.01), (0.6, 0.5, 0.01), (0.9, 0.5, 0.01)]),
+                         {'target': 0, 'radar': 1, 'damage': 2, 'weapons': 3})
+        self.assertEqual(cc.assign([(-0.9, 0.5, 0.01), (-0.6, 0.5, 0.01), (-0.3, 0.5, 0.01), (-0.2, 0.5, 0.01)]),
+                         {'lance': 0, 'target': 1, 'radar': 2, 'damage': 3})
+
+    def test_order_given_does_not_matter(self):
+        places = [(0.24, 0.68, 0.019), (-0.64, 0.11, 0.024), (-0.01, 0.68, 0.037), (0.69, 0.16, 0.024), (-0.22, 0.57, 0.016)]
+        self.assertEqual(cc.assign(places), {'lance': 1, 'target': 4, 'radar': 2, 'damage': 0, 'weapons': 3})
+
+    def test_ini_text(self):
+        text = cc.ini_text([(-0.64, 0.11, 0.024), (-0.22, 0.57, 0.016), (-0.01, 0.68, 0.0371), (0.24, 0.68, 0.019)])
+        lines = text.split('\n')
+        self.assertEqual(lines[1], '[cockpit]')
+        self.assertEqual(lines[2], '; the eye in the mesh (metres) and the size of the mesh; in a battle: Ctrl+Alt+arrows, Ctrl+Alt+PgUp / PgDn')
+        self.assertEqual(lines[7], '; 1 = the monitors show the HUD; 0 = the HUD floats in front as without a cockpit of our own')
+        self.assertEqual(lines[3:7], ['scale=1.000', 'eye_right_m=0.000', 'eye_up_m=0.000', 'eye_forward_m=0.000'])
+        self.assertEqual(lines[8], 'screens=1')
+        self.assertEqual(lines[10:], [';   0: -0.64 m to the right, 0.11 m ahead, 240 cm2', ';   1: -0.22 m to the right, 0.57 m ahead, 160 cm2',
+                                      ';   2: -0.01 m to the right, 0.68 m ahead, 371 cm2', ';   3: 0.24 m to the right, 0.68 m ahead, 190 cm2',
+                                      '; lance', 'screen_0=0.000 0.000 0.243 0.108', 'screen_0_alt=0.000 0.000 0.243 0.435 0.210 0.125',
+                                      '; target', 'screen_1=0.000 0.772 0.180 1.000', '; radar', 'screen_2=0.320 0.770 0.690 0.990',
+                                      '; damage', 'screen_3=0.820 0.772 1.005 1.000', ''])
+        for line in lines:
+            self.assertTrue(line == '' or line[0] in ';[' or '=' in line, line)
+
+    def test_ini_text_without_monitors(self):
+        lines = cc.ini_text([(0.5, 0.3, 5.0)]).split('\n')
+        self.assertEqual(lines[8], 'screens=0')
+        self.assertEqual(lines[10:], [';   0: 0.50 m to the right, 0.30 m ahead, 50000 cm2', ''])
+        self.assertEqual(cc.HUD_PARTS['weapons'], '0.716 0.000 1.000 0.124')
+
+
+class Cockpit(unittest.TestCase):
+    def convert(self, d, prims):
+        path = write_gltf(d, prims)
+        out = os.path.join(d, 'c.mwc')
+        said = []
+        groups = cc.convert(path, d, out, log=lambda *a: said.append(' '.join(str(x) for x in a)))
+        return out, said, groups
+
+    def panel(self, rects):
+        """rects in the mod's space (z forward) as a glTF primitive (z back)"""
+        P, N, I = join(rects)
+        P, N = P.copy(), N.copy()
+        P[:, 2] *= -1
+        N[:, 2] *= -1
+        UV = np.tile(np.array([[0.25, 0.75]], np.float32), (len(P), 1))
+        return P, N, UV, I.astype(np.uint16)
+
+    def test_buttons_stay_with_their_material(self):
+        with tempfile.TemporaryDirectory() as d:
+            prims = [('Panels_MTI',) + self.panel([rect(-0.5, 0.3, 0.2), rect(0.0, 0.05, 0.05), rect(0.3, 0.2, 0.2)]),
+                     ('PanelsRight_MTI',) + self.panel([rect(0.8, 0.2, 0.1)])]
+            out, said, groups = self.convert(d, prims)
+            got = cc.read_mwc(out)
+            self.assertEqual([g['name'] for g in got], ['SCREEN:0', 'SCREEN:1', 'Panels_MTI', 'SCREEN:2'])
+            rest = got[2]
+            self.assertEqual(rest['indices'].tolist(), [4, 5, 6, 4, 6, 7])  # the button's two triangles, the vertices as they were
+            np.testing.assert_allclose(rest['verts'][:, 6:8], [[0.25, 0.75]] * 12)
+            self.assertEqual((rest['colour_size'], rest['strength']), (4, 1.0))
+            np.testing.assert_allclose(got[3]['verts'][:, 0].min(), 0.8)
+            self.assertAlmostEqual(got[3]['strength'], 2.0, places=4)
+            self.assertTrue(any(s.startswith('  screen 2: centre 0.90 0.05 1.00 m, 20 x 10 cm') for s in said), said)
+            self.assertTrue(any(s.startswith('  screen 0: centre -0.35 0.10 1.00 m, 30 x 20 cm') for s in said), said)
+
+    def test_ini_is_written_once(self):
+        with tempfile.TemporaryDirectory() as d:
+            prims = [('Panels_MTI',) + self.panel([rect(-0.5, 0.3, 0.2), rect(-0.1, 0.2, 0.2), rect(0.3, 0.2, 0.1)])]
+            out, said, groups = self.convert(d, prims)
+            ini = os.path.join(d, 'c.ini')
+            text = get(ini, 'r')
+            self.assertEqual(text, cc.ini_text([(-0.35, 1.0, 0.06), (0.0, 1.0, 0.04), (0.4, 1.0, 0.02)]))
+            self.assertIn('screen_1=' + cc.HUD_PARTS['radar'], text)
+            put(ini, 'mine')
+            self.convert(d, prims)
+            self.assertEqual(get(ini, 'r'), 'mine')
+
+    def test_ini_without_monitors(self):
+        with tempfile.TemporaryDirectory() as d:
+            out, said, groups = self.convert(d, [('Hull_MTI',) + quad(0, 0, 1, 1, -1)])
+            self.assertIn('screens=0', get(os.path.join(d, 'c.ini'), 'r'))
 
 
 if __name__ == '__main__':
