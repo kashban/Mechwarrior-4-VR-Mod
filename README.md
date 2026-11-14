@@ -67,16 +67,27 @@ Visual Studio 2022 Build Tools (x86), then `mod\build.bat`. The result is `mod\b
 
 ## Tests
 
-`tests\run_tests.bat` runs the automatic tests (Python, no game files needed). `tests\run_tests.bat mutation` also
-plants small errors into the tested code, one at a time, and checks that a test fails for each
-(`tests/mutate.py`); the share found must not fall below the floor in `tests/mutation_floor.json`.
-So far the cockpit converter is covered; the mod itself (C++) is not yet.
+`tests/run_tests.bat` runs the automatic tests; no game files are needed.
+
+- `test_convert.py` - the cockpit converter, on a small made-up cockpit
+- `core_test.cpp` - the mod's arithmetic (`mod/src/core.h`: matrices, the camera's frustum planes, which parts
+  of the HUD go where), built as a console program
+- `test_shaders.py` - the mod's shaders compile (Windows SDK's `fxc`)
+- `test_abi.py` - `mw4hook_abi.inc` against the programs themselves. Set `MW4_DIR` to the game's folder and it
+  checks the builds of `mw4hook.dll` and `MW4Mercs.exe` and every instruction the mod relies on; a new build of
+  mw4hook fails here first.
+
+`tests/run_tests.bat mutation` also plants small errors into the converter and into `core.h`, one at a time,
+and checks that a test fails for each (`tests/mutate.py`); the share found must not fall below the floor in
+`tests/mutation_floor.json` (both at 100 %). What needs the game, a headset or Direct3D - the hooks, OpenXR,
+drawing - is not covered by tests.
 
 ## Layout
 
 - `mod/src/main.cpp` - the proxy, hooks, shader tracking
 - `mod/src/mw4hook_abi.inc` - everything known about the insides of `mw4hook.dll` and `MW4Mercs.exe`
   (addresses, offsets, shader hashes, label names). A new build of either means changes here only.
+- `mod/src/core.h` - the arithmetic, free of Windows and the game (what the tests test)
 - `mod/src/cam.inc` - the camera hook; `vr.inc` - OpenXR; `hud.inc` - the HUD layer; `mw5.inc` - the cockpit mesh
 - `tools/` - cockpit conversion
 

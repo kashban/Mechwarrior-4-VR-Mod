@@ -1,5 +1,6 @@
 # build output
 mod/build/
+tests/build/
 __pycache__/
 *.pyc
 

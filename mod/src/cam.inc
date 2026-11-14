@@ -193,12 +193,6 @@ static volatile int g_camLocal = -1;
 static uint8_t *g_camLocalCam;   // the element whose own matrix holds the head's pose
 static float g_camLocalOrig[12]; // its own matrix as the game had it
 static float g_camLocalLast[12]; // what we wrote
-static void camMul34(const float *a, const float *b, float *out) { // out = a o b (rows: axis x, y, z, translation)
-    for (int i = 0; i < 3; ++i) {
-        for (int j = 0; j < 3; ++j) out[i * 4 + j] = a[i * 4 + 0] * b[0 * 4 + j] + a[i * 4 + 1] * b[1 * 4 + j] + a[i * 4 + 2] * b[2 * 4 + j];
-        out[i * 4 + 3] = a[i * 4 + 3] + a[i * 4 + 0] * b[3] + a[i * 4 + 1] * b[7] + a[i * 4 + 2] * b[11];
-    }
-}
 // the game's own matrix back (the camera left, tracking off, a menu)
 static void camLocalRestore() {
     if (!g_camLocalCam) return;
@@ -222,7 +216,7 @@ static bool camLocalBase(uint8_t *cam, float *base) {
     }
     uint8_t *par = *(uint8_t **)(cam + EL_PARENT);
     if (!par) return false;
-    camMul34((const float *)(par + EL_WORLD), g_camLocalOrig, base);
+    mcMul34((const float *)(par + EL_WORLD), g_camLocalOrig, base);
     return true;
 }
 static void camLocalWrite(uint8_t *cam, const float *Rc, const float *tc) {
@@ -239,7 +233,7 @@ static void camLocalWrite(uint8_t *cam, const float *Rc, const float *tc) {
         for (int j = 0; j < 3; ++j) h[i * 4 + j] = Rc[i * 3 + j];
         h[i * 4 + 3] = tc[i];
     }
-    camMul34(g_camLocalOrig, h, l);
+    mcMul34(g_camLocalOrig, h, l);
     memcpy(cam + EL_LOCAL, l, sizeof l);
     memcpy(cam + EL_LOCAL_COPY, l, sizeof l);
     memcpy(g_camLocalLast, l, sizeof l);
@@ -260,45 +254,19 @@ static float g_camPlanesSaved[24];
 static bool g_camPlanesIn;
 static void camPlanesWrite(uint8_t *cam, const float *base, const float *out) {
     float *pl = (float *)(cam + CAM_PLANES);
-    const float *A = g_camA;
-    auto axis = [&](const float *m, int k, float *v) { // view axis k (right, up, forward) in the world
-        for (int i = 0; i < 3; ++i) v[i] = m[i * 4 + 0] * A[0 * 3 + k] + m[i * 4 + 1] * A[1 * 3 + k] + m[i * 4 + 2] * A[2 * 3 + k];
-    };
-    float fb[3], pb[3] = {base[3], base[7], base[11]};
-    axis(base, 2, fb);
-    // the layout as it is known: plane 0 looks along the mech's view, plane 1 against it
-    float d0 = pl[0] * fb[0] + pl[1] * fb[1] + pl[2] * fb[2], d1 = pl[4] * fb[0] + pl[5] * fb[1] + pl[6] * fb[2];
     static int told;
-    if (!(d0 > 0.98f && d1 < -0.98f)) {
-        if (told++ < 3) logf("cam: the frustum planes at +0x1ac are not as expected (%.3f %.3f) - left alone", d0, d1);
+    McFrustum fr;
+    if (!mcFrustumPlanes(pl, base, out, g_camA, *(float *)(cam + CAM_TANGENTS), &fr)) {
+        // the layout as it is known: plane 0 looks along the mech's view, plane 1 against it
+        if (told++ < 3) logf("cam: the frustum planes at +0x1ac are not as expected (%.3f %.3f) - left alone", fr.d0, fr.d1);
         return;
     }
-    float farD = pl[3] - (fb[0] * pb[0] + fb[1] * pb[1] + fb[2] * pb[2]);
-    float nearD = -pl[7] - (fb[0] * pb[0] + fb[1] * pb[1] + fb[2] * pb[2]);
     if (!g_camPlanesIn) memcpy(g_camPlanesSaved, pl, sizeof g_camPlanesSaved);
     g_camPlanesIn = true;
-    float r[3], u[3], f[3], p[3] = {out[3], out[7], out[11]};
-    axis(out, 0, r), axis(out, 1, u), axis(out, 2, f);
-    float t = fabsf(*(float *)(cam + CAM_TANGENTS));
-    if (!(t > 1.6f && t < 20)) t = 1.6f; // +-58 degrees and more: the headset's widest side is 55
-    float fp = f[0] * p[0] + f[1] * p[1] + f[2] * p[2];
-    float n[24];
-    for (int i = 0; i < 3; ++i) n[i] = f[i], n[4 + i] = -f[i];
-    n[3] = fp + farD, n[7] = -fp - (nearD > 0.05f ? nearD * 0.5f : nearD);
-    const float *side[4] = {r, r, u, u};
-    const float sg[4] = {1, -1, -1, 1};
-    for (int k = 0; k < 4; ++k) {
-        float v[3], l = 0;
-        for (int i = 0; i < 3; ++i) v[i] = sg[k] * side[k][i] - t * f[i], l += v[i] * v[i];
-        l = sqrtf(l);
-        float *o = n + 8 + 4 * k;
-        for (int i = 0; i < 3; ++i) o[i] = v[i] / l;
-        o[3] = o[0] * p[0] + o[1] * p[1] + o[2] * p[2];
-    }
-    memcpy(pl, n, sizeof n);
+    memcpy(pl, fr.planes, sizeof fr.planes);
     if (told == 0) {
         told = 100;
-        logf("cam: frustum planes made from the head's view (cam_planes=1): far %.0f, near %.2f, tangent %.3f", farD, nearD, t);
+        logf("cam: frustum planes made from the head's view (cam_planes=1): far %.0f, near %.2f, tangent %.3f", fr.farD, fr.nearD, fr.t);
     }
 }
 static void camPlanesRestore(uint8_t *cam) {

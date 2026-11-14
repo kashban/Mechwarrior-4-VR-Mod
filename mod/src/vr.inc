@@ -934,103 +934,29 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
             swt = {g_swayT[0] * k, g_swayT[1] * k, -g_swayT[2] * k};
         }
         float p0 = g_vr.baseP00 > 0 ? g_vr.baseP00 : g_P00, p1 = g_vr.baseP11 > 0 ? g_vr.baseP11 : g_P11;
-        // the zoom window: a small camera around the middle of the picture
-        float zr[4] = {0, 0, 0, 0};
-        bool zoomWin = false;
-        if (g_hudCamFrame == g_frame && g_hudW && g_hudH)
-            for (int i = 0; i < g_hudCamN; ++i) {
-                const HudCamRect &r = g_hudCams[i];
-                float cu = (r.x + 0.5f * r.w) / g_hudW;
-                if (cu > 0.3f && cu < 0.7f) {
-                    zr[0] = (float)r.x / g_hudW;
-                    zr[1] = (float)r.y / g_hudH;
-                    zr[2] = (float)(r.x + r.w) / g_hudW;
-                    zr[3] = (float)(r.y + r.h) / g_hudH;
-                    zoomWin = true;
-                }
-            }
-        // list: the far middle, the near frame (cut left and right of the zoom window where they meet), the zoom window far
-        float rc[32][5]; // u0 v0 u1 v1 kind (0 near, 1 far, 2 near opaque, 3 far opaque, 4 far and moved up, 5 the fade sheet)
-        int nr = 0;
-        auto add = [&](float u0, float v0, float u1, float v1, float isFar) {
-            if (nr < 32 && u1 - u0 > 0.005f && v1 - v0 > 0.005f) {
-                rc[nr][0] = u0, rc[nr][1] = v0, rc[nr][2] = u1, rc[nr][3] = v1, rc[nr][4] = isFar;
-                ++nr;
-            }
-        };
-        // what is cut out of the HUD around the zoom window: the window and the game's frame around it
-        float zc[4] = {zr[0] - g_vr.zoomWinMargin, zr[1] - g_vr.zoomWinMargin, zr[2] + g_vr.zoomWinMargin, zr[3] + g_vr.zoomWinMargin};
-        if (zoomWin && zc[0] < R && zc[2] > L && zc[1] < B && zc[3] > T) {
-            // the far middle around the zoom window (that is shown by its own, smaller quad)
-            float a0 = zc[0] > L ? zc[0] : L, a1 = zc[1] > T ? zc[1] : T, a2 = zc[2] < R ? zc[2] : R, a3 = zc[3] < B ? zc[3] : B;
-            add(L, T, R, a1, 1);
-            add(L, a3, R, B, 1);
-            add(L, a1, a0, a3, 1);
-            add(a2, a1, R, a3, 1);
-        } else {
-            add(L, T, R, B, 1);
-        }
+        // which parts of the HUD image are shown where (core.h)
+        McHud hd = {};
+        hd.T = T, hd.B = B, hd.L = L, hd.R = R;
         // the HUD image's right edge: beyond 1 where the layer texture is wider than the picture (hud.inc)
-        float UR = hudWide() ? (float)min(g_hudTexW, hudWideW(g_vr.w)) / (float)g_hudW : 1.0f;
-        const float nearRc[4][4] = {{0, 0, UR, T}, {0, B, UR, 1}, {0, T, L, B}, {R, T, UR, B}};
-        bool screens = mw5ScreensOn(); // the own cockpit's monitors show the near frame; what none of them shows stays, far
-        // a rectangle without what the zoom window covers of it (that is shown by its own quad, smaller)
-        auto addCut = [&](float u0, float v0, float u1, float v1, float kind) {
-            if (!(zoomWin && zc[0] < u1 && zc[2] > u0 && zc[1] < v1 && zc[3] > v0)) {
-                add(u0, v0, u1, v1, kind);
-                return;
-            }
-            float a0 = zc[0] > u0 ? zc[0] : u0, a1 = zc[1] > v0 ? zc[1] : v0, a2 = zc[2] < u1 ? zc[2] : u1, a3 = zc[3] < v1 ? zc[3] : v1;
-            add(u0, v0, u1, a1, kind);
-            add(u0, a3, u1, v1, kind);
-            add(u0, a1, a0, a3, kind);
-            add(a2, a1, u1, a3, kind);
-        };
-        if (screens) {
-            float iv[8][2], u = 0; // the top strip between the monitors' parts (the compass, mission texts)
-            int ni = mw5TopSpans(T, iv);
-            for (int i = 0; i < ni; ++i) {
-                if (iv[i][0] > u) addCut(u, 0, iv[i][0], T, 1);
-                if (iv[i][1] > u) u = iv[i][1];
-            }
-            if (u < UR) addCut(u, 0, UR, T, 1);
-            float lt = mw5LeftAltBottom(L); // the lance orders' menu is on a monitor
-            addCut(0, lt > T ? lt : T, L, B, 1); // the side columns (messages)
-            addCut(R, T, UR, B, 1);
-            // the torso mark: cut out of the far middle and shown higher
-            const float *tw = g_vr.twist;
-            if (!zoomWin && tw[2] > tw[0] && tw[3] > tw[1] && g_vr.twistDv != 0) {
-                int n0 = nr;
-                for (int i = 0; i < n0; ++i) {
-                    if (rc[i][4] != 1) continue;
-                    float u0 = rc[i][0], v0 = rc[i][1], u1 = rc[i][2], v1 = rc[i][3];
-                    if (tw[0] >= u1 || tw[2] <= u0 || tw[1] >= v1 || tw[3] <= v0) continue;
-                    float a0 = tw[0] > u0 ? tw[0] : u0, a1 = tw[1] > v0 ? tw[1] : v0, a2 = tw[2] < u1 ? tw[2] : u1, a3 = tw[3] < v1 ? tw[3] : v1;
-                    rc[i][3] = a1; // what lies above it; then below, left, right
-                    add(u0, a3, u1, v1, 1);
-                    add(u0, a1, a0, a3, 1);
-                    add(a2, a1, u1, a3, 1);
-                }
-                add(tw[0], tw[1], tw[2], tw[3], 4);
-            }
-        }
-        for (int i = 0; i < 4 && !screens; ++i) {
-            float u0 = nearRc[i][0], v0 = nearRc[i][1], u1 = nearRc[i][2], v1 = nearRc[i][3];
-            if (zoomWin && zc[0] < u1 && zc[2] > u0 && zc[1] < v1 && zc[3] > v0) {
-                add(u0, v0, zc[0], v1, 0);
-                add(zc[2], v0, u1, v1, 0);
-            } else {
-                add(u0, v0, u1, v1, 0);
-            }
-        }
-        if (zoomWin) add(zr[0], zr[1], zr[2], zr[3], 3); // far, opaque
+        hd.UR = hudWide() ? (float)min(g_hudTexW, hudWideW(g_vr.w)) / (float)g_hudW : 1.0f;
         if (g_hudCamFrame == g_frame && g_hudW && g_hudH)
-            for (int i = 0; i < g_hudCamN && !screens; ++i) { // the other windows (the target's view): near, opaque, over the frame
+            for (int i = 0; i < g_hudCamN && i < MC_CAMS; ++i) { // the small cameras' windows
                 const HudCamRect &r = g_hudCams[i];
-                float cu = (r.x + 0.5f * r.w) / g_hudW;
-                if (cu > 0.3f && cu < 0.7f) continue;
-                add((float)r.x / g_hudW, (float)r.y / g_hudH, (float)(r.x + r.w) / g_hudW, (float)(r.y + r.h) / g_hudH, 2);
+                float *o = hd.cam[hd.nCam++];
+                o[0] = (float)r.x / g_hudW, o[1] = (float)r.y / g_hudH, o[2] = (float)(r.x + r.w) / g_hudW, o[3] = (float)(r.y + r.h) / g_hudH;
             }
+        hd.margin = g_vr.zoomWinMargin;
+        hd.screens = mw5ScreensOn(); // the own cockpit's monitors show the near frame; what none of them shows stays, far
+        if (hd.screens) {
+            hd.nSpan = mw5TopSpans(T, hd.span);
+            hd.leftAlt = mw5LeftAltBottom(L); // the lance orders' menu is on a monitor
+        }
+        memcpy(hd.twist, g_vr.twist, sizeof hd.twist);
+        hd.twistDv = g_vr.twistDv;
+        static McRects hq_;
+        mcHudRects(hd, hq_);
+        float (*rc)[5] = hq_.rc;
+        int nr = hq_.n;
         // a battle's first pictures (the answer comes a frame late, and the first frame can last long): no HUD yet
         if (g_fadeStage && (g_fadeKnownFrame == ~0u || g_frame - g_fadeKnownFrame > 4)) nr = 0;
         else if (g_fadeA > 0) { // the game's fade sheet: over the whole view, the HUD not

@@ -26,10 +26,9 @@ static UINT hudWideW(UINT w) {
     if (k < 0) {
         wchar_t b[64];
         GetPrivateProfileStringW(L"vr", L"hud_extra_width", L"1.08", b, 64, (g_dir + L"mw4vr.ini").c_str());
-        k = (float)_wtof(b);
-        if (!(k >= 1 && k <= 1.3f)) k = 1;
+        k = mcWideFactor((float)_wtof(b));
     }
-    return k > 1.001f ? ((UINT)(w * k + 0.5f) + 7) & ~7u : w;
+    return mcWideWidth(w, k);
 }
 static inline bool hudWide() { return g_hudTexW > g_hudW && g_hudW; }
 // the HUD pass draws into the wider layer texture: its full viewports are as wide

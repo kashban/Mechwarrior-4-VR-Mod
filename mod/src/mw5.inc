@@ -306,25 +306,16 @@ static bool mw5ScreensOn() { return mw5Active() && g_mw5ScreensWanted && g_m5Scr
 // the parts of the HUD image's top strip (above v = T) the monitors show, as spans of u in rising order
 static int mw5TopSpans(float T, float (*iv)[2]) {
     int n = 0;
-    for (int i = 0; i < g_m5N && n < 8; ++i) {
-        if (!g_m5[i].screen) continue;
-        const float *r = g_m5Rect[g_m5[i].screen - 1];
-        if (!(r[2] > r[0] && r[3] > r[1]) || r[1] >= T) continue;
-        int k = n++;
-        for (; k > 0 && iv[k - 1][0] > r[0]; --k) iv[k][0] = iv[k - 1][0], iv[k][1] = iv[k - 1][1];
-        iv[k][0] = r[0], iv[k][1] = r[2];
-    }
+    for (int i = 0; i < g_m5N; ++i)
+        if (g_m5[i].screen) mcTopSpan(iv, n, g_m5Rect[g_m5[i].screen - 1], T);
     return n;
 }
 
 // the left side column of the HUD image (u < L): how far down the monitors' second parts reach (0: none)
 static float mw5LeftAltBottom(float L) {
     float v = 0;
-    for (int i = 0; i < g_m5N; ++i) {
-        if (!g_m5[i].screen) continue;
-        const float *a = g_m5Alt[g_m5[i].screen - 1];
-        if (a[2] > a[0] && a[3] > a[1] && a[0] < L && a[3] > v) v = a[3];
-    }
+    for (int i = 0; i < g_m5N; ++i)
+        if (g_m5[i].screen) v = mcLeftAlt(g_m5Alt[g_m5[i].screen - 1], L, v);
     return v;
 }
 

@@ -35,6 +35,7 @@
 #include <algorithm>
 
 #include "eye_tl_vs.h"
+#include "core.h"
 
 extern "C" {
 extern const int VT_Dev_CreateBuffer, VT_Dev_CreateVertexShader, VT_Dev_CreatePixelShader,
@@ -2733,7 +2734,7 @@ BOOL WINAPI DllMain(HINSTANCE h, DWORD reason, LPVOID) {
         if (g_dbg) g_shlog = _wfsopen((g_dir + L"mw4vr_shaders.txt").c_str(), L"w", _SH_DENYNO);
         wchar_t exe[MAX_PATH];
         GetModuleFileNameW(nullptr, exe, MAX_PATH);
-        logf("MW4VR v11.19 (debug level %d) loaded into %s", g_dbg, narrow(exe).c_str());
+        logf("MW4VR v11.20 (debug level %d) loaded into %s", g_dbg, narrow(exe).c_str());
         if (!loadReal()) logf("ERROR: the system d3d11.dll could not be loaded");
     }
     return TRUE;
