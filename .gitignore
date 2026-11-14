@@ -1,5 +1,5 @@
 # build output
-probe/build/
+mod/build/
 __pycache__/
 *.pyc
 

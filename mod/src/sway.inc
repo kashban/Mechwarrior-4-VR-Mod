@@ -96,7 +96,7 @@ static void swayDiscover(uint8_t *root, const float *camPos, float range) {
         n.st = SwStat();
     }
     static int logs;
-    if (logs++ < 8) logf("sway: scene graph below %p - %u elements, %d within %.0f m of the camera", root, (unsigned)all.size(), g_swNodeN, range);
+    if (g_dbg && logs++ < 8) logf("sway: scene graph below %p - %u elements, %d within %.0f m of the camera", root, (unsigned)all.size(), g_swNodeN, range);
 }
 
 // from camPre (the main camera's base matrix just read): find the elements now and then, read their matrices
@@ -206,7 +206,7 @@ static void swayOnPresent() {
             ++dumps;
             for (int l = 0; l < g_swNodeN && l < 40; ++l)
                 if (ok[l])
-                    logf("sway:   element %p - right %.2f up %.2f forward %.2f m, moving %.1f mm (rms)%s", g_swNodes[l].e, tv[l][0],
+                    if (g_dbg) logf("sway:   element %p - right %.2f up %.2f forward %.2f m, moving %.1f mm (rms)%s", g_swNodes[l].e, tv[l][0],
                          tv[l][1], tv[l][2], sqrtf(g_swNodes[l].st.var) * 1000, l == best ? "  <- followed" : "");
         }
         if (best >= 0 && g_swNodes[best].e != g_swFollow) {

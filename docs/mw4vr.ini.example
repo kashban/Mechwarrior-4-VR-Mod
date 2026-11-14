@@ -128,3 +128,8 @@ mw5_screen_4=0.716 0.000 1.000 0.124
 
 ; pictures for diagnosis into mw4vr_shots\ (both eyes side by side, and the HUD layer):
 ; Ctrl+F12 one picture at full size; Ctrl+Shift+F12 a series for about 5 s (again to stop)
+
+[debug]
+; 0 = the log (mw4vr.log) alone and short; 1 = everything: all log lines, every shader (mw4vr_shaders.txt, mw4vr_shaders\),
+; the audit, frame captures (Ctrl+Shift+F11) and the labels of a frame some seconds into a battle
+level=0

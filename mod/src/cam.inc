@@ -311,7 +311,7 @@ static void camPreEye(uint8_t *cam, int eyeOv) {
     InterlockedIncrement(&g_statCamCalls);
     {
         static int logs;
-        if (cam && logs < 24 && g_frame > 200) {
+        if (g_dbg && cam && logs < 24 && g_frame > 200) {
             ++logs;
             __try {
                 const float *vp = (const float *)(cam + CAM_VIEWPORT), *mm = (const float *)(cam + EL_WORLD);
@@ -502,7 +502,7 @@ static int __cdecl camDraw(uint8_t *cam, void *edxv, void *arg) {
             if (g_lblDump) {
                 g_lblDump = false;
                 lblWrite();
-            } else if (firstBoth != ~0u && g_frame - firstBoth == 900) {
+            } else if (g_dbg && firstBoth != ~0u && g_frame - firstBoth == 900) {
                 g_lblDump = true; // the next frame
             }
         }

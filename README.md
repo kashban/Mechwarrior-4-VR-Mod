@@ -21,7 +21,7 @@ It sits behind the *MW4Engine DX11* renderer mod (`mw4hook.dll`, by another auth
 
 - MechWarrior 4: Mercenaries, MekTek MekPak 3.1c
 - MW4Engine DX11 (`mw4hook.dll`) **build 20261107_ea16ef2**. The mod reaches into this build's memory; with any
-  other build those parts switch themselves off (see `mw4vr_probe.log`, lines starting `abi:`).
+  other build those parts switch themselves off (see `mw4vr.log`, lines starting `abi:`).
 - A 32-bit OpenXR runtime. Tested with Virtual Desktop (VDXR) and a Quest 3 only.
 - For the MechWarrior 5 cockpits: your own copy of MechWarrior 5: Mercenaries.
 
@@ -45,6 +45,8 @@ To remove it, delete `d3d11.dll` from the game's folder.
 | Ctrl+F12 | a picture of both eyes and the HUD into `mw4vr_shots\` |
 | Ctrl+F9 | the renderer's labels of one frame into `mw4vr_labels.txt` |
 
+`[debug] level=1` in `mw4vr.ini` writes the diagnosis files (shaders, frame captures with Ctrl+Shift+F11) and the full log.
+
 Everything else is in `mw4vr.ini`, with a comment at each key.
 
 ## MechWarrior 5 cockpits
@@ -65,10 +67,10 @@ Visual Studio 2022 Build Tools (x86), then `probe\build.bat`. The result is `pro
 
 ## Layout
 
-- `probe/src/main.cpp` - the proxy, hooks, shader tracking
-- `probe/src/mw4hook_abi.inc` - everything known about the insides of `mw4hook.dll` and `MW4Mercs.exe`
+- `mod/src/main.cpp` - the proxy, hooks, shader tracking
+- `mod/src/mw4hook_abi.inc` - everything known about the insides of `mw4hook.dll` and `MW4Mercs.exe`
   (addresses, offsets, shader hashes, label names). A new build of either means changes here only.
-- `probe/src/cam.inc` - the camera hook; `vr.inc` - OpenXR; `hud.inc` - the HUD layer; `mw5.inc` - the cockpit mesh
+- `mod/src/cam.inc` - the camera hook; `vr.inc` - OpenXR; `hud.inc` - the HUD layer; `mw5.inc` - the cockpit mesh
 - `tools/` - cockpit conversion
 
 ## Credits
@@ -80,4 +82,4 @@ trademark of Microsoft; the game and MekPak belong to their owners. OpenXR heade
 
 Copyright (c) 2026 Kashban. [PolyForm Noncommercial License 1.0.0](LICENSE): use it, change it and pass it on
 for any noncommercial purpose; keep the licence and the copyright notice with it. Commercial use needs the
-author's permission. The OpenXR headers in `probe/include/openxr` stay under Apache 2.0.
+author's permission. The OpenXR headers in `mod/include/openxr` stay under Apache 2.0.

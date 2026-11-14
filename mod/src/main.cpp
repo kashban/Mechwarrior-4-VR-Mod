@@ -1,13 +1,14 @@
-// MW4VR probe - a d3d11.dll proxy that observes how MW4Engine (mw4hook.dll) renders.
+// MW4VR - a d3d11.dll proxy behind MW4Engine (mw4hook.dll): VR for MechWarrior 4: Mercenaries.
 //
 // Goal: find out, without touching the engine, where the camera lives (constant buffers,
 // reflected variable names), how a frame is structured (annotation labels, render targets,
 // passes, deferred contexts) and where the swap chain is presented. Nothing is modified.
 //
 // Output (next to the DLL, i.e. the game folder; opened shared, readable while the game runs):
-//   mw4vr_probe.log        - device/swap chain/context creation, periodic stats, label changes
+//   mw4vr.log              - device/swap chain/context creation, what was found and switched on, periodic fps
+//   ([debug] level=1:)
 //   mw4vr_shaders.txt      - every created shader with its constant buffers and variables
-//   mw4vr_frame_NNN.txt    - one fully traced frame (Ctrl+F11, or create mw4vr_capture.txt)
+//   mw4vr_frame_NNN.txt    - one fully traced frame (Ctrl+Shift+F11, or create mw4vr_capture.txt)
 //
 // v2: originals are kept per vtable (deferred contexts have their own), deferred contexts and
 // command lists are hooked and counted, the immediate context is re-patched if D3D swaps its
@@ -58,6 +59,7 @@ extern const int VT_Sc_Present, VT_Sc_Present1, VT_Sc_ResizeBuffers;
 
 static std::wstring g_dir;
 static FILE *g_log, *g_shlog;
+static int g_dbg; // [debug] level in mw4vr.ini: 0 = the log alone, short; 1 = the diagnosis files and all lines
 static std::mutex g_logMx;
 
 static void logf(const char *fmt, ...) {
@@ -272,13 +274,13 @@ static void onShader(char stage, const void *code, SIZE_T len, void *obj) {
         if (m) g_reflect = (PFN_D3DReflect)GetProcAddress(m, "D3DReflect");
         if (m) g_disasm = (PFN_D3DDisassemble)GetProcAddress(m, "D3DDisassemble");
         if (m) g_compile = (PFN_D3DCompile)GetProcAddress(m, "D3DCompile");
-        CreateDirectoryW((g_dir + L"mw4vr_shaders").c_str(), nullptr);
+        if (g_dbg) CreateDirectoryW((g_dir + L"mw4vr_shaders").c_str(), nullptr);
         if (!g_reflect) logf("reflection unavailable (d3dcompiler_47.dll / D3DReflect missing)");
     }
     auto *si = new ShaderInfo();
     si->stage = stage;
     si->hash = fnv(code, len);
-    {   // keep every shader: bytecode and disassembly, once per hash
+    if (g_dbg) { // keep every shader: bytecode and disassembly, once per hash
         wchar_t fn[MAX_PATH];
         swprintf_s(fn, L"%smw4vr_shaders\\%cS_%016llx.dxbc", g_dir.c_str(), stage, (unsigned long long)si->hash);
         if (GetFileAttributesW(fn) == INVALID_FILE_ATTRIBUTES) {
@@ -723,7 +725,7 @@ static void auditDraw(CtxState *s) {
 }
 
 static void auditOnPresent() {
-    if (!g_eyeMode) {
+    if (!g_eyeMode || !g_dbg) {
         g_auditT0 = 0;
         return;
     }
@@ -1111,7 +1113,7 @@ static void eyeReadIni() {
     if (GetFileAttributesW(p.c_str()) == INVALID_FILE_ATTRIBUTES) {
         FILE *f = _wfsopen(p.c_str(), L"w", _SH_DENYNO);
         if (f) {
-            fputs("; MW4VR probe - eye offset experiment. Ctrl+F7 cycles: off -> right eye -> left eye -> alternating.\n"
+            fputs("; MW4VR - eye offset experiment. Ctrl+F7 cycles: off -> right eye -> left eye -> alternating.\n"
                   "; Read again every 2 seconds while the game runs.\n"
                   "[eye]\n"
                   "; distance of the eye from the centre in metres (real: 0.032; large values make the shift obvious)\n"
@@ -1323,7 +1325,7 @@ static void onPresent(IDXGISwapChain *sc) {
     {
         std::lock_guard<std::mutex> lk(g_labelMx);
         if (g_frameLabels != g_lastFrameLabels) {
-            logf("frame %u top-level labels: %s", g_frame, g_frameLabels.empty() ? "(none)" : g_frameLabels.c_str());
+            if (g_dbg) logf("frame %u top-level labels: %s", g_frame, g_frameLabels.empty() ? "(none)" : g_frameLabels.c_str());
             g_lastFrameLabels = g_frameLabels;
         }
         g_frameLabels.clear();
@@ -1333,26 +1335,28 @@ static void onPresent(IDXGISwapChain *sc) {
     if (!g_statT0) g_statT0 = now;
     if (now - g_statT0 >= 5000) {
         float s = (now - g_statT0) / 1000.0f, f = g_statFrames ? (float)g_statFrames : 1.0f;
-        logf("%.1f fps | per frame: %.0f draws imm, %.0f draws deferred, %.0f dispatches, %.0f maps, "
+        static unsigned reports;
+        bool all = g_dbg != 0; // else the first line alone, every sixth time (30 s)
+        if (all || reports++ % 6 == 0) logf("%.1f fps | per frame: %.0f draws imm, %.0f draws deferred, %.0f dispatches, %.0f maps, "
              "%.0f labels, %.1f FinishCommandList, %.1f ExecuteCommandList | shaders %u, contexts %u",
              g_statFrames / s, g_statDrawsImm / f, g_statDrawsDef / f, g_statDisp / f, g_statMaps / f,
              g_statLabels / f, g_statFinish / f, g_statExec / f, g_shaderCount, (unsigned)g_ctx.size());
-        logf("   eye mode %d: per frame maps / patched - Mlr %.0f/%.0f, View %.1f/%.1f, Cards %.1f/%.1f, Reflect %.1f/%.1f",
+        if (all) logf("   eye mode %d: per frame maps / patched - Mlr %.0f/%.0f, View %.1f/%.1f, Cards %.1f/%.1f, Reflect %.1f/%.1f",
              g_eyeMode, g_statKindMaps[EK_MLR] / f, g_statKindPatched[EK_MLR] / f, g_statKindMaps[EK_VIEW] / f,
              g_statKindPatched[EK_VIEW] / f, g_statKindMaps[EK_CARDS] / f, g_statKindPatched[EK_CARDS] / f,
              g_statKindMaps[EK_REFLECT] / f, g_statKindPatched[EK_REFLECT] / f);
-        logf("   Mlr updates per frame: map discard %.0f, map other %.0f, update whole %.0f, update box %.0f",
+        if (all) logf("   Mlr updates per frame: map discard %.0f, map other %.0f, update whole %.0f, update box %.0f",
              g_mlrPath[0] / f, g_mlrPath[1] / f, g_mlrPath[2] / f, g_mlrPath[3] / f);
         g_mlrPath[0] = g_mlrPath[1] = g_mlrPath[2] = g_mlrPath[3] = 0;
-        logf("   camera-position updates moved per frame %.1f (buffers known %u), full scans %.2f per frame",
+        if (all) logf("   camera-position updates moved per frame %.1f (buffers known %u), full scans %.2f per frame",
              g_statCamPos / f, (unsigned)g_camPosBufs.size(), g_statFullScans / f);
         g_statFullScans = 0;
-        logf("   CPU-path draws with the replacement shader per frame %.1f, constant buffers with a camera matrix %.1f",
+        if (all) logf("   CPU-path draws with the replacement shader per frame %.1f, constant buffers with a camera matrix %.1f",
              g_statTlSwaps / f, g_statCbScanHits / f);
         g_statCbScanHits = 0;
         g_statTlSwaps = 0;
         g_statCamPos = 0;
-        logf("   scanned dynamic buffers per frame %.1f, with a camera matrix %.1f", g_statKindMaps[EK_SCAN] / f,
+        if (all) logf("   scanned dynamic buffers per frame %.1f, with a camera matrix %.1f", g_statKindMaps[EK_SCAN] / f,
              g_statKindPatched[EK_SCAN] / f);
         for (int k = 0; k < EK_N; ++k) g_statKindMaps[k] = g_statKindPatched[k] = 0;
         g_statT0 = now;
@@ -1361,10 +1365,10 @@ static void onPresent(IDXGISwapChain *sc) {
     }
 
     static bool keyWas;
-    bool key = (GetAsyncKeyState(VK_CONTROL) & 0x8000) && (GetAsyncKeyState(VK_F11) & 0x8000);
+    bool key = g_dbg && (GetAsyncKeyState(VK_CONTROL) & 0x8000) && (GetAsyncKeyState(VK_SHIFT) & 0x8000) && (GetAsyncKeyState(VK_F11) & 0x8000);
     bool trig = key && !keyWas;
     keyWas = key;
-    if (g_frame % 30 == 0) {
+    if (g_dbg && g_frame % 30 == 0) {
         std::wstring f = g_dir + L"mw4vr_capture.txt";
         if (GetFileAttributesW(f.c_str()) != INVALID_FILE_ATTRIBUTES) {
             DeleteFileW(f.c_str());
@@ -2723,12 +2727,13 @@ BOOL WINAPI DllMain(HINSTANCE h, DWORD reason, LPVOID) {
         GetModuleFileNameW(h, p, MAX_PATH);
         if (wchar_t *s = wcsrchr(p, L'\\')) s[1] = 0;
         g_dir = p;
-        MoveFileExW((g_dir + L"mw4vr_probe.log").c_str(), (g_dir + L"mw4vr_probe_prev.log").c_str(), MOVEFILE_REPLACE_EXISTING);
-        g_log = _wfsopen((g_dir + L"mw4vr_probe.log").c_str(), L"w", _SH_DENYNO);
-        g_shlog = _wfsopen((g_dir + L"mw4vr_shaders.txt").c_str(), L"w", _SH_DENYNO);
+        g_dbg = GetPrivateProfileIntW(L"debug", L"level", 0, (g_dir + L"mw4vr.ini").c_str());
+        MoveFileExW((g_dir + L"mw4vr.log").c_str(), (g_dir + L"mw4vr_prev.log").c_str(), MOVEFILE_REPLACE_EXISTING);
+        g_log = _wfsopen((g_dir + L"mw4vr.log").c_str(), L"w", _SH_DENYNO);
+        if (g_dbg) g_shlog = _wfsopen((g_dir + L"mw4vr_shaders.txt").c_str(), L"w", _SH_DENYNO);
         wchar_t exe[MAX_PATH];
         GetModuleFileNameW(nullptr, exe, MAX_PATH);
-        logf("mw4vr probe v11.18 (VR stage 5, both eyes per frame, camera head tracking, HUD layer, cockpit profiles, own cockpit mesh with HUD monitors, pictures) loaded into %s", narrow(exe).c_str());
+        logf("MW4VR v11.19 (debug level %d) loaded into %s", g_dbg, narrow(exe).c_str());
         if (!loadReal()) logf("ERROR: the system d3d11.dll could not be loaded");
     }
     return TRUE;
