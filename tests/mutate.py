@@ -7,12 +7,13 @@
 # A scope: the file, the environment variable that tells its tests which copy to load, the test module, and
 # the lines left alone (output, the command line).
 import json, os, re, subprocess, sys, tempfile, time
+from concurrent.futures import ThreadPoolExecutor
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 SCOPES = [
     {'name': 'cockpit_convert', 'file': 'tools/cockpit_convert.py', 'env': 'MW4VR_CONVERT', 'tests': 'tests/test_convert.py',
-     'skip': [r'^\s*log\(', r'^\s*#', r"^if __name__", r'sys\.exit', r'^\s*"""', r'^\s*convert\(sys\.argv']},
+     'skip': [r'^\s*log\(', r'^\s*#', r"^if __name__", r'^\s*"""', r'^\s*main\(sys\.argv']},
 ]
 
 # (pattern, replacement): each match on a line is one mutant
@@ -84,14 +85,19 @@ def run_scope(scope, verbose):
     killed, survivors = 0, []
     t0 = time.time()
     with tempfile.TemporaryDirectory() as d:
-        path = os.path.join(d, os.path.basename(scope['file']))
-        for n, col, what, new in mutants(lines, scope['skip']):
+        def one(job):  # each mutant in a folder of its own, several at a time
+            k, (n, col, what, new) = job
+            os.mkdir(os.path.join(d, str(k)))
+            path = os.path.join(d, str(k), os.path.basename(scope['file']))
             with open(path, 'w', encoding='utf-8', newline='\n') as f:
                 f.write('\n'.join(lines[:n] + [new] + lines[n + 1:]))
-            if run_tests(scope, path) != 0:
-                killed += 1
-            else:
-                survivors.append((n + 1, what, new.strip()))
+            return run_tests(scope, path) != 0, (n + 1, what, new.strip())
+        with ThreadPoolExecutor(os.cpu_count() or 4) as pool:
+            for dead, which in pool.map(one, enumerate(mutants(lines, scope['skip']))):
+                if dead:
+                    killed += 1
+                else:
+                    survivors.append(which)
     total = killed + len(survivors)
     score = 100.0 * killed / total if total else 100.0
     print('%s: %d of %d mutants killed, %.1f %% (%.0f s)' % (scope['name'], killed, total, score, time.time() - t0))

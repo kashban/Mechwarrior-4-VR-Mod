@@ -73,7 +73,7 @@ def two_monitors():
     """the right monitor first in the file: 0.4 x 0.2 m at x = +1; the left one 0.2 x 0.2 m at x = -1"""
     Pr, Nr, _, Ir = quad(0.8, 0.0, 1.2, 0.2, -1.0)
     Pl, Nl, _, Il = quad(-1.1, 0.5, -0.9, 0.7, -1.0)
-    P, N = np.vstack([Pr, Pl]), np.vstack([Nr, Nl])
+    P, N = np.vstack([Pr, Pl]), 2 * np.vstack([Nr, Nl])  # normals need not have length 1
     I = np.concatenate([Ir, Il + 4]).astype(np.uint16)
     return P, N, np.zeros((8, 2), np.float32), I
 
@@ -161,6 +161,12 @@ class Mips(unittest.TestCase):
         lit.putpixel((3, 3), (255, 255, 255, 255))
         self.assertEqual(cc.emissive_size(lit.resize((64, 64)), 1024), 64)
         self.assertEqual(cc.emissive_size(lit.resize((64, 64)), 32), 32)
+        self.assertEqual(cc.emissive_size(lit, 1024), 16)  # one lit texel is enough
+
+    def test_flat(self):
+        im = cc.flat(1, 2, 3)
+        self.assertEqual((im.mode, im.size), ('RGBA', (4, 4)))
+        self.assertEqual(im.tobytes(), bytes([1, 2, 3, 255]) * 16)
 
 
 class Screens(unittest.TestCase):
@@ -209,6 +215,55 @@ class Screens(unittest.TestCase):
         self.assertEqual(len(parts), 1)
         self.assertEqual(len(parts[0][3]), 6)
 
+    def test_places_closer_than_a_tenth_of_a_millimetre_are_one(self):
+        P = np.array([[0, 0, 1], [1, 0, 1], [1, 1, 1], [0.00002, 0, 1], [1, 1.00002, 1], [0, 1, 1]], np.float32)
+        N = np.tile(np.array([0, 0, -1], np.float32), (6, 1))
+        self.assertEqual(len(cc.screens(P, N, np.arange(6, dtype=np.uint32))), 1)
+        P[3, 0] = P[4, 1] = 0.5  # a real gap
+        P[4, 0] = 0.4
+        self.assertEqual(len(cc.screens(P, N, np.arange(6, dtype=np.uint32))), 2)
+
+    def test_triangles_joined_at_any_corner(self):
+        # a chain of triangles, each sharing one vertex with the next, at every corner position in turn
+        P = np.array([[x, y, 1] for x in range(7) for y in (0, 1)][:7], np.float32)
+        N = np.tile(np.array([0, 0, -1], np.float32), (len(P), 1))
+        for order in ([0, 1, 2, 3, 4, 2, 5, 4, 6], [0, 1, 2, 3, 2, 4, 4, 5, 6], [0, 1, 2, 2, 3, 4, 5, 6, 4],
+                      [2, 0, 1, 3, 4, 2, 4, 5, 6], [1, 2, 0, 3, 4, 2, 6, 4, 5], [1, 0, 2, 3, 4, 0, 5, 6, 3]):
+            parts = cc.screens(P, N, np.array(order, np.uint32))
+            self.assertEqual(len(parts), 1, order)
+            self.assertEqual(len(parts[0][3]), 9)
+
+    def test_turned_and_tilted_monitor(self):
+        # 0.5 x 0.2 m, turned by 30 degrees about the vertical, leaning by 20, away from the origin; normals of length 3
+        yaw, pitch, W, H = np.radians(30), np.radians(20), 0.5, 0.2
+        r = np.array([np.cos(yaw), 0, np.sin(yaw)])
+        n0 = np.cross([0, 1, 0], r)
+        u = np.cos(pitch) * np.array([0, 1.0, 0]) + np.sin(pitch) * n0
+        n = np.cross(u, r)
+        c = np.array([0.7, -0.4, 1.3])
+        corners = {(0, 0): c - r * W / 2 + u * H / 2, (1, 0): c + r * W / 2 + u * H / 2,
+                   (0, 1): c - r * W / 2 - u * H / 2, (1, 1): c + r * W / 2 - u * H / 2}
+        want = list(corners)
+        P = np.array([corners[k] for k in want], np.float32)
+        (p, nn, uv, i, asp), = cc.screens(P, np.tile(3 * n, (4, 1)).astype(np.float32), np.array([0, 1, 2, 1, 3, 2], np.uint32))
+        self.assertAlmostEqual(asp, W / H, places=3)
+        for q, t in zip(p, uv):
+            k = int(np.argmin(np.abs(P - q).sum(1)))
+            np.testing.assert_allclose(t, want[k], atol=1e-4)
+        np.testing.assert_allclose(nn, np.tile(3 * n, (4, 1)), atol=1e-6)  # the normals pass through unchanged
+
+    def test_bent_monitor_is_measured_in_its_mean_plane(self):
+        # two halves of 0.1 m, the lower leaning by 40 degrees, the upper upright; the normals say 20 degrees
+        def along(deg):
+            return np.array([0, np.cos(np.radians(deg)), np.sin(np.radians(deg))])
+        low, mid = np.array([0, 0, 1.0]), np.array([0, 0, 1.0]) + 0.1 * along(40)
+        top, w = mid + 0.1 * along(0), np.array([0.5, 0, 0])
+        P = np.array([low, low + w, mid, mid + w, top, top + w], np.float32)
+        n = np.cross(along(20), [1, 0, 0])
+        (p, nn, uv, i, asp), = cc.screens(P, np.tile(n, (6, 1)).astype(np.float32), np.array([0, 1, 2, 1, 3, 2, 2, 3, 4, 3, 5, 4], np.uint32))
+        self.assertAlmostEqual(asp, 0.5 / (0.2 * np.cos(np.radians(20))), places=3)
+        np.testing.assert_allclose(uv[:, 1], [1, 1, 0.5, 0.5, 0, 0], atol=1e-4)
+
     def test_tilted_monitor_keeps_its_shape(self):
         # leaning back by 45 degrees: 0.3 wide, 0.2 along its slope
         s = 0.2 / np.sqrt(2)
@@ -219,6 +274,19 @@ class Screens(unittest.TestCase):
 
 
 class Accessors(unittest.TestCase):
+    def test_component_types(self):
+        for ctype, dt in [(5120, '<i1'), (5121, '<u1'), (5122, '<i2'), (5123, '<u2'), (5125, '<u4'), (5126, '<f4')]:
+            arr = np.array([[1, 2, 3, 4], [5, 6, 7, 100]], dt)
+            g = {'accessors': [{'bufferView': 0, 'componentType': ctype, 'count': 2, 'type': 'VEC4'}], 'bufferViews': [{'buffer': 0}]}
+            got = cc.acc(g, arr.tobytes(), 0)  # a view without byteOffset starts at 0
+            self.assertEqual(got.dtype, np.dtype(dt))
+            np.testing.assert_array_equal(got, arr)
+
+    def test_stride_equal_to_the_element(self):
+        arr = np.arange(6, dtype='<f4').reshape(2, 3)
+        g = {'accessors': [{'bufferView': 0, 'componentType': 5126, 'count': 2, 'type': 'VEC3'}], 'bufferViews': [{'buffer': 0, 'byteStride': 12}]}
+        np.testing.assert_array_equal(cc.acc(g, arr.tobytes(), 0), arr)
+
     def test_interleaved_view(self):
         with tempfile.TemporaryDirectory() as d:
             P, N, UV, I = quad(0, 0, 1, 1, -2)
@@ -282,7 +350,46 @@ class Convert(unittest.TestCase):
             ems = tex + cc.mip_bytes(16)
             self.assertEqual(b[ems + 4 * 9:ems + 4 * 9 + 4], bytes([255, 0, 0, 255]))  # the lit texel at 1,1
             # the next group starts right after the emissive mips
-            self.assertEqual(b[ems + cc.mip_bytes(8):ems + cc.mip_bytes(8) + 8], b'SCREEN:0')
+            scr = ems + cc.mip_bytes(8)
+            self.assertEqual(b[scr:scr + 8], b'SCREEN:0')
+            tex = scr + struct.calcsize(cc.HEADER) + 4 * 32 + 6 * 4
+            self.assertEqual(b[tex:tex + cc.mip_bytes(4)], bytes([0, 0, 0, 255]) * 21)  # a monitor's own texture: black
+
+    def group(self, name='A', clr=(4, 4), ems=None):
+        P, N, UV, I = quad(0, 0, 1, 1, 1)
+        e = Image.new('RGBA', ems, (9, 9, 9, 255)) if ems else None
+        return (name, P, N, UV, I.astype(np.uint32), Image.new('RGBA', clr, (1, 2, 3, 255)), e, 1.0)
+
+    def test_texture_size_is_the_width(self):
+        with tempfile.TemporaryDirectory() as d:
+            out = os.path.join(d, 'o.mwc')
+            cc.write_mwc(out, [self.group(clr=(16, 8), ems=(8, 2))], log=lambda *a: None)
+            (g,) = cc.read_mwc(out)
+            self.assertEqual((g['colour_size'], g['emissive_size']), (16, 8))
+            self.assertEqual(len(get(out)), 8 + struct.calcsize(cc.HEADER) + 4 * 32 + 6 * 4 + cc.mip_bytes(16) + cc.mip_bytes(8))
+
+    def test_long_name_is_cut(self):
+        with tempfile.TemporaryDirectory() as d:
+            out = os.path.join(d, 'o.mwc')
+            cc.write_mwc(out, [self.group(name='x' * 60), self.group(name='y' * 47)], log=lambda *a: None)
+            self.assertEqual([g['name'] for g in cc.read_mwc(out)], ['x' * 47, 'y' * 47])
+
+    def test_command_line(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = write_gltf(d, [('Big_MTI',) + quad(0, 0, 1, 1, -1)])
+            os.makedirs(os.path.join(d, 'Game'))
+            Image.new('RGB', (2048, 2048), (5, 5, 5)).save(os.path.join(d, 'Game', 'Big.png'))
+            put(os.path.join(d, 'Big_MTI.props.txt'), "ParameterInfo = { Name=BaseColor }\n ParameterValue = Texture2D'/Game/Big.Big'\n")
+            out = os.path.join(d, 'o.mwc')
+            quiet = lambda *a: None
+            with self.assertRaises(SystemExit) as e:
+                cc.main(['x', path, d], quiet)
+            self.assertIn('cockpit_convert.py <mesh.gltf>', str(e.exception))
+            self.assertFalse(os.path.exists(out))
+            cc.main(['x', path, d, out], quiet)
+            self.assertEqual(cc.read_mwc(out)[0]['colour_size'], 1024)  # the limit when none is given
+            cc.main(['x', path, d, out, '8'], quiet)
+            self.assertEqual(cc.read_mwc(out)[0]['colour_size'], 8)
 
     def test_texture_size_limit(self):
         with tempfile.TemporaryDirectory() as d:
@@ -307,12 +414,12 @@ class Convert(unittest.TestCase):
             p = os.path.join(d, 'x.mwc')
             with open(p, 'wb') as f:
                 f.write(b'NOPE' + bytes(8))
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, '^not an .mwc file$'):
                 cc.read_mwc(p)
             out, _ = self.run_convert(d)
             with open(out, 'ab') as f:
                 f.write(b'\0')
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, '^bytes after the last group$'):
                 cc.read_mwc(out)
 
 
