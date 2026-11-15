@@ -52,7 +52,9 @@ VSOut main(VSIn v) {
     o.pos.z = w * z;
     o.pos.w = w;
     if (persp && w < g_eyeN.y && g_eyeN.z > 0.0) {
-        o.pos = float4(0.0, 0.0, -1.0, 1.0); // outside the depth range: gone
+        // not a number: the whole triangle is dropped. (A point outside the view would leave what remains of a
+        // triangle with a corner beyond the range - a sliver from there to the middle of the picture.)
+        o.pos = asfloat(0x7fc00000).xxxx;
     } else if (persp && w < g_eyeN.y) {
         float4 c = mul(g_K, float4(o.pos.x, o.pos.y, g_eyeN.x, w));
         o.pos.xy = c.xy;

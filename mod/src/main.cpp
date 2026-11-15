@@ -640,13 +640,12 @@ static bool mw5ScreensOn();
 static int mw5TopSpans(float T, float (*iv)[2]);
 static float mw5LeftAltBottom(float L);
 // a part of the HUD on the cockpit's glass (mw5.inc): what is shown (rc), the part its place is given for (base),
-// that place as seen from the seat (degrees right and up of base's middle, base's width in degrees)
+// that place as seen from the seat (degrees right and up of base's middle, base's width in degrees, metres away)
 struct GlassItem {
     float rc[4], base[4];
-    float right, up, width;
+    float right, up, width, dist;
 };
 static int mw5GlassItems(GlassItem *out);
-static float mw5GlassDistance();
 static void mw5HudCopy(ID3D11DeviceContext *, ID3D11Texture2D *);
 static bool g_renderOverride;          // the game renders larger than its window ([vr] render_height)
 static void *volatile g_foreignDev;    // the VR runtime's device (shares the vtable with the game's)
@@ -2743,7 +2742,7 @@ BOOL WINAPI DllMain(HINSTANCE h, DWORD reason, LPVOID) {
         if (g_dbg) g_shlog = _wfsopen((g_dir + L"mw4vr_shaders.txt").c_str(), L"w", _SH_DENYNO);
         wchar_t exe[MAX_PATH];
         GetModuleFileNameW(nullptr, exe, MAX_PATH);
-        logf("MW4VR v11.23 (debug level %d) loaded into %s", g_dbg, narrow(exe).c_str());
+        logf("MW4VR v11.24 (debug level %d) loaded into %s", g_dbg, narrow(exe).c_str());
         if (!loadReal()) logf("ERROR: the system d3d11.dll could not be loaded");
     }
     return TRUE;

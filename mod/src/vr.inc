@@ -651,7 +651,7 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
     {   // Ctrl + Up / Down: seat forward / back, Ctrl + Right / Left: seat up / down, 5 cm a press; saved at once
         static bool was[4];
         // with Shift: the near HUD panels up / down / right / left, 2 cm a press
-        bool mod = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0, shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+        bool mod = (GetAsyncKeyState(VK_CONTROL) & 0x8000) && !(GetAsyncKeyState(VK_MENU) & 0x8000), shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
         const int keys[4] = {VK_UP, VK_DOWN, VK_RIGHT, VK_LEFT};
         for (int k = 0; k < 4; ++k) {
             bool down = mod && (GetAsyncKeyState(keys[k]) & 0x8000);
@@ -690,7 +690,7 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
     {   // Ctrl+Ins / Ctrl+Del: cockpit scale up / down by 5 % (larger = the cockpit looks smaller);
         // with Shift: the world's scale (larger = the world looks smaller, the ground nearer). Saved at once
         static bool was[2];
-        bool ctrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0, shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+        bool ctrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000) && !(GetAsyncKeyState(VK_MENU) & 0x8000), shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
         const int keys[2] = {VK_INSERT, VK_DELETE};
         for (int k = 0; k < 2; ++k) {
             bool down = ctrl && (GetAsyncKeyState(keys[k]) & 0x8000);
@@ -717,7 +717,7 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
     // Ctrl+PgUp: HUD farther, Ctrl+PgDn: nearer, Ctrl+End: at infinity; saved to mw4vr.ini at once
     {
         static bool was[3];
-        bool ctrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+        bool ctrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000) && !(GetAsyncKeyState(VK_MENU) & 0x8000); // (with Alt: the cockpit mesh, mw5.inc)
         const int keys[3] = {VK_PRIOR, VK_NEXT, VK_END};
         for (int k = 0; k < 3; ++k) {
             bool down = ctrl && (GetAsyncKeyState(keys[k]) & 0x8000);
@@ -950,7 +950,6 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
         // the own cockpit's monitors show the near frame, its glass what no monitor shows; the rest stays, far
         static GlassItem gi[MC_GLASSES];
         int ng = mw5GlassItems(gi);
-        float gd = mw5GlassDistance();
         hd.screens = mw5ScreensOn() || ng > 0;
         if (hd.screens) {
             hd.nSpan = mw5ScreensOn() ? mw5TopSpans(T, hd.span) : 0;
@@ -985,7 +984,7 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
             if (rc[i][4] >= MC_GLASS) { // on the cockpit's glass: where its part's middle is seen from the seat, facing the seat
                 bool solid = rc[i][4] >= MC_GLASS_OPAQUE;
                 const GlassItem &it = gi[(int)rc[i][4] - (solid ? MC_GLASS_OPAQUE : MC_GLASS)];
-                float gp[3], gq[4];
+                float gp[3], gq[4], gd = it.dist;
                 mcGlassPose(it.right, it.up, gd, gp, gq);
                 float mu = mcGlassScale(it.width, gd, it.base[2] - it.base[0]), mv = mu * (float)g_vr.h / (float)g_vr.w;
                 XrQuaternionf lq = {gq[0], gq[1], gq[2], gq[3]};

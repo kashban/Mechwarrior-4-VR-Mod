@@ -596,8 +596,229 @@ static void testGlassAim() {
     CHECK(nearly(r, 0, 1e-3f) && nearly(u, 0));
 }
 
+// ---------------------------------------------------------------- the grid of directions
+// (a row of memory before and after it: writing or reading past its ends shows)
+static struct {
+    float before[MC_GW];
+    McGrid g;
+    float after[MC_GW];
+} g_box;
+#define g_grid g_box.g
+static void gridClear() { memset(&g_box, 0, sizeof g_box); }
+static float cell(int c, int r) { return g_grid.d[r * MC_GW + c]; }
+static int marked() {
+    int n = 0;
+    for (int i = 0; i < MC_GW * MC_GH; ++i) n += g_grid.d[i] > 0;
+    return n;
+}
+static bool around() { // nothing written beside the grid
+    for (int i = 0; i < MC_GW; ++i)
+        if (g_box.before[i] != 0 || g_box.after[i] != 0) return false;
+    return true;
+}
+// a vertex d metres away at the grid's place x, y (cells); after its three coordinates comes something else
+static void at(float x, float y, float d, float *p) {
+    float q[4];
+    mcGlassPose(MC_GAZ0 + x * MC_GSTEP, MC_GEL0 + y * MC_GSTEP, d, p, q);
+    p[2] = -p[2]; // ahead
+    p[3] = -1;
+}
+
+static void testGridMark() {
+    g_test = "grid mark";
+    gridClear();
+    mcGridMark(g_grid, 0, 0, 2), mcGridMark(g_grid, MC_GW - 1, MC_GH - 1, 3), mcGridMark(g_grid, 5, 7, 4);
+    CHECK(cell(0, 0) == 2 && cell(MC_GW - 1, MC_GH - 1) == 3 && cell(5, 7) == 4 && marked() == 3);
+    mcGridMark(g_grid, -1, 0, 1), mcGridMark(g_grid, MC_GW, 0, 1), mcGridMark(g_grid, 0, -1, 1), mcGridMark(g_grid, 0, MC_GH, 1);
+    mcGridMark(g_grid, 3, -1, 1), mcGridMark(g_grid, 3, MC_GH, 1), mcGridMark(g_grid, -1, 9, 1), mcGridMark(g_grid, MC_GW, 9, 1);
+    CHECK(marked() == 3 && around() && cell(0, 0) == 2 && cell(MC_GW - 1, 0) == 0 && cell(0, MC_GH - 1) == 0 && cell(1, 0) == 0);
+    mcGridMark(g_grid, 5, 7, 6); // the nearest counts
+    CHECK(cell(5, 7) == 4);
+    mcGridMark(g_grid, 5, 7, 1.5f);
+    CHECK(cell(5, 7) == 1.5f);
+    mcGridMark(g_grid, 5, 7, 0.5f), mcGridMark(g_grid, 5, 7, 0.75f);
+    CHECK(cell(5, 7) == 0.5f);
+}
+
+static void testGridPlace() {
+    g_test = "grid place";
+    const float ahead[4] = {0, 0, 1, -1}, p[4] = {1, 0.5f, 1, -1}, q[4] = {-0.5f, -1, 2, -1};
+    CHECK(mcGridX(ahead) == 40 && mcGridY(ahead) == 25);
+    CHECK(nearly(mcGridX(p), 62.5f, 1e-3f) && nearly(mcGridY(p), 34.7356f, 1e-3f));
+    CHECK(nearly(mcGridX(q), 32.9819f, 1e-3f) && nearly(mcGridY(q), 12.0615f, 1e-3f));
+    CHECK(mcGridSide(1, 1, 3, 2, 2, 1.5f) == 0 && mcGridSide(1, 1, 3, 2, 2, 2) == 1 && mcGridSide(1, 1, 3, 2, 2, 1) == -1);
+    CHECK(mcGridSide(1, 1, 3, 2, 5, 3.5f) == 1 && mcGridSide(3, 2, 1, 1, 5, 3.5f) == -1);
+}
+
+// the cells a triangle with the corners (cells) x, y must mark: those of its corners and those whose direction it covers
+static bool covered(const float *x, const float *y) {
+    for (int r = 0; r < MC_GH; ++r)
+        for (int c = 0; c < MC_GW; ++c) {
+            bool want = false;
+            for (int k = 0; k < 3; ++k) want = want || (c == (int)floorf(x[k]) && r == (int)floorf(y[k]));
+            int pos = 0, neg = 0;
+            for (int k = 0; k < 3; ++k) {
+                int n = (k + 1) % 3;
+                double e = ((double)x[n] - x[k]) * (r - (double)y[k]) - ((double)y[n] - y[k]) * (c - (double)x[k]);
+                pos += e > 1e-4, neg += e < -1e-4;
+            }
+            want = want || !(pos && neg);
+            if (want != (cell(c, r) > 0)) {
+                printf("   cell %d %d: %s\n", c, r, want ? "not marked" : "marked");
+                return false;
+            }
+        }
+    return true;
+}
+
+static void testGridTri() {
+    g_test = "grid triangle";
+    float v[3][4];
+    // corners at three different places across and up, given in every order
+    const float shapes[][6] = {{30.3f, 41.7f, 36.4f, 20.2f, 23.8f, 27.6f}, {50.5f, 55.3f, 60.7f, 10.6f, 14.2f, 12.4f}, {20.4f, 20.7f, 21.3f, 30.2f, 36.8f, 33.1f}};
+    const int order[6][3] = {{0, 1, 2}, {0, 2, 1}, {1, 0, 2}, {1, 2, 0}, {2, 0, 1}, {2, 1, 0}};
+    for (int s = 0; s < 3; ++s)
+        for (int o = 0; o < 6; ++o) {
+            float x[3], y[3];
+            for (int k = 0; k < 3; ++k) x[k] = shapes[s][order[o][k]], y[k] = shapes[s][3 + order[o][k]], at(x[k], y[k], 1 + k, v[k]);
+            gridClear();
+            mcGridTri(g_grid, v[0], v[1], v[2]);
+            CHECK(covered(x, y) && marked() > (s == 2 ? 3 : 8));
+            CHECK(nearly(cell((int)x[0], (int)y[0]), 2)); // the mean distance of its corners
+        }
+    // a small one within a cell: that cell alone
+    gridClear();
+    at(45.2f, 27.2f, 1, v[0]), at(45.6f, 27.2f, 2, v[1]), at(45.2f, 27.7f, 6, v[2]);
+    mcGridTri(g_grid, v[0], v[1], v[2]);
+    CHECK(marked() == 1 && nearly(cell(45, 27), 3.0f));
+    // corners in three cells, no cell's direction inside
+    gridClear();
+    at(29.75f, 19.75f, 2, v[0]), at(30.2f, 19.75f, 2, v[1]), at(29.75f, 20.2f, 2, v[2]);
+    mcGridTri(g_grid, v[0], v[1], v[2]);
+    CHECK(marked() == 3 && cell(29, 19) > 0 && cell(30, 19) > 0 && cell(29, 20) > 0);
+    // its edges count: one straight up at 0 degrees, one corner straight ahead
+    gridClear();
+    const float t0[4] = {0, -0.2f, 1, -1}, t1[4] = {0, 0.2f, 1, -1}, t2[4] = {0.2f, 0, 1, -1};
+    mcGridTri(g_grid, t0, t1, t2);
+    CHECK(cell(40, 25) > 0 && cell(40, 20) > 0 && cell(40, 30) > 0 && cell(45, 25) > 0 && cell(42, 22) > 0 && cell(42, 27) > 0);
+    CHECK(cell(39, 25) == 0 && cell(40, 31) == 0 && cell(40, 18) == 0 && cell(46, 25) == 0 && cell(44, 22) == 0 && cell(44, 28) == 0);
+    // one with a corner beside or behind the seat: left out, whichever corner it is
+    const float s0[4] = {0.3f, 0, 1, -1}, s1[4] = {0.3f, 0.3f, 1, -1}, s2[4] = {1, 0, 0.05f, -1}, s3[4] = {1, 0, -1, -1}, s4[4] = {1, 0, 0.06f, -1};
+    const float s5[4] = {0.3f, 0, 0.06f, 1}, s6[4] = {0.3f, 0.02f, 0.06f, 1}, s7[4] = {0.31f, 0, 0.06f, 1};
+    gridClear();
+    mcGridTri(g_grid, s0, s1, s2), mcGridTri(g_grid, s0, s3, s1), mcGridTri(g_grid, s3, s0, s1), mcGridTri(g_grid, s2, s0, s1), mcGridTri(g_grid, s0, s2, s1);
+    CHECK(marked() == 0);
+    mcGridTri(g_grid, s0, s1, s4);
+    CHECK(marked() > 3);
+    gridClear();
+    mcGridTri(g_grid, s5, s6, s7); // all three just ahead
+    CHECK(marked() > 0);
+    // one reaching out of the grid: what lies inside it is marked, nothing beside it
+    gridClear();
+    at(75.3f, 45.3f, 1, v[0]), at(82.5f, 45.3f, 1, v[1]), at(75.3f, 54.0f, 1, v[2]);
+    mcGridTri(g_grid, v[0], v[1], v[2]);
+    CHECK(cell(76, 46) > 0 && cell(79, 46) > 0 && cell(76, 49) > 0 && marked() > 10 && around());
+    gridClear();
+    at(-3.3f, -2.6f, 3, v[0]), at(4.4f, 1.3f, 1, v[1]), at(1.2f, 4.5f, 1, v[2]);
+    mcGridTri(g_grid, v[0], v[1], v[2]);
+    CHECK(cell(0, 0) > 0 && cell(2, 1) > 0 && marked() > 5 && around());
+}
+
+static void testGridCells() {
+    g_test = "grid cells";
+    int q[4];
+    mcGridCells(0, 0, 4, 2, q); // -2..2 right, -1..1 up
+    CHECK(q[0] == 39 && q[1] == 24 && q[2] == 41 && q[3] == 25);
+    mcGridCells(-21, 11, 6, 10, q); // -24..-18, 6..16
+    CHECK(q[0] == 28 && q[1] == 28 && q[2] == 31 && q[3] == 33);
+    mcGridCells(31, -19, 3, 5, q); // 29.5..32.5, -21.5..-16.5
+    CHECK(q[0] == 54 && q[1] == 14 && q[2] == 56 && q[3] == 16);
+}
+
+static void testGridFree() {
+    g_test = "grid free";
+    gridClear();
+    CHECK(mcGridFree(g_grid, 0, 0, 20, 10));
+    CHECK(mcGridFree(g_grid, -69, -44, 20, 10) && mcGridFree(g_grid, 69, 44, 19, 9)); // up to the grid's edges
+    CHECK(!mcGridFree(g_grid, -71, 0, 20, 10) && !mcGridFree(g_grid, 71, 0, 20, 10) && !mcGridFree(g_grid, 0, -46, 20, 10) && !mcGridFree(g_grid, 0, 46, 20, 10));
+    const int in[][2] = {{35, 22}, {45, 22}, {35, 27}, {45, 27}, {40, 25}}; // the corner cells of -10..10 x -5..5, and one inside
+    for (int i = 0; i < 5; ++i) {
+        gridClear();
+        mcGridMark(g_grid, in[i][0], in[i][1], 1);
+        CHECK(!mcGridFree(g_grid, 0, 0, 20, 10));
+    }
+    const int out[][2] = {{34, 25}, {46, 25}, {40, 21}, {40, 28}}; // the cells just outside
+    gridClear();
+    for (int i = 0; i < 4; ++i) mcGridMark(g_grid, out[i][0], out[i][1], 1);
+    CHECK(mcGridFree(g_grid, 0, 0, 20, 10));
+}
+
+static void testGridRim() {
+    g_test = "grid rim";
+    gridClear();
+    CHECK(mcGridRim(g_grid, 0, 0, 20, 10) == 0);
+    mcGridMark(g_grid, 32, 19, 2), mcGridMark(g_grid, 48, 30, 4); // three cells out from the corners 35 22 and 45 27
+    CHECK(nearly(mcGridRim(g_grid, 0, 0, 20, 10), 3));
+    mcGridMark(g_grid, 31, 25, 9), mcGridMark(g_grid, 49, 25, 9), mcGridMark(g_grid, 40, 18, 9), mcGridMark(g_grid, 40, 31, 9); // four out
+    CHECK(nearly(mcGridRim(g_grid, 0, 0, 20, 10), 3));
+    mcGridMark(g_grid, 40, 25, 6); // in it
+    CHECK(nearly(mcGridRim(g_grid, 0, 0, 20, 10), 4));
+    // at the grid's corners: what there is of the rim, nothing from beside the grid or from the row above
+    gridClear();
+    for (int i = 0; i < MC_GW; ++i) g_box.before[i] = g_box.after[i] = 100;
+    mcGridMark(g_grid, 0, 0, 5), mcGridMark(g_grid, MC_GW - 1, MC_GH - 1, 7), mcGridMark(g_grid, MC_GW - 1, 0, 1);
+    mcGridMark(g_grid, 0, 3, 50), mcGridMark(g_grid, 0, MC_GH - 3, 60);
+    CHECK(nearly(mcGridRim(g_grid, 75, 45, 4, 4), 7));
+    CHECK(nearly(mcGridRim(g_grid, 75, -46, 4, 4), 1));
+    CHECK(nearly(mcGridRim(g_grid, -76, 45, 4, 4), 60));
+    CHECK(nearly(mcGridRim(g_grid, -76, -46, 4, 4), 27.5f)); // (5 and 50)
+}
+
+static void testGridFit() {
+    g_test = "grid fit";
+    gridClear();
+    float r = 99, u = 99;
+    CHECK(mcGridFit(g_grid, 20, 10, 7.1f, -2.9f, 1000, nullptr, 0, &r, &u) && r == 8 && u == -2); // open everywhere: the nearest direction of the grid
+    CHECK(mcGridFit(g_grid, 20, 10, 6.9f, -3.1f, 1000, nullptr, 0, &r, &u) && r == 6 && u == -4);
+    CHECK(mcGridFit(g_grid, 20, 10, 7, -3, 1000, nullptr, 0, &r, &u) && r == 6 && u == -4); // between four: the first met
+    CHECK(mcGridFit(g_grid, 20, 10, -200, 0, 1000, nullptr, 0, &r, &u) && r == -70 && u == 0); // wanted outside: the edge
+    CHECK(mcGridFit(g_grid, 20, 10, 0, 200, 1000, nullptr, 0, &r, &u) && r == 0 && u == 44);
+    CHECK(mcGridFit(g_grid, 2, 2, -200, -200, 1000, nullptr, 0, &r, &u) && r == -78 && u == -48); // the grid's second row and column
+    CHECK(mcGridFit(g_grid, 2, 2, 200, 200, 1000, nullptr, 0, &r, &u) && r == 78 && u == 48);     // and its last
+    // places taken beside it: clear of them, touching them
+    const float left[][4] = {{-30, -60, 0, 60}}, right[][4] = {{0, -60, 30, 60}};
+    CHECK(mcGridFit(g_grid, 20, 10, -10, 0, 1000, left, 1, &r, &u) && r == 10 && u == 0);
+    CHECK(mcGridFit(g_grid, 20, 10, 10, 0, 1000, right, 1, &r, &u) && r == -10 && u == 0);
+    // a post right of where it is wanted: left of it
+    for (int row = 0; row < MC_GH; ++row) mcGridMark(g_grid, 44, row, 1.5f);
+    CHECK(mcGridFit(g_grid, 20, 10, 8, 0, 1000, nullptr, 0, &r, &u) && r == -4 && u == 0);
+    CHECK(mcGridFit(g_grid, 20, 10, 14, 0, 1000, nullptr, 0, &r, &u) && r == 20 && u == 0); // nearer to its other side
+    // places taken above and below
+    const float taken[][4] = {{-30, -10, 0, 10}, {-100, 12, 100, 14}, {-100, -22, 100, -12}};
+    CHECK(mcGridFit(g_grid, 20, 10, -10, 1, 1000, taken, 1, &r, &u) && r == -10 && u == 16);
+    CHECK(mcGridFit(g_grid, 20, 10, -10, -1, 1000, taken, 1, &r, &u) && r == -10 && u == -16);
+    CHECK(mcGridFit(g_grid, 20, 10, -10, 1, 1000, taken, 2, &r, &u) && r == -10 && u == -16); // above it the second
+    CHECK(mcGridFit(g_grid, 20, 10, -10, 1, 1000, taken, 3, &r, &u) && r == -10 && u == 20);  // below it the third: above the second
+    CHECK(mcGridFit(g_grid, 20, 4, -10, 12, 1000, taken, 1, &r, &u) && r == -10 && u == 12);  // touching is clear
+    // no farther than its reach
+    const float mid[][4] = {{-11, -6, 11, 6}};
+    gridClear();
+    CHECK(mcGridFit(g_grid, 20, 10, 0, 0, 12.1f, mid, 1, &r, &u) && r == 0 && u == -12);
+    r = u = 99;
+    CHECK(!mcGridFit(g_grid, 20, 10, 0, 0, 12, mid, 1, &r, &u) && r == 99 && u == 99);
+    for (int row = 0; row < MC_GH; ++row) mcGridMark(g_grid, 44, row, 1.5f);
+    // nowhere: too large for the grid, or mesh in every fourth row
+    r = u = 99;
+    CHECK(!mcGridFit(g_grid, 20, 102, 0, 0, 1000, nullptr, 0, &r, &u) && r == 99 && u == 99);
+    for (int row = 0; row < MC_GH; row += 4)
+        for (int col = 0; col < MC_GW; ++col) mcGridMark(g_grid, col, row, 1);
+    CHECK(!mcGridFit(g_grid, 20, 10, 0, 0, 1000, nullptr, 0, &r, &u));
+    CHECK(mcGridFit(g_grid, 4, 4, 0, 0, 1000, nullptr, 0, &r, &u));
+}
+
 int main() {
     testHolds(), testHudGlass(), testGlassPose(), testGlassScale(), testGlassAim();
+    testGridMark(), testGridPlace(), testGridTri(), testGridCells(), testGridFree(), testGridRim(), testGridFit();
     testMul34(), testViewAxis();
     testFrustum(), testFrustumSameView(), testFrustumTangent(), testFrustumNear(), testFrustumLayout();
     testWide();

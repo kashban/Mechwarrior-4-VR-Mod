@@ -246,3 +246,93 @@ static inline void mcGlassAim(const float *p, const float *f, float D, float *ri
     *right = atan2f(x, -z) / MC_RAD;
     *up = atan2f(y, sqrtf(x * x + z * z)) / MC_RAD;
 }
+
+// ---- the cockpit as seen from the seat: where its windows are (mw5.inc) ----
+// A grid of directions, 2 degrees a cell, 80 degrees to each side and 50 up and down: the nearest mesh in each
+// (metres), 0 where the view is open. A cell stands for the direction of its lower left corner.
+
+enum { MC_GW = 80, MC_GH = 50 };
+static const float MC_GSTEP = 2.0f, MC_GAZ0 = -80.0f, MC_GEL0 = -50.0f;
+struct McGrid {
+    float d[MC_GW * MC_GH];
+};
+
+static inline void mcGridMark(McGrid &g, int c, int r, float d) {
+    if (c < 0 || c >= MC_GW || r < 0 || r >= MC_GH) return;
+    float &o = g.d[r * MC_GW + c];
+    o = o > 0 ? fminf(o, d) : d;
+}
+
+// a point (metres right, up, ahead of the seat) in cells: across, up
+static inline float mcGridX(const float *v) { return (atan2f(v[0], v[2]) / MC_RAD - MC_GAZ0) / MC_GSTEP; }
+static inline float mcGridY(const float *v) { return (atan2f(v[1], sqrtf(v[0] * v[0] + v[2] * v[2])) / MC_RAD - MC_GEL0) / MC_GSTEP; }
+// which side of the line from a to b the point p lies on (0: on it)
+static inline float mcGridSide(float ax, float ay, float bx, float by, float px, float py) { return (bx - ax) * (py - ay) - (by - ay) * (px - ax); }
+
+// a triangle of the mesh: the cells its corners lie in and those whose direction it covers. One reaching beside or
+// behind the seat is left out.
+static inline void mcGridTri(McGrid &g, const float *a, const float *b, const float *c) {
+    if (!(a[2] > 0.05f && b[2] > 0.05f && c[2] > 0.05f)) return;
+    float xa = mcGridX(a), ya = mcGridY(a), xb = mcGridX(b), yb = mcGridY(b), xc = mcGridX(c), yc = mcGridY(c);
+    float d = (sqrtf(mcDot3(a, a)) + sqrtf(mcDot3(b, b)) + sqrtf(mcDot3(c, c))) / 3;
+    mcGridMark(g, (int)floorf(xa), (int)floorf(ya), d);
+    mcGridMark(g, (int)floorf(xb), (int)floorf(yb), d);
+    mcGridMark(g, (int)floorf(xc), (int)floorf(yc), d);
+    int cEnd = (int)floorf(fmaxf(xa, fmaxf(xb, xc))), rEnd = (int)floorf(fmaxf(ya, fmaxf(yb, yc)));
+    for (int r = (int)ceilf(fminf(ya, fminf(yb, yc))); r <= rEnd; ++r)
+        for (int cc = (int)ceilf(fminf(xa, fminf(xb, xc))); cc <= cEnd; ++cc) {
+            float e0 = mcGridSide(xa, ya, xb, yb, (float)cc, (float)r), e1 = mcGridSide(xb, yb, xc, yc, (float)cc, (float)r);
+            float e2 = mcGridSide(xc, yc, xa, ya, (float)cc, (float)r);
+            if (fminf(e0, fminf(e1, e2)) * fmaxf(e0, fmaxf(e1, e2)) >= 0) mcGridMark(g, cc, r, d); // on one side of all three
+        }
+}
+
+// the cells a rectangle w x h degrees about right / up reaches into: c0 r0 c1 r1
+static inline void mcGridCells(float right, float up, float w, float h, int *q) {
+    q[0] = (int)floorf((right - 0.5f * w - MC_GAZ0) / MC_GSTEP), q[1] = (int)floorf((up - 0.5f * h - MC_GEL0) / MC_GSTEP);
+    q[2] = (int)floorf((right + 0.5f * w - MC_GAZ0) / MC_GSTEP), q[3] = (int)floorf((up + 0.5f * h - MC_GEL0) / MC_GSTEP);
+}
+
+// the view is open all over that rectangle (and the grid covers it)
+static inline bool mcGridFree(const McGrid &g, float right, float up, float w, float h) {
+    int q[4];
+    mcGridCells(right, up, w, h, q);
+    if (q[0] < 0 || q[1] < 0 || q[2] >= MC_GW || q[3] >= MC_GH) return false;
+    for (int r = q[1]; r <= q[3]; ++r)
+        for (int c = q[0]; c <= q[2]; ++c)
+            if (g.d[r * MC_GW + c] > 0) return false;
+    return true;
+}
+
+// how far the mesh around that rectangle is (its window's frame): the mean over the cells in it and up to three
+// cells around it that hold mesh; 0: none
+static inline float mcGridRim(const McGrid &g, float right, float up, float w, float h) {
+    int q[4], n = 0;
+    mcGridCells(right, up, w, h, q);
+    float sum = 0;
+    for (int r = q[1] - 3; r <= q[3] + 3; ++r)
+        for (int c = q[0] - 3; c <= q[2] + 3; ++c)
+            if (c >= 0 && c < MC_GW && r >= 0 && r < MC_GH && g.d[r * MC_GW + c] > 0) sum += g.d[r * MC_GW + c], ++n;
+    return n ? sum / n : 0;
+}
+
+// The open place for a part w x h degrees nearest to wantR / wantU, less than reach degrees from there, that keeps
+// clear of the rectangles taken (right0 up0 right1 up1 each). false: there is none. (No place is about the grid's
+// first row or column.)
+static inline bool mcGridFit(const McGrid &g, float w, float h, float wantR, float wantU, float reach, const float (*taken)[4], int nTaken, float *right,
+                             float *up) {
+    bool found = false;
+    float best = reach * reach;
+    for (int r = 1; r != MC_GH; ++r)
+        for (int c = 1; c != MC_GW; ++c) {
+            float az = MC_GAZ0 + c * MC_GSTEP, el = MC_GEL0 + r * MC_GSTEP;
+            float cost = (az - wantR) * (az - wantR) + (el - wantU) * (el - wantU);
+            if (cost >= best || !mcGridFree(g, az, el, w, h)) continue;
+            bool clear = true;
+            for (int i = 0; i < nTaken; ++i)
+                if (mcMeet(taken[i], az - 0.5f * w, el - 0.5f * h, az + 0.5f * w, el + 0.5f * h)) clear = false;
+            if (!clear) continue;
+            best = cost, found = true, *right = az, *up = el;
+        }
+    return found;
+}

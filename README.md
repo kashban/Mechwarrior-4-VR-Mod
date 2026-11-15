@@ -40,8 +40,9 @@ To remove it, delete `d3d11.dll` from the game's folder.
 | Ctrl+Home | recentre |
 | Ctrl+F11 | own cockpit mesh on / off |
 | Ctrl+Alt+F11 (with Shift: back) | the next cockpit mesh; remembered for the mech you sit in |
-| Ctrl+Alt+1 … 6 | radar / target / damage / lance list / weapons / top strip: onto the monitor you look at or, looking elsewhere, onto the glass there (0: the monitor goes dark; with Shift: the part leaves the glass); remembered per cockpit |
-| Ctrl+Alt+Shift+PgUp / PgDn | the size of the part placed on the glass last |
+| Ctrl+Alt+1 … 6 | radar / target / damage / lance list / weapons / top strip: onto the monitor you look at or, looking elsewhere, onto the glass there (0: the monitor goes dark); remembered per cockpit |
+| Ctrl+Alt+7 | all parts on the glass back to their automatic places (in the cockpit's windows) |
+| Ctrl+Alt+Shift+1 … 6 | choose a part on the glass; then Ctrl+Alt+Shift + arrows move it, PgUp / PgDn size it, Ins / Del put it farther / nearer, 0 takes it off the glass |
 | Ctrl+Alt+arrows, PgUp / PgDn | eye position in the cockpit mesh, its size (remembered per cockpit) |
 | Ctrl+Ins / Del | the cockpit's size |
 | Ctrl+F10 | this cockpit fits: remember it for this mech |
@@ -67,8 +68,9 @@ cockpits belong to Piranha Games. You convert your own:
 The converter turns the larger faces of the material `Panels*` into monitors and writes a `<name>.ini` beside
 each `.mwc`: which part of the HUD each monitor shows (`screen_<n>`), the eye's place, the size. Change it as
 you like; it is not written again. The clan cockpits (about 35) have such monitors. What no monitor shows - in
-the other cockpits everything - is shown on the glass around the cross-hair, fixed to the cockpit (`glass_<part>`
-in the same file: degrees right, degrees up, width in degrees).
+the other cockpits everything - is shown on the glass, fixed to the cockpit: the mod looks for the cockpit's windows
+as seen from the seat and puts each part into an open place near the cross-hair. A part you place yourself stays
+there (`glass_<part>` in the same file: degrees right, degrees up, width in degrees, metres away).
 
 ## Build
 

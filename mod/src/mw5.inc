@@ -34,10 +34,14 @@ static const float g_m5Part[M5_PARTS][4] = {{0.320f, 0.770f, 0.690f, 0.990f}, {0
                                             {0.000f, 0.000f, 0.243f, 0.108f}, {0.716f, 0.000f, 1.000f, 0.124f}, {0.243f, 0.000f, 0.716f, 0.120f}};
 static const float g_m5LanceMenu = 0.435f; // the lance list with its open orders menu reaches this far down
 static const float g_m5GlassDef[M5_PARTS][3] = {{0, -17, 22}, {-26, -14, 16}, {26, -14, 16}, {-32, 20, 18}, {32, 20, 22}, {0, 22, 30}};
-static float g_m5Glass[M5_PARTS][3];
-static float g_m5GlassDist = 1.2f;
+static float g_m5Glass[M5_PARTS][4];     // degrees right, up, width; metres away
+static bool g_m5GlassSaved[M5_PARTS];    // set by hand (in the cockpit's file); the others are placed automatically
+static float g_m5GlassDistDef = 1.2f;    // [cockpit] glass_distance_m: a part's distance where nothing else says
+static std::vector<float> g_m5Pos;       // the mesh's vertices (x y z each) and triangles, for finding its windows
+static std::vector<uint32_t> g_m5Tri;
+static void mw5GlassFit();
 static bool g_m5GlassOn = true; // [vr] mw5_glass
-static int g_m5GlassLast = -1;  // the part placed last (Ctrl+Alt+Shift+PgUp / PgDn: its size)
+static int g_m5GlassLast = -1;  // the part chosen (Ctrl+Alt+Shift+1..6) or placed last: what the Ctrl+Alt+Shift keys change
 #define MW5_GROUPS 40
 static Mw5Group g_m5[MW5_GROUPS];
 static int g_m5N;
@@ -199,16 +203,20 @@ static void mw5ReadIni() {
         if (swscanf(b, L"%f %f %f %f %f %f", a, a + 1, a + 2, a + 3, a + 4, a + 5) != 6) a[0] = a[1] = a[2] = a[3] = a[4] = a[5] = 0;
     }
     g_m5GlassOn = GetPrivateProfileIntW(L"vr", L"mw5_glass", 1, ini.c_str()) != 0;
-    g_m5GlassDist = mw5CockpitF(L"glass_distance_m", 1.2f);
-    if (!(g_m5GlassDist >= 0.3f && g_m5GlassDist <= 20)) g_m5GlassDist = 1.2f;
-    for (int i = 0; i < M5_PARTS; ++i) {
+    g_m5GlassDistDef = mw5CockpitF(L"glass_distance_m", 1.2f);
+    if (!(g_m5GlassDistDef >= 0.3f && g_m5GlassDistDef <= 20)) g_m5GlassDistDef = 1.2f;
+    for (int i = 0; i < M5_PARTS; ++i) { // glass_<part> = degrees right, up, width [metres away]; none: placed automatically
         wchar_t k[32], b[96];
         swprintf(k, 32, L"glass_%ls", g_m5PartKey[i]);
         mw5CockpitStr(k, b, 96);
         float *g = g_m5Glass[i];
-        if (swscanf(b, L"%f %f %f", g, g + 1, g + 2) != 3) memcpy(g, g_m5GlassDef[i], sizeof g_m5GlassDef[i]);
+        g[3] = g_m5GlassDistDef;
+        g_m5GlassSaved[i] = swscanf(b, L"%f %f %f %f", g, g + 1, g + 2, g + 3) >= 3;
+        if (!g_m5GlassSaved[i]) memcpy(g, g_m5GlassDef[i], sizeof g_m5GlassDef[i]), g[3] = g_m5GlassDistDef;
         if (!(g[2] <= 120)) g[2] = g_m5GlassDef[i][2];
+        if (!(g[3] >= 0.3f && g[3] <= 20)) g[3] = g_m5GlassDistDef;
     }
+    mw5GlassFit();
     if (!g_mw5IniRead) {
         g_mw5IniRead = true;
         g_mw5On = g_mw5Name[0] && GetPrivateProfileIntW(L"vr", L"mw5_on", 0, ini.c_str()) != 0;
@@ -271,6 +279,12 @@ static bool mw5LoadFile() {
             sd.pSysMem = ix.data();
             HRESULT h2 = ORIG(PFN_CreateBuffer, g_dev, VT_Dev_CreateBuffer)(g_dev, &bd, &sd, &g.ib);
             g.nIdx = h.ni;
+            uint32_t base = (uint32_t)(g_m5Pos.size() / 3); // a copy of the shape for mw5GlassFit
+            for (uint32_t k = 0; k < h.nv; ++k) {
+                const float *vp = (const float *)(v.data() + (size_t)k * 32);
+                g_m5Pos.insert(g_m5Pos.end(), vp, vp + 3);
+            }
+            for (uint32_t k = 0; k < h.ni; ++k) g_m5Tri.push_back(base + *(const uint32_t *)(ix.data() + (size_t)k * 4));
             for (uint32_t k = 0; k < h.nv; ++k) {
                 const float *vp = (const float *)(v.data() + (size_t)k * 32);
                 for (int a = 0; a < 3; ++a) g.centre[a] += vp[a] / (float)h.nv;
@@ -365,27 +379,30 @@ static void mw5Load() {
 // the monitors show the HUD (the near HUD quads are then left out, vr.inc)
 static bool mw5ScreensOn() { return mw5Active() && g_mw5ScreensWanted && g_m5Screens > 0 && g_m5HudSrv; }
 
+// a monitor shows this part of the HUD (its middle)
+static bool mw5PartOnMonitor(int p) {
+    const float *r = g_m5Part[p];
+    for (int i = 0; i < g_m5N && mw5ScreensOn(); ++i)
+        if (g_m5[i].screen && mcHolds(g_m5Rect[g_m5[i].screen - 1], 0.5f * (r[0] + r[2]), 0.5f * (r[1] + r[3]))) return true;
+    return false;
+}
+
 // The parts of the HUD shown on the glass: those no monitor shows, with a width. 0: none (no cockpit of our own).
 static int mw5GlassItems(GlassItem *out) {
     if (!(mw5Active() && g_m5GlassOn)) return 0;
-    bool mon = mw5ScreensOn();
     int n = 0;
     for (int p = 0; p < M5_PARTS; ++p) {
         const float *r = g_m5Part[p], *g = g_m5Glass[p];
         if (!(g[2] > 0.5f)) continue;
-        bool shown = false;
-        for (int i = 0; i < g_m5N && mon; ++i)
-            if (g_m5[i].screen && mcHolds(g_m5Rect[g_m5[i].screen - 1], 0.5f * (r[0] + r[2]), 0.5f * (r[1] + r[3]))) shown = true;
-        if (shown) continue;
+        if (mw5PartOnMonitor(p)) continue;
         GlassItem &it = out[n++];
         memcpy(it.base, r, sizeof it.base), memcpy(it.rc, r, sizeof it.rc);
         if (p == 3) it.rc[3] = g_m5LanceMenu;
         if (p == 5) it.base[3] = it.rc[3] = g_vr.hudTop;
-        it.right = g[0], it.up = g[1], it.width = g[2];
+        it.right = g[0], it.up = g[1], it.width = g[2], it.dist = g[3];
     }
     return n;
 }
-static float mw5GlassDistance() { return g_m5GlassDist; }
 
 // the parts of the HUD image's top strip (above v = T) the monitors show, as spans of u in rising order
 static int mw5TopSpans(float T, float (*iv)[2]) {
@@ -525,7 +542,8 @@ static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw) {
         }
         g_m5Looked = looked;
     }
-    cb[16] = g_P00, cb[17] = g_P11, cb[18] = g_near, cb[19] = (float)rev;
+    // the mesh has a near plane of its own, 2 cm of the cockpit: the game's (1 m of its world) cuts the ceiling above the head
+    cb[16] = g_P00, cb[17] = g_P11, cb[18] = min(g_near, 0.02f * S), cb[19] = (float)rev;
     cb[20] = 0.25f, cb[21] = 0.85f, cb[22] = 0.45f; // the lamp: above, a little ahead and to the right
     cb[23] = g_mw5DepthFront;
     cb[24] = g_mw5Ems, cb[25] = g_mw5Amb, cb[26] = (float)g_mw5LinearOut;
@@ -610,6 +628,7 @@ static void mw5Switch(const wchar_t *name) {
         g_m5[i] = {};
     }
     g_m5N = g_m5Screens = 0;
+    g_m5Pos.clear(), g_m5Tri.clear();
     g_mw5State = 0;
     wcsncpy(g_mw5Name, name, 63);
     g_mw5Name[63] = 0;
@@ -683,35 +702,143 @@ static void mw5CockpitPutStr(const wchar_t *key, const wchar_t *val) {
     else WritePrivateProfileStringW(L"vr", k, val, (g_dir + L"mw4vr.ini").c_str());
 }
 
-// where the pilot looks at the glass (degrees right and up from the seat); false: no head pose
-static bool mw5GlassAim(float *right, float *up) {
+// ---- the parts on the glass: where they go ----
+
+// a part's height / width as shown (its base: the lance list without its menu)
+static float mw5GlassAspect(int p) {
+    const float *r = g_m5Part[p];
+    float v1 = p == 5 ? g_vr.hudTop : r[3];
+    float px = g_vr.w && g_vr.h ? (float)g_vr.h / (float)g_vr.w : 1.0f;
+    return (v1 - r[1]) / (r[2] - r[0]) * px;
+}
+
+// The cockpit as seen from the seat (the head at the reference pose), in the grid of directions. A vertex v of
+// the mesh lies at size (v - eye) - seat / cockpit scale: metres right, up, ahead.
+static McGrid g_m5Grid;
+static void mw5GlassGrid() {
+    memset(&g_m5Grid, 0, sizeof g_m5Grid);
+    const float cs = g_vr.cockpitScale > 0.05f ? g_vr.cockpitScale : 1.0f, S = g_mw5Scale;
+    const float o[3] = {g_mw5Eye[0] * S, g_mw5Eye[1] * S + g_vr.seatUp / cs, g_mw5Eye[2] * S + g_vr.seatFwd / cs};
+    const size_t nv = g_m5Pos.size() / 3;
+    for (size_t t = 0; t + 2 < g_m5Tri.size(); t += 3) {
+        float p[3][3];
+        bool ok = true;
+        for (int k = 0; k < 3 && ok; ++k) {
+            size_t i = g_m5Tri[t + k];
+            ok = i < nv;
+            for (int a = 0; a < 3 && ok; ++a) p[k][a] = g_m5Pos[i * 3 + a] * S - o[a];
+        }
+        if (ok) mcGridTri(g_m5Grid, p[0], p[1], p[2]);
+    }
+}
+
+// Places for the parts not set by hand: each in the open view (a window of the cockpit) nearest to where it
+// usually is, clear of the cross-hair's surroundings and of each other, as far away as the window's frame.
+static void mw5GlassFit() {
+    if (g_mw5State != 1 || g_m5Tri.empty() || !g_m5GlassOn) return;
+    mw5GlassGrid();
+    float taken[M5_PARTS + 1][4] = {{-10, -8, 10, 8}};
+    int nt = 1, fitted = 0, failed = 0;
+    for (int p = 0; p < M5_PARTS; ++p) { // those set by hand keep their places
+        const float *g = g_m5Glass[p];
+        if (!g_m5GlassSaved[p] || !(g[2] > 0.5f) || mw5PartOnMonitor(p)) continue;
+        float w = g[2], h = w * mw5GlassAspect(p);
+        float *t = taken[nt++];
+        t[0] = g[0] - 0.5f * w, t[1] = g[1] - 0.5f * h, t[2] = g[0] + 0.5f * w, t[3] = g[1] + 0.5f * h;
+    }
+    static const int order[M5_PARTS] = {0, 5, 1, 2, 3, 4}; // the wide ones first: radar, top strip
+    for (int oi = 0; oi < M5_PARTS; ++oi) {
+        int p = order[oi];
+        if (g_m5GlassSaved[p] || mw5PartOnMonitor(p)) continue;
+        const float *def = g_m5GlassDef[p];
+        float *g = g_m5Glass[p];
+        float a = mw5GlassAspect(p), r = def[0], u = def[1], w = def[2];
+        bool ok = false;
+        static const float shrink[4] = {1.0f, 0.85f, 0.7f, 0.55f}; // smaller if it does not fit whole
+        for (int s = 0; s < 4 && !ok; ++s) {
+            w = def[2] * shrink[s];
+            ok = mcGridFit(g_m5Grid, w + 1, w * a + 1, def[0], def[1], 40, taken, nt, &r, &u); // (half a degree of margin; within 40 degrees)
+        }
+        if (!ok) r = def[0], u = def[1], w = def[2], ++failed;
+        else ++fitted;
+        float rim = mcGridRim(g_m5Grid, r, u, w, w * a);
+        g[0] = r, g[1] = u, g[2] = w;
+        g[3] = rim > 0 ? min(5.0f, max(0.4f, 0.95f * rim)) : g_m5GlassDistDef;
+        float *t = taken[nt++];
+        t[0] = r - 0.5f * w, t[1] = u - 0.5f * w * a, t[2] = r + 0.5f * w, t[3] = u + 0.5f * w * a;
+    }
+    static wchar_t told[64];
+    static int toldN = -1;
+    if (wcscmp(told, g_mw5Name) || toldN != fitted * 16 + failed) {
+        wcscpy(told, g_mw5Name);
+        toldN = fitted * 16 + failed;
+        logf("mw5: cockpit '%ls': %d parts of the HUD placed in its windows, %d found no open place (left where they usually are)", g_mw5Name, fitted, failed);
+        for (int p = 0; p < M5_PARTS; ++p)
+            if (!mw5PartOnMonitor(p))
+                logf("mw5:   %ls %s: %.0f right, %.0f up, %.1f wide, %.2f m away", g_m5PartName[p], g_m5GlassSaved[p] ? "(set by hand)" : "(automatic)",
+                     g_m5Glass[p][0], g_m5Glass[p][1], g_m5Glass[p][2], g_m5Glass[p][3]);
+    }
+}
+
+// where the pilot looks at the glass at the distance D (degrees right and up from the seat); false: no head pose
+static bool mw5GlassAim(float D, float *right, float *up) {
     if (!(g_vr.haveRef && g_vr.nextOk[0] && g_vr.nextOk[1])) return false;
     XrQuaternionf ri = qconj(g_vr.ref.orientation);
     const XrVector3f &a = g_vr.next[0].position, &b = g_vr.next[1].position, &o = g_vr.ref.position;
     XrVector3f hp = qrot(ri, XrVector3f{0.5f * (a.x + b.x) - o.x, 0.5f * (a.y + b.y) - o.y, 0.5f * (a.z + b.z) - o.z});
     XrVector3f hf = qrot(ri, qrot(g_vr.next[0].orientation, XrVector3f{0, 0, -1}));
     const float p[3] = {hp.x, hp.y, hp.z}, f[3] = {hf.x, hf.y, hf.z};
-    mcGlassAim(p, f, g_m5GlassDist, right, up);
+    mcGlassAim(p, f, D, right, up);
     return true;
 }
+// a part's place written into the cockpit's file: it is set by hand from now on
 static void mw5GlassPut(int p) {
     wchar_t k[32], b[96];
     swprintf(k, 32, L"glass_%ls", g_m5PartKey[p]);
-    swprintf(b, 96, L"%.1f %.1f %.1f", g_m5Glass[p][0], g_m5Glass[p][1], g_m5Glass[p][2]);
+    swprintf(b, 96, L"%.1f %.1f %.1f %.2f", g_m5Glass[p][0], g_m5Glass[p][1], g_m5Glass[p][2], g_m5Glass[p][3]);
     mw5CockpitPutStr(k, b);
+    g_m5GlassSaved[p] = true;
 }
 
 // Ctrl+Alt+1..6 (radar, target, damage, lance list, weapons, top strip): the monitor looked at shows this part of the
 // HUD from now on; looking elsewhere, the part goes onto the glass there. Ctrl+Alt+0: the monitor looked at goes dark.
-// With Shift: the part leaves the glass. Remembered for the cockpit.
-static void mw5Assign(int part, bool away) {
+// Ctrl+Alt+7: all parts on the glass are placed automatically again.
+// With Shift: 1..6 chooses the part the Ctrl+Alt+Shift keys change (arrows: its place, PgUp / PgDn: its size,
+// Ins / Del: farther / nearer), 0 takes that part off the glass. Remembered for the cockpit.
+static void mw5Assign(int part, bool shift) {
     static const wchar_t *lanceAlt = L"0.000 0.000 0.243 0.435 0.210 0.125"; // the list with the open orders menu, and where that shows
     int n = g_m5Looked - 1, p = part - 1;
-    wchar_t note[160], k[32];
-    if (away && p >= 0) {
+    wchar_t note[200], k[32];
+    if (part == 7) {
+        if (shift) return;
+        for (int i = 0; i < M5_PARTS; ++i) {
+            swprintf(k, 32, L"glass_%ls", g_m5PartKey[i]);
+            mw5CockpitPutStr(k, nullptr);
+        }
+        mw5ReadIni();
+        swprintf(note, 200, L"%ls: the HUD's parts placed in the windows automatically", g_mw5Name);
+        noteShow(note, 4);
+        logf("mw5: cockpit '%ls': the parts on the glass are automatic again", g_mw5Name);
+        Beep(1000, 40);
+        return;
+    }
+    if (shift && p >= 0) {
+        g_m5GlassLast = p;
+        swprintf(note, 200, L"%ls chosen: Ctrl+Alt+Shift + arrows move it, PgUp/PgDn size, Ins/Del depth, 0 removes", g_m5PartName[p]);
+        noteShow(note, 5);
+        Beep(900, 40);
+        return;
+    }
+    if (shift) {
+        p = g_m5GlassLast;
+        if (p < 0) {
+            noteShow(L"Choose a part first: Ctrl+Alt+Shift+1..6 (radar, target, damage, lance, weapons, top strip)", 4);
+            Beep(300, 150);
+            return;
+        }
         g_m5Glass[p][2] = 0;
         mw5GlassPut(p);
-        swprintf(note, 160, L"%ls: %ls not on the glass", g_mw5Name, g_m5PartName[p]);
+        swprintf(note, 200, L"%ls: %ls not on the glass", g_mw5Name, g_m5PartName[p]);
         noteShow(note, 4);
         logf("mw5: cockpit '%ls': %ls off the glass (saved)", g_mw5Name, g_m5PartName[p]);
         Beep(600, 40);
@@ -719,7 +846,7 @@ static void mw5Assign(int part, bool away) {
     }
     bool onMonitor = n >= 0 && n < MW5_SCREENS && p != 5;
     float right = 0, up = 0;
-    if (!onMonitor && (p < 0 || !g_m5GlassOn || !mw5GlassAim(&right, &up))) {
+    if (!onMonitor && (p < 0 || !g_m5GlassOn || !mw5GlassAim(g_m5Glass[p][3], &right, &up))) {
         noteShow(L"Ctrl+Alt+1..6 (radar, target, damage, lance, weapons, top strip): onto the monitor or the glass you look at", 4);
         Beep(300, 150);
         return;
@@ -741,7 +868,7 @@ static void mw5Assign(int part, bool away) {
         mw5CockpitPutStr(k, p == 3 ? lanceAlt : nullptr);
         if (p >= 0) mw5CockpitPutStr(L"screens", L"1");
         mw5ReadIni();
-        swprintf(note, 160, L"%ls: monitor %d shows %ls", g_mw5Name, n, p >= 0 ? g_m5PartName[p] : L"nothing");
+        swprintf(note, 200, L"%ls: monitor %d shows %ls", g_mw5Name, n, p >= 0 ? g_m5PartName[p] : L"nothing");
         logf("mw5: cockpit '%ls': monitor %d shows %ls (saved)", g_mw5Name, n, p >= 0 ? g_m5PartName[p] : L"nothing");
     } else {
         float *g = g_m5Glass[p];
@@ -750,11 +877,37 @@ static void mw5Assign(int part, bool away) {
         mw5GlassPut(p);
         mw5ReadIni();
         g_m5GlassLast = p;
-        swprintf(note, 160, L"%ls: %ls on the glass, %+.0f right %+.0f up", g_mw5Name, g_m5PartName[p], right, up);
-        logf("mw5: cockpit '%ls': %ls on the glass at %.1f right, %.1f up, %.1f wide (saved)", g_mw5Name, g_m5PartName[p], right, up, g[2]);
+        swprintf(note, 200, L"%ls: %ls on the glass, %+.0f right %+.0f up", g_mw5Name, g_m5PartName[p], right, up);
+        logf("mw5: cockpit '%ls': %ls on the glass at %.1f right, %.1f up, %.1f wide, %.2f m away (saved)", g_mw5Name, g_m5PartName[p], right, up, g[2], g[3]);
     }
     noteShow(note, 4);
     Beep(1200, 40);
+}
+
+// Ctrl+Alt+Shift + arrows, PgUp / PgDn, Ins / Del (k: 0..7): the chosen part's place, size, distance
+static void mw5GlassAdjust(int k) {
+    int p = g_m5GlassLast;
+    if (p < 0) {
+        noteShow(L"Choose a part first: Ctrl+Alt+Shift+1..6 (radar, target, damage, lance, weapons, top strip)", 4);
+        Beep(300, 150);
+        return;
+    }
+    float *g = g_m5Glass[p];
+    if (!(g[2] > 0.5f)) g[2] = g_m5GlassDef[p][2]; // it was off the glass
+    if (k == 0) g[1] += 1;
+    if (k == 1) g[1] -= 1;
+    if (k == 2) g[0] += 1;
+    if (k == 3) g[0] -= 1;
+    if (k == 4) g[2] = min(120.0f, g[2] * 1.05f);
+    if (k == 5) g[2] = max(2.0f, g[2] / 1.05f);
+    if (k == 6) g[3] = min(20.0f, g[3] * 1.05f);
+    if (k == 7) g[3] = max(0.3f, g[3] / 1.05f);
+    mw5GlassPut(p);
+    mw5GlassFit(); // (the others placed automatically keep clear of it)
+    wchar_t note[200];
+    swprintf(note, 200, L"%ls: %+.0f right, %+.0f up, %.1f wide, %.2f m away", g_m5PartName[p], g[0], g[1], g[2], g[3]);
+    noteShow(note, 3);
+    Beep(k < 4 ? 1000 : k < 6 ? 1400 : 800, 30);
 }
 
 // hot keys, once a frame
@@ -789,32 +942,29 @@ static void mw5OnPresent() {
         was = down;
     }
     if (!g_mw5On) return;
+    {   // the seat, the eye in the mesh or the mesh itself changed: the automatic places on the glass are found anew
+        static float last[8];
+        float now[8] = {g_vr.seatUp, g_vr.seatFwd, g_vr.cockpitScale, g_mw5Eye[0], g_mw5Eye[1], g_mw5Eye[2], g_mw5Scale, (float)g_m5Tri.size()};
+        if (g_mw5State == 1 && memcmp(last, now, sizeof now)) {
+            memcpy(last, now, sizeof now);
+            mw5GlassFit();
+        }
+    }
     {
-        static bool wasN[7];
-        for (int k = 0; k < 7; ++k) {
+        static bool wasN[8];
+        for (int k = 0; k < 8; ++k) {
             bool down = ctrl && alt && (GetAsyncKeyState('0' + k) & 0x8000);
             if (down && !wasN[k]) mw5Assign(k, shift);
             wasN[k] = down;
         }
     }
-    static bool was[6];
-    const int keys[6] = {VK_UP, VK_DOWN, VK_RIGHT, VK_LEFT, VK_PRIOR, VK_NEXT};
-    for (int k = 0; k < 6; ++k) {
+    static bool was[8];
+    const int keys[8] = {VK_UP, VK_DOWN, VK_RIGHT, VK_LEFT, VK_PRIOR, VK_NEXT, VK_INSERT, VK_DELETE};
+    for (int k = 0; k < 8; ++k) {
         bool down = ctrl && alt && (GetAsyncKeyState(keys[k]) & 0x8000);
-        if (down && !was[k] && shift && k >= 4) { // with Shift: the size of the part placed on the glass last
-            int p = g_m5GlassLast;
-            if (p < 0 || !(g_m5Glass[p][2] > 0.5f)) {
-                noteShow(L"Place a part on the glass first (Ctrl+Alt+1..6), then Ctrl+Alt+Shift+PgUp / PgDn sizes it", 4);
-                Beep(300, 150);
-            } else {
-                g_m5Glass[p][2] = min(120.0f, max(2.0f, g_m5Glass[p][2] * (k == 4 ? 1.05f : 1 / 1.05f)));
-                mw5GlassPut(p);
-                wchar_t note[160];
-                swprintf(note, 160, L"%ls: %ls %.1f degrees wide", g_mw5Name, g_m5PartName[p], g_m5Glass[p][2]);
-                noteShow(note, 3);
-                Beep(1400, 30);
-            }
-        } else if (down && !was[k]) {
+        if (down && !was[k] && shift) {
+            mw5GlassAdjust(k);
+        } else if (down && !was[k] && k < 6) {
             if (k == 0) g_mw5Eye[2] += 0.02f;
             if (k == 1) g_mw5Eye[2] -= 0.02f;
             if (k == 2) g_mw5Eye[1] += 0.02f;
