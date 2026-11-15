@@ -37,7 +37,7 @@ source_camera=1
 hud_layer=1
 hud_panel_distance_m=1.5
 hud_top=0.12
-hud_bottom=0.78
+hud_bottom=0.77
 ; size of the top and bottom HUD strips against the game image (smaller = closer to the middle)
 hud_panel_scale=0.6
 ; sides of the far middle (0..1 of the width); left and right of it the HUD is near, like the strips

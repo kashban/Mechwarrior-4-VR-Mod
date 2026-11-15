@@ -45,7 +45,7 @@ struct VrState {
     XrSwapchain hudSc = XR_NULL_HANDLE;   // the HUD layer's image
     std::vector<XrSwapchainImageD3D11KHR> hudImg;
     bool hudHave = false, hudLayer = true;
-    float hudNear = 1.5f, hudTop = 0.12f, hudBottom = 0.78f; // the edge strips' distance; where they end / begin
+    float hudNear = 1.5f, hudTop = 0.12f, hudBottom = 0.77f; // the edge strips' distance; where they end / begin
     float hudLeft = 0.25f, hudRight = 0.72f; // the far middle's sides; beside it the near side columns
     float hudPanelScale = 0.6f;    // the edge strips' angular size against the game's image (drawn towards the middle)
     float cockpitScale = 1.0f;     // the cockpit's size: eye movement for the near CPU-path geometry, times this
@@ -250,9 +250,9 @@ static void vrReadIni() {
     if (g_vr.hudPanelScale < 0.2f || g_vr.hudPanelScale > 1.0f) g_vr.hudPanelScale = 0.6f;
     GetPrivateProfileStringW(L"vr", L"hud_top", L"0.12", b, 64, p.c_str());
     g_vr.hudTop = (float)_wtof(b);
-    GetPrivateProfileStringW(L"vr", L"hud_bottom", L"0.78", b, 64, p.c_str());
+    GetPrivateProfileStringW(L"vr", L"hud_bottom", L"0.77", b, 64, p.c_str());
     g_vr.hudBottom = (float)_wtof(b);
-    if (!(g_vr.hudTop >= 0 && g_vr.hudTop < g_vr.hudBottom && g_vr.hudBottom <= 1)) g_vr.hudTop = 0.12f, g_vr.hudBottom = 0.78f;
+    if (!(g_vr.hudTop >= 0 && g_vr.hudTop < g_vr.hudBottom && g_vr.hudBottom <= 1)) g_vr.hudTop = 0.12f, g_vr.hudBottom = 0.77f;
     GetPrivateProfileStringW(L"vr", L"hud_left", L"0.25", b, 64, p.c_str());
     g_vr.hudLeft = (float)_wtof(b);
     GetPrivateProfileStringW(L"vr", L"hud_right", L"0.72", b, 64, p.c_str());
@@ -961,6 +961,7 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
         if (hd.screens) {
             hd.nSpan = mw5ScreensOn() ? mw5TopSpans(T, hd.span) : 0;
             hd.leftAlt = mw5ScreensOn() ? mw5LeftAltBottom(L) : 0; // the lance orders' menu is on a monitor
+            mw5MonitorLists(hd, T);
             for (int g = 0; g < ng; ++g) {
                 float *r = gi[g].rc;
                 if (r[2] >= 1.0f && hd.UR > r[2]) r[2] = hd.UR; // at the picture's right edge: with what the wide HUD adds there

@@ -390,6 +390,28 @@ static bool mw5PartOnMonitor(int p) {
     return false;
 }
 
+// the monitor that shows this part (0..MW5_SCREENS-1; -1: none)
+static int mw5MonitorOf(int p) {
+    const float *r = g_m5Part[p];
+    for (int i = 0; i < g_m5N && mw5ScreensOn(); ++i)
+        if (g_m5[i].screen && mcHolds(g_m5Rect[g_m5[i].screen - 1], 0.5f * (r[0] + r[2]), 0.5f * (r[1] + r[3]))) return g_m5[i].screen - 1;
+    return -1;
+}
+
+// a monitor's piece of the HUD image that reaches below the top strip (a list set longer by hand): the far HUD
+// does not show that again
+static void mw5MonitorLists(McHud &hd, float T) {
+    for (int i = 0; i < g_m5N && mw5ScreensOn(); ++i) {
+        if (!g_m5[i].screen) continue;
+        const float *r = g_m5Rect[g_m5[i].screen - 1];
+        if (!(r[2] > r[0] && r[1] < T && r[3] > T + 0.01f)) continue;
+        if (r[0] > 0.5f && r[0] < hd.R) hd.R = r[0];
+        if (r[2] < 0.5f && r[2] > hd.L) hd.L = r[2];
+        hd.leftAlt = mcLeftAlt(r, hd.L, hd.leftAlt);
+        hd.rightAlt = mcRightAlt(r, hd.R, hd.rightAlt);
+    }
+}
+
 // The parts of the HUD shown on the glass: those no monitor shows, with a width. 0: none (no cockpit of our own).
 static int mw5GlassItems(GlassItem *out) {
     if (!(mw5Active() && g_m5GlassOn)) return 0;
@@ -843,7 +865,10 @@ static void mw5Assign(int part, bool shift) {
     }
     if (shift && p >= 0) {
         g_m5GlassLast = p;
-        swprintf(note, 200, L"%ls chosen: Ctrl+Alt+Shift + arrows move it, PgUp/PgDn size, Ins/Del depth, 0 removes", g_m5PartName[p]);
+        if (p < 5 && mw5MonitorOf(p) >= 0)
+            swprintf(note, 200, L"%ls (on a monitor) chosen: Ctrl+Alt+Shift + arrows move what it shows, PgUp/PgDn nearer/more, Ins/Del longer/shorter",
+                     g_m5PartName[p]);
+        else swprintf(note, 200, L"%ls chosen: Ctrl+Alt+Shift + arrows move it, PgUp/PgDn size, Ins/Del depth, 0 removes", g_m5PartName[p]);
         noteShow(note, 5);
         Beep(900, 40);
         return;
@@ -872,7 +897,7 @@ static void mw5Assign(int part, bool shift) {
     }
     for (int i = 0; i < MW5_SCREENS && p >= 0 && p < 5; ++i) { // the part leaves the monitor that showed it
         const float *r = g_m5Rect[i], *want = g_m5Part[p];
-        if (i == n || fabsf(r[0] - want[0]) + fabsf(r[1] - want[1]) + fabsf(r[2] - want[2]) + fabsf(r[3] - want[3]) > 0.002f) continue;
+        if (i == n || !mcHolds(r, 0.5f * (want[0] + want[2]), 0.5f * (want[1] + want[3]))) continue;
         swprintf(k, 32, L"screen_%d", i);
         mw5CockpitPutStr(k, nullptr);
         swprintf(k, 32, L"screen_%d_alt", i);
@@ -909,6 +934,40 @@ static void mw5GlassAdjust(int k) {
     if (p < 0) {
         noteShow(L"Choose a part first: Ctrl+Alt+Shift+1..6 (radar, target, damage, lance, weapons, top strip)", 4);
         Beep(300, 150);
+        return;
+    }
+    int mon = p < 5 ? mw5MonitorOf(p) : -1;
+    if (mon >= 0) { // on a monitor: which piece of the HUD image it shows
+        float *r = g_m5Rect[mon], was[4];
+        memcpy(was, r, sizeof was);
+        float w = r[2] - r[0], h = r[3] - r[1], cu = 0.5f * (r[0] + r[2]), cv = 0.5f * (r[1] + r[3]);
+        if (k == 0) r[1] -= 0.01f, r[3] -= 0.01f; // the picture's window moves: up, down, right, left
+        if (k == 1) r[1] += 0.01f, r[3] += 0.01f;
+        if (k == 2) r[0] += 0.01f, r[2] += 0.01f;
+        if (k == 3) r[0] -= 0.01f, r[2] -= 0.01f;
+        if (k == 4 || k == 5) { // PgUp: nearer (less of the picture, larger), PgDn: more of it
+            float f = k == 4 ? 1 / 1.05f : 1.05f;
+            r[0] = cu - 0.5f * w * f, r[2] = cu + 0.5f * w * f, r[1] = cv - 0.5f * h * f, r[3] = cv + 0.5f * h * f;
+        }
+        if (k == 6) r[3] += 0.02f; // Ins: longer downwards (a list with more lines), Del: shorter
+        if (k == 7) r[3] -= 0.02f;
+        const float *d = g_m5Part[p];
+        bool ok = r[0] >= -0.02f && r[1] >= -0.02f && r[2] <= 1.06f && r[3] <= 1.02f && r[2] - r[0] >= 0.03f && r[3] - r[1] >= 0.03f &&
+                  mcHolds(r, 0.5f * (d[0] + d[2]), 0.5f * (d[1] + d[3]));
+        wchar_t note[200], key[32], b[96];
+        if (!ok) {
+            memcpy(r, was, sizeof was);
+            swprintf(note, 200, L"%ls on monitor %d: no further", g_m5PartName[p], mon);
+            noteShow(note, 3);
+            Beep(300, 100);
+            return;
+        }
+        swprintf(key, 32, L"screen_%d", mon);
+        swprintf(b, 96, L"%.3f %.3f %.3f %.3f", r[0], r[1], r[2], r[3]);
+        mw5CockpitPutStr(key, b);
+        swprintf(note, 200, L"%ls on monitor %d: shows %.2f..%.2f across, %.2f..%.2f down", g_m5PartName[p], mon, r[0], r[2], r[1], r[3]);
+        noteShow(note, 3);
+        Beep(k < 4 ? 1000 : k < 6 ? 1400 : 800, 30);
         return;
     }
     float *g = g_m5Glass[p];
