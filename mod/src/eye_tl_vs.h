@@ -13,7 +13,7 @@ cbuffer Frame : register(b0) {
 
 cbuffer Eye : register(b12) {
     row_major float4x4 g_K; // this frame's clip-space transform (head pose / eye): clip' = K clip
-    float4 g_eyeN;          // x: n of the projection (clip.z of a point = n); y: only nearer than this (view z); z > 0: those are not drawn (our own cockpit, mw5.inc)
+    float4 g_eyeN;          // x: n of the projection (clip.z of a point = n); y: only nearer than this (view z); z > 0: what is nearer than z is not drawn (our own cockpit, mw5.inc)
 };
 
 struct VSIn {
@@ -52,7 +52,7 @@ VSOut main(VSIn v) {
     float z = modern ? (1.0 - v.pos.z) : v.pos.z;
     o.pos.z = w * z;
     o.pos.w = w;
-    if (persp && w < g_eyeN.y && g_eyeN.z > 0.0) {
+    if (persp && g_eyeN.z > 0.0 && w < g_eyeN.z) {
         // not a number: the whole triangle is dropped. (A point outside the view would leave what remains of a
         // triangle with a corner beyond the range - a sliver from there to the middle of the picture.)
         o.pos = asfloat(0x7fc00000).xxxx;

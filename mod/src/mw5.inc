@@ -33,6 +33,7 @@ static const wchar_t *const g_m5PartName[M5_PARTS] = {L"radar", L"target", L"dam
 static const float g_m5Part[M5_PARTS][4] = {{0.320f, 0.770f, 0.690f, 0.990f}, {0.000f, 0.772f, 0.180f, 1.000f}, {0.820f, 0.772f, 1.005f, 1.000f},
                                             {0.000f, 0.000f, 0.243f, 0.108f}, {0.716f, 0.000f, 1.000f, 0.124f}, {0.243f, 0.000f, 0.716f, 0.120f}};
 static const float g_m5LanceMenu = 0.435f; // the lance list with its open orders menu reaches this far down
+static const float g_m5WeaponsLeft = 0.700f; // where the weapon list's frame begins (its part for a monitor begins inside it)
 static const float g_m5GlassDef[M5_PARTS][3] = {{0, -17, 22}, {-26, -14, 16}, {26, -14, 16}, {-32, 20, 18}, {32, 20, 22}, {0, 22, 30}};
 static float g_m5Glass[M5_PARTS][4];     // degrees right, up, width; metres away
 static bool g_m5GlassSaved[M5_PARTS];    // set by hand (in the cockpit's file); the others are placed automatically
@@ -398,7 +399,8 @@ static int mw5GlassItems(GlassItem *out) {
         GlassItem &it = out[n++];
         memcpy(it.base, r, sizeof it.base), memcpy(it.rc, r, sizeof it.rc);
         if (p == 3) it.rc[3] = g_m5LanceMenu;
-        if (p == 5) it.base[3] = it.rc[3] = g_vr.hudTop;
+        if (p == 4) it.rc[0] = g_m5WeaponsLeft, it.rc[3] = g_m5LanceMenu; // the list is as long as the mech has weapons
+        if (p == 5) it.base[3] = it.rc[3] = g_vr.hudTop, it.rc[2] = g_m5WeaponsLeft;
         it.right = g[0], it.up = g[1], it.width = g[2], it.dist = g[3];
     }
     return n;

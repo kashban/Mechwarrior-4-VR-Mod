@@ -955,10 +955,14 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
             hd.nSpan = mw5ScreensOn() ? mw5TopSpans(T, hd.span) : 0;
             hd.leftAlt = mw5ScreensOn() ? mw5LeftAltBottom(L) : 0; // the lance orders' menu is on a monitor
             for (int g = 0; g < ng; ++g) {
-                const float *r = gi[g].rc;
+                float *r = gi[g].rc;
+                if (r[2] >= 1.0f && hd.UR > r[2]) r[2] = hd.UR; // at the picture's right edge: with what the wide HUD adds there
                 memcpy(hd.glass[hd.nGlass++], r, sizeof hd.glass[0]);
                 mcTopSpan(hd.span, hd.nSpan, r, T);
-                if (r[1] < T) hd.leftAlt = mcLeftAlt(r, L, hd.leftAlt); // (the lance list with its menu, not the target below)
+                if (r[1] < T) { // the lists with what hangs below them (the lance menu, the weapons): not the far columns' any more
+                    hd.leftAlt = mcLeftAlt(r, L, hd.leftAlt);
+                    hd.rightAlt = mcRightAlt(r, R, hd.rightAlt);
+                }
             }
         }
         memcpy(hd.twist, g_vr.twist, sizeof hd.twist);
@@ -981,6 +985,12 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
             bool isFar = rc[i][4] == 1 || rc[i][4] >= 3, opaque = rc[i][4] == 2 || rc[i][4] == 3;
 
             if (rc[i][4] != 5 && (u1 - u0 < 0.005f || v1 - v0 < 0.005f)) continue;
+            if (nl >= 16) { // what every runtime shows at least; with more, xrEndFrame fails and the picture stands still
+                static bool told;
+                if (!told) logf("vr: more than 16 layers - %d parts of the HUD left out", nr - i);
+                told = true;
+                break;
+            }
             if (rc[i][4] >= MC_GLASS) { // on the cockpit's glass: where its part's middle is seen from the seat, facing the seat
                 bool solid = rc[i][4] >= MC_GLASS_OPAQUE;
                 const GlassItem &it = gi[(int)rc[i][4] - (solid ? MC_GLASS_OPAQUE : MC_GLASS)];

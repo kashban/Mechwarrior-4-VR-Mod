@@ -421,39 +421,84 @@ static void testHudScreens() {
     setCam(h, 0.80f, 0.60f, 0.98f, 0.76f); // the target's view: on a monitor, no quad
     McRects q;
     mcHudRects(h, q);
-    const float want[][5] = {{0.25f, 0.12f, 0.72f, 0.585f, MC_FAR}, // the far middle above the torso mark
+    const float want[][5] = {{0.25f, 0.12f, 1.02f, 0.435f, MC_FAR}, // the middle and the right column beside the lance menu
+                             {0, 0.435f, 1.02f, 0.585f, MC_FAR},    // the whole width below it, down to the torso mark
                              {0.3f, 0, 0.716f, 0.12f, MC_FAR},      // the top strip between the monitors' parts
                              {1.0f, 0, 1.02f, 0.12f, MC_FAR},       // and right of them
-                             {0, 0.435f, 0.25f, 0.78f, MC_FAR},     // the left column below the lance menu
-                             {0.72f, 0.12f, 1.02f, 0.78f, MC_FAR},
-                             {0.25f, 0.665f, 0.72f, 0.78f, MC_FAR}, // the middle below, left and right of the mark
-                             {0.25f, 0.585f, 0.42f, 0.665f, MC_FAR},
-                             {0.58f, 0.585f, 0.72f, 0.665f, MC_FAR},
+                             {0, 0.665f, 1.02f, 0.78f, MC_FAR},     // below, left and right of the mark
+                             {0, 0.585f, 0.42f, 0.665f, MC_FAR},
+                             {0.58f, 0.585f, 1.02f, 0.665f, MC_FAR},
                              {0.42f, 0.585f, 0.58f, 0.665f, MC_FAR_UP}};
-    CHECK(same(q, want, 9));
+    CHECK(same(q, want, 8));
 
-    h.twistDv = 0; // the mark not moved: the middle whole
+    h.twistDv = 0; // the mark not moved: nothing cut out
     mcHudRects(h, q);
-    CHECK(q.n == 5 && q.rc[0][3] == 0.78f && q.rc[4][4] == MC_FAR);
+    CHECK(q.n == 4 && q.rc[1][3] == 0.78f && q.rc[3][4] == MC_FAR);
     h.twistDv = 0.01f;
     mcHudRects(h, q);
-    CHECK(q.n == 9);
+    CHECK(q.n == 8);
     h.twist[2] = h.twist[0]; // no width
     mcHudRects(h, q);
-    CHECK(q.n == 5);
+    CHECK(q.n == 4);
     h.twist[2] = 0.58f, h.twist[3] = h.twist[1]; // no height
     mcHudRects(h, q);
-    CHECK(q.n == 5);
+    CHECK(q.n == 4);
 
-    h = hud(), h.screens = true; // no monitor shows the top strip or the left column
+    // the columns' tops (the mark not moved, nothing of the top strip shown elsewhere: that strip comes last)
+    h = hud(), h.screens = true, h.twistDv = 0;
+    mcHudRects(h, q); // both from the top strip down: one rectangle
+    const float all[][5] = {{0, 0.12f, 1.02f, 0.78f, MC_FAR}, {0, 0, 1.02f, 0.12f, MC_FAR}};
+    CHECK(same(q, all, 2));
+    h.leftAlt = 0.05f, h.rightAlt = 0.1f; // above the strip's lower edge: as before
     mcHudRects(h, q);
-    CHECK(q.n == 8 && q.rc[1][0] == 0 && q.rc[1][1] == 0 && q.rc[1][2] == 1.02f && q.rc[1][3] == 0.12f && q.rc[2][1] == 0.12f);
-    h.leftAlt = 0.05f; // above the strip's lower edge: the column from the strip down
+    CHECK(same(q, all, 2));
+    h.leftAlt = 0, h.rightAlt = 0.435f; // the right column begins lower
     mcHudRects(h, q);
-    CHECK(q.rc[2][1] == 0.12f);
+    const float right[][5] = {{0, 0.12f, 0.72f, 0.435f, MC_FAR}, {0, 0.435f, 1.02f, 0.78f, MC_FAR}, {0, 0, 1.02f, 0.12f, MC_FAR}};
+    CHECK(same(q, right, 3));
+    h.leftAlt = 0.3f, h.rightAlt = 0.5f; // both lower, the left one first
+    mcHudRects(h, q);
+    const float both[][5] = {{0.25f, 0.12f, 0.72f, 0.3f, MC_FAR}, {0, 0.3f, 0.72f, 0.5f, MC_FAR}, {0, 0.5f, 1.02f, 0.78f, MC_FAR}, {0, 0, 1.02f, 0.12f, MC_FAR}};
+    CHECK(same(q, both, 4));
+    h.leftAlt = 0.5f, h.rightAlt = 0.3f; // the right one first
+    mcHudRects(h, q);
+    const float other[][5] = {{0.25f, 0.12f, 0.72f, 0.3f, MC_FAR}, {0.25f, 0.3f, 1.02f, 0.5f, MC_FAR}, {0, 0.5f, 1.02f, 0.78f, MC_FAR}, {0, 0, 1.02f, 0.12f, MC_FAR}};
+    CHECK(same(q, other, 4));
+    h.leftAlt = h.rightAlt = 0.4f; // at the same height
+    mcHudRects(h, q);
+    const float level[][5] = {{0.25f, 0.12f, 0.72f, 0.4f, MC_FAR}, {0, 0.4f, 1.02f, 0.78f, MC_FAR}, {0, 0, 1.02f, 0.12f, MC_FAR}};
+    CHECK(same(q, level, 3));
+    h.leftAlt = 0.9f, h.rightAlt = 0; // a column all taken: none of it
+    mcHudRects(h, q);
+    const float noLeft[][5] = {{0.25f, 0.12f, 1.02f, 0.78f, MC_FAR}, {0, 0, 1.02f, 0.12f, MC_FAR}};
+    CHECK(same(q, noLeft, 2));
+    h.leftAlt = 0, h.rightAlt = 0.9f;
+    mcHudRects(h, q);
+    const float noRight[][5] = {{0, 0.12f, 0.72f, 0.78f, MC_FAR}, {0, 0, 1.02f, 0.12f, MC_FAR}};
+    CHECK(same(q, noRight, 2));
+    h.leftAlt = 0.9f, h.rightAlt = 0.95f; // both: the middle alone
+    mcHudRects(h, q);
+    const float mid[][5] = {{0.25f, 0.12f, 0.72f, 0.78f, MC_FAR}, {0, 0, 1.02f, 0.12f, MC_FAR}};
+    CHECK(same(q, mid, 2));
+
+    h = hud(), h.screens = true, h.twistDv = 0;
     h.span[0][0] = 0, h.span[0][1] = 1.02f, h.nSpan = 1; // all of the top strip on monitors
     mcHudRects(h, q);
-    CHECK(q.n == 7 && q.rc[1][0] == 0 && q.rc[1][3] == 0.78f);
+    CHECK(same(q, all, 1));
+}
+
+static void testRightAlt() {
+    g_test = "rightAlt";
+    // (a fifth number behind each: not part of the rectangle)
+    const float a[5] = {0.7f, 0, 1.0f, 0.43f, 9}, left[5] = {0.5f, 0, 0.72f, 0.6f, 9}, edge[5] = {0.5f, 0, 0.721f, 0.6f, 9};
+    const float unset[5] = {0, 0, 0, 0, 9}, flat[5] = {0.8f, 0.5f, 0.9f, 0.5f, 9}, thin[5] = {0.9f, 0, 0.9f, 0.9f, 9};
+    CHECK(mcRightAlt(a, 0.72f, 0) == 0.43f);
+    CHECK(mcRightAlt(a, 0.72f, 0.5f) == 0.5f);   // another reached further already
+    CHECK(mcRightAlt(a, 0.72f, 0.43f) == 0.43f);
+    CHECK(mcRightAlt(left, 0.72f, 0.1f) == 0.1f); // ends at the column's edge: not in it
+    CHECK(mcRightAlt(edge, 0.72f, 0.1f) == 0.6f);
+    CHECK(mcRightAlt(unset, 0.72f, 0.1f) == 0.1f && mcRightAlt(flat, 0.72f, 0.1f) == 0.1f && mcRightAlt(thin, 0.72f, 0.1f) == 0.1f);
+    CHECK(mcRightAlt(unset, -1, 0.1f) == 0.1f);
 }
 
 static void testHudScreensZoom() {
@@ -464,16 +509,14 @@ static void testHudScreensZoom() {
     setCam(h, 0.35f, 0.05f, 0.65f, 0.50f);
     McRects q;
     mcHudRects(h, q);
-    const float want[][5] = {{0.25f, 0.52f, 0.72f, 0.78f, MC_FAR},
-                             {0.25f, 0.12f, 0.33f, 0.52f, MC_FAR},
-                             {0.67f, 0.12f, 0.72f, 0.52f, MC_FAR},
-                             {0.243f, 0, 1.02f, 0.03f, MC_FAR}, // the top strip around the window: above, left, right
+    const float want[][5] = {{0, 0.52f, 1.02f, 0.78f, MC_FAR}, // the middle and the columns below, left and right of the window and its frame
+                             {0, 0.12f, 0.33f, 0.52f, MC_FAR},
+                             {0.67f, 0.12f, 1.02f, 0.52f, MC_FAR},
+                             {0.243f, 0, 1.02f, 0.03f, MC_FAR}, // the top strip around it: above, left, right
                              {0.243f, 0.03f, 0.33f, 0.12f, MC_FAR},
                              {0.67f, 0.03f, 1.02f, 0.12f, MC_FAR},
-                             {0, 0.12f, 0.25f, 0.78f, MC_FAR},
-                             {0.72f, 0.12f, 1.02f, 0.78f, MC_FAR},
                              {0.35f, 0.05f, 0.65f, 0.50f, MC_FAR_OPAQUE}}; // the torso mark stays where it is while zooming
-    CHECK(same(q, want, 9));
+    CHECK(same(q, want, 7));
 }
 
 // ---------------------------------------------------------------- the parts on the glass
@@ -497,25 +540,25 @@ static void testHudGlass() {
     setCam(h, 0, 0.3f, 0.25f, 0.5f);         // one whose middle lies on the second part's edge
     McRects q;
     mcHudRects(h, q);
-    CHECK(q.n == 11); // the eight without glass, then:
+    CHECK(q.n == 9); // the six without glass, then:
     const float want[][5] = {{0, 0.772f, 0.18f, 1, MC_GLASS}, {0.01f, 0.80f, 0.07f, 0.98f, MC_GLASS_OPAQUE}, {0.125f, 0.25f, 0.75f, 0.625f, MC_GLASS + 1}};
-    for (int i = 0; i < 3 && q.n == 11; ++i)
-        for (int k = 0; k < 5; ++k) CHECK(nearly(q.rc[8 + i][k], want[i][k], 1e-6f));
+    for (int i = 0; i < 3 && q.n == 9; ++i)
+        for (int k = 0; k < 5; ++k) CHECK(nearly(q.rc[6 + i][k], want[i][k], 1e-6f));
     h.nCam = 0;
     setCam(h, 0.20f, 0.27f, 0.28f, 0.59f); // a window in the second part, off its middle both ways
     h.cam[0][0] = 0.14f; // (left of the zoom window's range)
     h.nGlass = 2;
     mcHudRects(h, q);
-    CHECK(q.n == 11 && q.rc[10][4] == MC_GLASS_OPAQUE + 1 && q.rc[10][0] == 0.14f && q.rc[10][3] == 0.59f);
+    CHECK(q.n == 9 && q.rc[8][4] == MC_GLASS_OPAQUE + 1 && q.rc[8][0] == 0.14f && q.rc[8][3] == 0.59f);
     h.cam[0][0] = 0, h.cam[0][2] = 0.16f; // its middle left of the part
     mcHudRects(h, q);
-    CHECK(q.n == 10);
+    CHECK(q.n == 8);
     h.cam[0][0] = 0.14f, h.cam[0][2] = 0.28f, h.cam[0][1] = 0.01f, h.cam[0][3] = 0.35f; // above it
     mcHudRects(h, q);
-    CHECK(q.n == 10);
+    CHECK(q.n == 8);
     h.nGlass = 0;
     mcHudRects(h, q);
-    CHECK(q.n == 8);
+    CHECK(q.n == 6);
 }
 
 // v turned by the quaternion q (x y z w)
@@ -822,7 +865,7 @@ int main() {
     testMul34(), testViewAxis();
     testFrustum(), testFrustumSameView(), testFrustumTangent(), testFrustumNear(), testFrustumLayout();
     testWide();
-    testAdd(), testMeet(), testAddCut(), testMoveOut(), testSpans(), testLeftAlt();
+    testAdd(), testMeet(), testAddCut(), testMoveOut(), testSpans(), testLeftAlt(), testRightAlt();
     testHudPlain(), testHudZoom(), testHudZoomEdges(), testHudScreens(), testHudScreensZoom();
     printf("%d checks, %d failed\n", g_checks, g_fail);
     return g_fail ? 1 : 0;

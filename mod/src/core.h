@@ -136,6 +136,9 @@ static inline void mcTopSpan(float (*iv)[2], int &n, const float *r, float T) {
 // a monitor's second part a in the left side column (u < L): how far down it reaches, if further than v
 static inline float mcLeftAlt(const float *a, float L, float v) { return a[2] > a[0] && a[3] > a[1] && a[0] < L ? fmaxf(a[3], v) : v; }
 
+// the same for a part a in the right side column (u > R)
+static inline float mcRightAlt(const float *a, float R, float v) { return a[2] > a[0] && a[3] > a[1] && a[2] > R ? fmaxf(a[3], v) : v; }
+
 struct McHud {
     float T, B, L, R;   // the far middle: marks stay on their targets there
     float UR;           // the image's right edge (beyond 1: the wide HUD)
@@ -146,6 +149,7 @@ struct McHud {
     int nSpan;          // what they show of the top strip (mcTopSpan; at most MC_SPANS)
     float span[MC_SPANS][2];
     float leftAlt;      // and of the left column (mcLeftAlt)
+    float rightAlt;     // and of the right one (mcRightAlt)
     float twist[4];     // the torso mark, shown higher
     float twistDv;
     int nGlass;         // parts shown on the cockpit's glass (at most MC_GLASSES)
@@ -180,19 +184,25 @@ static inline void mcHudRects(const McHud &h, McRects &q) {
         cut = zc;
     }
     float T = h.T, B = h.B, L = h.L, R = h.R, UR = h.UR;
-    mcAddCut(q, cut, L, T, R, B, MC_FAR);
     if (h.screens) {
+        // the middle and the side columns (messages), each column from where the part above it ends, in as few
+        // rectangles as there can be (the runtime shows 16 layers): the middle alone down to the higher column's
+        // top, with that column down to the other's top, then the whole width
+        float a = fminf(fmaxf(h.leftAlt, T), B), b = fminf(fmaxf(h.rightAlt, T), B), lo = fminf(a, b), hi = fmaxf(a, b);
+        mcAddCut(q, cut, L, T, R, lo, MC_FAR);
+        mcAddCut(q, cut, 0, a, R, hi, MC_FAR);
+        mcAddCut(q, cut, L, b, UR, hi, MC_FAR);
+        mcAddCut(q, cut, 0, hi, UR, B, MC_FAR);
         float u = 0; // the top strip between the monitors' parts (the compass, mission texts)
         for (int i = 0; i < h.nSpan; ++i) {
             mcAddCut(q, cut, u, 0, h.span[i][0], T, MC_FAR); // (nothing where the spans overlap: mcAdd leaves it out)
             u = fmaxf(u, h.span[i][1]);
         }
         mcAddCut(q, cut, u, 0, UR, T, MC_FAR);
-        mcAddCut(q, cut, 0, fmaxf(h.leftAlt, T), L, B, MC_FAR); // the side columns (messages)
-        mcAddCut(q, cut, R, T, UR, B, MC_FAR);
         const float *tw = h.twist;
         if (!cut && tw[2] > tw[0] && tw[3] > tw[1] && h.twistDv != 0) mcMoveOut(q, tw, MC_FAR_UP);
     } else {
+        mcAddCut(q, cut, L, T, R, B, MC_FAR);
         const float nearRc[4][4] = {{0, 0, UR, T}, {0, B, UR, 1}, {0, T, L, B}, {R, T, UR, B}};
         for (const auto &nr : nearRc) {
             float u0 = nr[0], v0 = nr[1], u1 = nr[2], v1 = nr[3];

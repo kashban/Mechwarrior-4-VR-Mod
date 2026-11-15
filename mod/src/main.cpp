@@ -1783,7 +1783,9 @@ static bool eyeTlPre(ID3D11DeviceContext *c) {
             memcpy(v, g_K, 64);
             v[16] = g_near;
             v[17] = g_kTlOnly ? g_cockpitRange : 1e30f; // camera mode: the cockpit alone
-            v[18] = (g_kTlOnly && mw5Active()) ? 1.0f : 0.0f; // our own cockpit instead of the game's
+            // our own cockpit instead of the game's: that is hidden. A large one (a large cockpit scale) reaches further
+            // than the range its near parts are told by
+            v[18] = (g_kTlOnly && mw5Active()) ? g_cockpitRange * max(1.0f, g_vr.cockpitScale / 1.9f) : 0.0f;
             memcpy(m.pData, v, sizeof v);
             ORIG(PFN_Unmap, c, VT_Ctx_Unmap)(c, g_eyeCB, 0);
             cbFrame = g_tlEpoch;
@@ -2742,7 +2744,7 @@ BOOL WINAPI DllMain(HINSTANCE h, DWORD reason, LPVOID) {
         if (g_dbg) g_shlog = _wfsopen((g_dir + L"mw4vr_shaders.txt").c_str(), L"w", _SH_DENYNO);
         wchar_t exe[MAX_PATH];
         GetModuleFileNameW(nullptr, exe, MAX_PATH);
-        logf("MW4VR v11.24 (debug level %d) loaded into %s", g_dbg, narrow(exe).c_str());
+        logf("MW4VR v11.25 (debug level %d) loaded into %s", g_dbg, narrow(exe).c_str());
         if (!loadReal()) logf("ERROR: the system d3d11.dll could not be loaded");
     }
     return TRUE;
