@@ -661,14 +661,29 @@ static void mw5ForMech() {
     if (g_mechCur < 0) return; // between battles: what is loaded stays
     wchar_t name[64] = L"", sec[32];
     swprintf(sec, 32, L"mech_%d", g_mechCur + 1);
+    const wchar_t *model = g_mechs[g_mechCur].model;
+    const char *from = "chosen for it";
     GetPrivateProfileStringW(sec, L"mw5_cockpit", L"", name, 64, mechIni().c_str());
-    if (!name[0]) GetPrivateProfileStringW(L"vr", L"mw5_cockpit", L"", name, 64, (g_dir + L"mw4vr.ini").c_str());
-    if (!name[0] || !_wcsicmp(name, g_mw5Name)) return;
-    logf("mw5: cockpit '%ls' for mech profile %d", name, g_mechCur + 1);
-    mw5Switch(name);
+    if (!name[0] && model[0]) { // the list of mechs and their cockpits
+        GetPrivateProfileStringW(L"mechs", model, L"", name, 64, (g_dir + L"mw4vr_cockpit_map.ini").c_str());
+        from = "from mw4vr_cockpit_map.ini";
+        if (name[0] && GetFileAttributesW((g_dir + L"mw4vr_cockpits\\" + name + L".mwc").c_str()) == INVALID_FILE_ATTRIBUTES) {
+            logf("mw5: mw4vr_cockpit_map.ini names '%ls' for the mech '%ls', but there is no such cockpit file", name, model);
+            name[0] = 0;
+        }
+    }
+    if (!name[0]) {
+        GetPrivateProfileStringW(L"vr", L"mw5_cockpit", L"", name, 64, (g_dir + L"mw4vr.ini").c_str());
+        from = "the one for all ([vr] mw5_cockpit)";
+    }
+    if (!name[0]) return;
     wchar_t note[160];
-    swprintf(note, 160, L"Cockpit: %ls  (mech %d)", name, g_mechCur + 1);
+    if (model[0]) swprintf(note, 160, L"Mech: %ls   Cockpit: %ls", model, name);
+    else swprintf(note, 160, L"Cockpit: %ls  (mech %d)", name, g_mechCur + 1);
     noteShow(note);
+    if (!_wcsicmp(name, g_mw5Name)) return;
+    logf("mw5: cockpit '%ls' for mech profile %d '%ls' (%s)", name, g_mechCur + 1, model, from);
+    mw5Switch(name);
 }
 
 // Ctrl+Alt+F11: the next cockpit file (Shift: the one before), remembered for this mech

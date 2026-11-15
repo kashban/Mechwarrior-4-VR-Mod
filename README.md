@@ -70,6 +70,9 @@ cockpits belong to Piranha Games. You convert your own:
    `python tools/cockpit_convert.py <mesh.gltf> <export root> <name>.mwc`)
 3. `mw5_cockpit=<name>` in `mw4vr.ini` is the cockpit for every mech; in a battle Ctrl+Alt+F11 steps through
    the files and remembers the choice for the mech you sit in (`mw4vr_mechs.ini`).
+4. `docs/mw4vr_cockpit_map.ini`, copied into the game's folder, gives every MW4 mech a cockpit to start
+   with (the same mech where MW5 has it, otherwise one with a similar face). The mod reads the mech's name
+   from the game at the start of a battle and shows it together with the cockpit's.
 
 The converter turns the larger faces of the material `Panels*` into monitors and writes a `<name>.ini` beside
 each `.mwc`: which part of the HUD each monitor shows (`screen_<n>`), the eye's place, the size. Change it as

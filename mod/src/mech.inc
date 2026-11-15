@@ -26,6 +26,7 @@ static unsigned g_mechLastCamFrame = ~0u;
 
 struct MechProfile {
     wchar_t name[48];
+    wchar_t model[32]; // the mech's folder in the game's files ("catapult"); empty: not known yet
     float sig[MG_N];
     bool tuned;
     float cockpitScale, seatFwd, seatUp, panelX, panelY, panelDist, panelScale;
@@ -109,6 +110,7 @@ static void mechLoad() {
         MechProfile &p = g_mechs[g_mechN];
         memset(&p, 0, sizeof p);
         GetPrivateProfileStringW(sec, L"name", sec, p.name, 48, mechIni().c_str());
+        GetPrivateProfileStringW(sec, L"model", L"", p.model, 32, mechIni().c_str());
         GetPrivateProfileStringW(sec, L"signature", L"", buf, 8192, mechIni().c_str());
         int k = 0;
         for (wchar_t *q = buf; *q && k < MG_N;) {
@@ -164,6 +166,7 @@ static void mechWriteNew(int i) {
     swprintf(b, 16, L"%d", g_mechN);
     WritePrivateProfileStringW(L"mechs", L"count", b, mechIni().c_str());
     WritePrivateProfileStringW(sec, L"name", p.name, mechIni().c_str());
+    if (p.model[0]) WritePrivateProfileStringW(sec, L"model", p.model, mechIni().c_str());
     WritePrivateProfileStringW(sec, L"tuned", L"0", mechIni().c_str());
     mechPutF(sec, L"console_m", p.dash);
     mechPutF(sec, L"console_top_deg", p.top);
@@ -360,19 +363,40 @@ static void mechIdentify() {
         g_mgSampleN = 0;
         return;
     }
+    // the mech's name, when the game tells it, decides; the signature only among profiles without a name
+    char mech[32];
+    wchar_t model[32] = L"";
+    if (gmPlayerMech(mech, 32)) swprintf(model, 32, L"%hs", mech);
     int best = -1;
     float bd = 1e9f;
-    for (int i = 0; i < g_mechN; ++i) {
-        float d = mechDiff(sig, g_mechs[i].sig);
+    bool byName = false;
+    for (int i = 0; i < g_mechN && !byName; ++i) {
+        const MechProfile &q = g_mechs[i];
+        if (model[0] && q.model[0]) {
+            if (!_wcsicmp(model, q.model)) best = i, bd = mechDiff(sig, q.sig), byName = true;
+            continue; // another mech's profile
+        }
+        float d = mechDiff(sig, q.sig);
         if (d < bd) bd = d, best = i;
     }
     g_mechSearching = false;
-    if (best >= 0 && bd < 0.06f) {
+    if (best >= 0 && (byName || bd < 0.06f)) {
         g_mechCur = best;
         mechReload(best);
-        const MechProfile &p = g_mechs[best];
-        logf("mech: cockpit recognised - profile %d '%s' (difference %.3f), %s; console %.2f m, top %.0f deg, window middle %.0f deg",
-             best + 1, narrow(p.name).c_str(), bd, p.tuned ? "set by hand" : "fitted from the others", p.dash, p.top, p.centre);
+        MechProfile &p = g_mechs[best];
+        if (model[0] && !p.model[0]) { // a profile from before the names: it is this mech's now
+            wchar_t sec[32];
+            swprintf(sec, 32, L"mech_%d", best + 1);
+            wcscpy_s(p.model, model);
+            WritePrivateProfileStringW(sec, L"model", model, mechIni().c_str());
+            if (!wcsncmp(p.name, L"cockpit ", 8)) {
+                wcscpy_s(p.name, model);
+                WritePrivateProfileStringW(sec, L"name", model, mechIni().c_str());
+            }
+        }
+        logf("mech: cockpit recognised - profile %d '%s' (%s, difference %.3f), %s; console %.2f m, top %.0f deg, window middle %.0f deg",
+             best + 1, narrow(p.name).c_str(), byName ? "by the mech's name" : "by its shape", bd < 1e8f ? bd : -1.0f,
+             p.tuned ? "set by hand" : "fitted from the others", p.dash, p.top, p.centre);
         return;
     }
     if (g_mechN >= MECH_MAX) {
@@ -383,7 +407,8 @@ static void mechIdentify() {
     MechProfile &p = g_mechs[g_mechN];
     memset(&p, 0, sizeof p);
     memcpy(p.sig, sig, sizeof sig);
-    swprintf(p.name, 48, L"cockpit %d", g_mechN + 1);
+    if (model[0]) wcscpy_s(p.name, model), wcscpy_s(p.model, model);
+    else swprintf(p.name, 48, L"cockpit %d", g_mechN + 1);
     p.cockpitScale = 1, p.panelDist = 1.5f, p.panelScale = 0.6f;
     mechMeasures(p);
     g_mechCur = g_mechN++;

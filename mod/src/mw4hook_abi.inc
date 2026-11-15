@@ -69,6 +69,46 @@ enum : uint32_t {
     CAM_TANGENTS = 0x20c,  // 4 float: the frustum's half-angle tangents
     CAM_VIEWPORT = 0x2c8,  // 4 float: the normalised viewport
 };
+// the player's vehicle, found the way mw4hook finds it: node = [GM_PLAYER_KEY] ^ [[GM_PLAYER_REF]],
+// holder = [node + PL_HOLDER] ^ GM_PLAYER_XOR, vehicle = [holder + PL_VEHICLE]
+static const uintptr_t GM_PLAYER_KEY = 0x103b0b8, GM_PLAYER_REF = 0x103b0bc;
+static const uint32_t GM_PLAYER_XOR = 0x85739531;
+enum : uint32_t {
+    PL_HOLDER = 0x18,
+    PL_VEHICLE = 0x174,
+    VEH_MODEL = 0x5c, // char *: the vehicle's model file, "mechs\<mech>\<mech>.data"
+};
+
+// the mech the player sits in: its folder's name in small letters ("catapult"); false: not a mech,
+// or not in a battle
+static bool gmPlayerMech(char *out, int n) {
+    out[0] = 0;
+    __try {
+        const uint32_t *ref = *(const uint32_t **)GM_PLAYER_REF;
+        if (!ref) return false;
+        uintptr_t node = *(const uint32_t *)GM_PLAYER_KEY ^ *ref;
+        if (!node) return false;
+        uintptr_t holder = *(const uint32_t *)(node + PL_HOLDER) ^ GM_PLAYER_XOR;
+        if (holder < 0x10000) return false;
+        uintptr_t veh = *(const uint32_t *)(holder + PL_VEHICLE);
+        if (veh < 0x10000) return false;
+        const char *path = *(const char **)(veh + VEH_MODEL);
+        if ((uintptr_t)path < 0x10000 || _strnicmp(path, "mechs\\", 6)) return false;
+        int k = 0;
+        for (const char *p = path + 6; *p && *p != '\\' && k < n - 1; ++p) {
+            char c = *p;
+            bool ok = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-';
+            if (c >= 'A' && c <= 'Z') c += 32, ok = true;
+            if (!ok) return out[0] = 0, false;
+            out[k++] = c;
+        }
+        out[k] = 0;
+        return k > 0;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        out[0] = 0;
+        return false;
+    }
+}
 
 static bool abiBuildIs(HMODULE m, const AbiBuild &k, uint32_t *stamp, uint32_t *image) {
     *stamp = *image = 0;
