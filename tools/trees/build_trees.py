@@ -6,7 +6,10 @@
 # cards for the outline. The broad-leaved trees need no source at all: their crowns are grown here, leaf by leaf,
 # and drawn into the same two pictures.
 #
-#   python build_trees.py <fir_sapling folder with the glTF and its textures> <out folder>
+#   python build_trees.py <fir_sapling folder with the glTF and its textures> <out folder> [<folder of fetch_polyhaven.py>]
+#
+# With the third folder (jacaranda_tree, island_tree_02, pine_sapling_small, quiver_tree_02, searsia_lucida,
+# wild_rooibos_bush, shrub_02 in it) those plants are drawn into pictures the same way and become card trees too.
 #
 # Writes <kind>.obj / .mtl / .material and the pictures they use, <kind>_preview.png (the tree as built, from the
 # side), sheet.png (all of them) and clutter_trees.txt (the kinds for clutter.txt).
@@ -64,6 +67,85 @@ def points(parts, folder):
             y = np.clip((t[:, 1] % 1) * h, 0, h - 1).astype(int)
             P.append(p), N.append(n), C.append(tex[y, x])
     return np.concatenate(P), np.concatenate(C), np.concatenate(N)
+
+
+def qrot(q, v):
+    """the vectors v turned by the quaternion q (x y z w)"""
+    u, w = np.array(q[:3], np.float64), q[3]
+    return v + 2 * np.cross(u, np.cross(u, v) + w * v)
+
+
+def model_points(folder, name, meshes=None, total=5_000_000, scale=1.0, seed=1):
+    """Any Poly Haven model (fetch_polyhaven.py) as coloured points spread evenly over its surface: position (the
+    foot's middle at 0 0 0, times scale), colour, normal. meshes: which of its meshes (the variants a .. n), or all."""
+    j = json.load(open(os.path.join(folder, name + '_1k.gltf'), encoding='utf-8'))
+    raw = open(os.path.join(folder, j['buffers'][0]['uri']), 'rb').read()
+
+    def acc(i):
+        a = j['accessors'][i]
+        v = j['bufferViews'][a['bufferView']]
+        n = {'SCALAR': 1, 'VEC2': 2, 'VEC3': 3, 'VEC4': 4}[a['type']]
+        t = {5126: np.float32, 5125: np.uint32, 5123: np.uint16, 5121: np.uint8}[a['componentType']]
+        off = v.get('byteOffset', 0) + a.get('byteOffset', 0)
+        stride = v.get('byteStride', 0)
+        if stride and stride != n * np.dtype(t).itemsize:
+            b = np.frombuffer(raw, np.uint8, a['count'] * stride - (stride - n * np.dtype(t).itemsize), off)
+            idx = (np.arange(a['count'])[:, None] * stride + np.arange(n * np.dtype(t).itemsize)[None, :]).ravel()
+            return np.frombuffer(b[idx].tobytes(), t).reshape(a['count'], n)
+        return np.frombuffer(raw, t, a['count'] * n, off).reshape(a['count'], n)
+
+    parts = []
+    for node in j['nodes']:
+        if 'mesh' not in node or (meshes is not None and node['mesh'] not in meshes):
+            continue
+        for p in j['meshes'][node['mesh']]['primitives']:
+            mat = j['materials'][p['material']]
+            tex = mat.get('pbrMetallicRoughness', {}).get('baseColorTexture')
+            if tex is None:
+                continue
+            pos, nrm = acc(p['attributes']['POSITION']).astype(np.float64), acc(p['attributes']['NORMAL']).astype(np.float64)
+            if 'rotation' in node:
+                pos, nrm = qrot(node['rotation'], pos), qrot(node['rotation'], nrm)
+            uri = j['images'][j['textures'][tex['index']]['source']]['uri']
+            parts.append((os.path.join(folder, *uri.split('/')), mat.get('alphaMode', 'OPAQUE') != 'OPAQUE', pos, nrm, acc(p['attributes']['TEXCOORD_0']),
+                          acc(p['indices']).reshape(-1, 3).astype(np.int64)))
+    areas = [np.linalg.norm(np.cross(pos[tri[:, 1]] - pos[tri[:, 0]], pos[tri[:, 2]] - pos[tri[:, 0]]), axis=1) for _, _, pos, _, _, tri in parts]
+    whole = sum(a.sum() for a in areas)
+    rng = np.random.default_rng(seed)
+    P, C, N = [], [], []
+    for (path, cut, pos, nrm, uv, tri), area in zip(parts, areas):
+        n = int(total * area.sum() / whole)
+        if n == 0:
+            continue
+        pick = tri[rng.choice(len(tri), n, p=area / area.sum())]
+        b = rng.random((n, 2))
+        flip = b.sum(1) > 1
+        b[flip] = 1 - b[flip]
+        b = np.concatenate([1 - b.sum(1, keepdims=True), b], 1)
+        p = (pos[pick] * b[:, :, None]).sum(1)
+        nn = (nrm[pick] * b[:, :, None]).sum(1)
+        t = (uv[pick] * b[:, :, None]).sum(1)
+        img = Image.open(path)
+        tex = np.asarray(img.convert('RGBA'), np.float32) / 255
+        h, w = tex.shape[:2]
+        s = tex[np.clip((t[:, 1] % 1) * h, 0, h - 1).astype(int), np.clip((t[:, 0] % 1) * w, 0, w - 1).astype(int)]
+        keep = s[:, 3] > 0.5
+        if cut and img.mode not in ('RGBA', 'LA'):  # a cut-out without its mask: what is not leaf is black in the picture
+            keep &= s[:, :3].max(1) > 0.07
+        P.append(p[keep]), N.append(nn[keep]), C.append(s[keep, :3])
+    P, C, N = np.concatenate(P), np.concatenate(C), np.concatenate(N)
+    low = P[P[:, 1] < P[:, 1].min() + 0.03 * np.ptp(P[:, 1])]  # the foot
+    P = (P - [low[:, 0].mean(), P[:, 1].min(), low[:, 2].mean()]) * scale
+    return P, C, N
+
+
+def model_sheet(P, C, N):
+    """the cards' picture of a model's points, and what it spans: half its width, its height"""
+    half = float(np.abs(P[:, [0, 2]]).max()) * 1.02
+    h = float(P[:, 1].max()) * 1.01
+    s = finish(view(P, C, N, 0, 1, 2, np.array([-half, 0.0]), np.array([half, h])))
+    t = finish(view(P, C, N, 0, 2, 1, np.array([-half, -half]), np.array([half, half])))
+    return sheet_of(s, t), half, h
 
 
 def view(P, C, N, ax, ay, depth, lo, hi):
@@ -250,8 +332,8 @@ def build(name, height, trunk, whorls, cards, lean=0.0, sides=8):
     def off(y):
         return lean * (y / height) ** 2
 
-    r_foot, t_top = trunk
-    rings = 6
+    r_foot, t_top = trunk or (0, 0)  # (none: the stem is in the cards' picture)
+    rings = 6 if trunk else 0
     for i in range(rings):
         y0, y1 = t_top * i / rings, t_top * (i + 1) / rings
         r0, r1 = r_foot * (1 - i / rings) + 0.03, r_foot * (1 - (i + 1) / rings) + 0.03
@@ -342,18 +424,35 @@ MIXED = [('arctic05_color_grass_active', 0.9, 0.2), ('alpine01_color_terraingras
          ('eaton02_color_mowedgrass', 0.1, 0.15), ('newav01_color_mowedgrass', 0.1, 0.15), ('cityroad_color_median_*', 0.2, 0.3)]
 
 
-def kind_text(name, model, density, size, patch, seed, wind, conifer, grass=1.0):
+# where the dry grass grows: the desert's and the steppe's plants
+DRY = [('desert01_color_grass02', 1), ('desert01_color_grass03', 1), ('desert01_color_grass04', 1), ('scrub01_color_browngrass_active', 1),
+       ('scrub01_color_grass_01', 0.7), ('hallor03_color_deadgrass_active', 1), ('arctic01_color_deadgrass_active', 0.3)]
+# the warm maps' grass alone (Exford, the jungle)
+WARM = [(m, 1) for m in GRASS if m.startswith('trop01') or m.startswith('eaton03')]
+
+
+def kind_text(name, model, density, size, patch, seed, wind, conifer=False, grass=1.0, where='green', distance=1500, sink=(-0.4, -0.15)):
     t = ['[%s]' % name, 'enabled = 1', 'model = clutter\\mw4vr\\%s.obj' % model, 'density = %g' % density, 'size = %g %g' % size, 'rotate = 0 360',
-         'sink = -0.4 -0.15', 'jitter = 1', 'align = up', 'slope = 22 35', 'above_water = 0.5', 'distance = 0 1500', 'grow = 0 0.1', 'fade = dither',
-         'bands = auto', 'patch = %g %g' % patch, 'seed = %d' % seed, 'wind = %g %g' % wind, 'ground_tint = 0 1']
-    for m in GRASS:
-        t.append('material = %s%s' % (m, '' if grass == 1 else ' %g' % grass))
-    for m, wc, wb in MIXED:
-        t.append('material = %s %g' % (m, wc if conifer else wb))
+         'sink = %g %g' % sink, 'jitter = 1', 'align = up', 'slope = 22 35', 'above_water = 0.5', 'distance = 0 %d' % distance, 'grow = 0 0.1',
+         'fade = dither', 'bands = auto', 'patch = %g %g' % patch, 'seed = %d' % seed, 'wind = %g %g' % wind, 'ground_tint = 0 1']
+    if where == 'green':
+        for m in GRASS:
+            t.append('material = %s%s' % (m, '' if grass == 1 else ' %g' % grass))
+        for m, wc, wb in MIXED:
+            t.append('material = %s %g' % (m, wc if conifer else wb))
+    else:
+        for m, w in (DRY if where == 'dry' else WARM):
+            t.append('material = %s%s' % (m, '' if w == 1 else ' %g' % w))
     return '\n'.join(t) + '\n'
 
 
-def main(src, out):
+def card_tree(name, half, h, domes, cards=3, lean=0.0):
+    """a tree all of cards for a model's pictures: upright cards over its whole height, and domes (height share,
+    radius share, how far the middle stands above the rim as a share of the radius) of the picture from above"""
+    return build(name, h, None, [(h * y, half * r, -half * r * up, 0.4 + 1.1 * i) for i, (y, r, up) in enumerate(domes)], (0.0, h, half, cards), lean)
+
+
+def main(src, out, ph=None):
     os.makedirs(out, exist_ok=True)
     parts = gltf_mesh(src, 0)
     P, C, N = points(parts, src)
@@ -402,6 +501,32 @@ def main(src, out):
     ]
     names = {'fir_01': 'tree_fir', 'fir_02': 'tree_fir_tall', 'fir_03': 'tree_fir_young', 'fir_04': 'tree_fir_dead', 'oak_01': 'tree_oak',
              'oak_02': 'tree_oak_tall', 'birch_01': 'tree_birch', 'bush_01': 'tree_bush'}
+    if ph:
+        # with Poly Haven's other plants at hand (fetch_polyhaven.py) the photographed ones take the drawn ones' places:
+        # name, asset, which of its meshes, scale, domes, the clutter kind's name and values
+        trees = [t for t in trees if t[0] not in ('oak_01', 'bush_01')]
+        real = [
+            ('jacaranda_01', 'jacaranda_tree', None, 0.85, [(0.5, 0.95, 0.1), (0.72, 0.85, 0.2), (0.9, 0.5, 0.25)], 'tree_jacaranda',
+             dict(density=0.0005, size=(0.7, 1.1), patch=(80, 0.45), seed=101, wind=(0.006, 0.25))),
+            ('island_01', 'island_tree_02', None, 3.2, [(0.6, 0.95, 0.12), (0.85, 0.7, 0.25)], 'tree_island',
+             dict(density=0.0009, size=(0.75, 1.3), patch=(60, 0.5), seed=102, wind=(0.01, 0.35), where='warm')),
+            ('pine_01', 'pine_sapling_small', [1], 11.0, [(0.3, 0.95, -0.2), (0.48, 0.9, -0.2), (0.66, 0.7, -0.2), (0.82, 0.5, -0.2), (0.94, 0.25, -0.2)],
+             'tree_pine', dict(density=0.0007, size=(0.75, 1.35), patch=(70, 0.5), seed=103, wind=(0.012, 0.35), conifer=True)),
+            ('quiver_01', 'quiver_tree_02', None, 3.6, [(0.82, 0.95, 0.1)], 'tree_quiver',
+             dict(density=0.0005, size=(0.7, 1.4), patch=(70, 0.35), seed=104, wind=(0.002, 0.3), where='dry')),
+            ('searsia_01', 'searsia_lucida', [0], 1.6, [(0.55, 0.9, 0.3)], 'bush_searsia',
+             dict(density=0.002, size=(0.6, 1.4), patch=(40, 0.45), seed=105, wind=(0.02, 0.6), where='dry', distance=900, sink=(-0.1, 0))),
+            ('rooibos_01', 'wild_rooibos_bush', [0], 2.4, [(0.6, 0.9, 0.3)], 'bush_rooibos',
+             dict(density=0.006, size=(0.6, 1.5), patch=(25, 0.5), seed=106, wind=(0.03, 0.8), where='dry', distance=400, sink=(-0.05, 0))),
+            ('shrub_01', 'shrub_02', [0], 1.5, [(0.5, 0.9, 0.3)], 'bush_green',
+             dict(density=0.002, size=(0.6, 1.5), patch=(40, 0.5), seed=107, wind=(0.03, 0.7), distance=900, sink=(-0.1, 0))),
+        ]
+        none = Image.new('RGB', (8, 8), (70, 55, 40))
+        for name, asset, meshes, scale, domes, kind, k in real:
+            cards, half, h = model_sheet(*model_points(os.path.join(ph, asset), asset, meshes, scale=scale))
+            trees.append((name, card_tree(name, half, h, domes), cards, none, k))
+            names[name] = kind
+            print('%-12s %.1f m high, %.1f m across' % (name, h, 2 * half))
     shots, kinds, total = [], [], 0
     for name, o, cards, bark, k in trees:
         cards.save(os.path.join(out, name + '_cards.png'))
@@ -419,9 +544,9 @@ def main(src, out):
         kinds.append(kind_text(names[name], name, grass=0.6 if name == 'fir_04' else 1.0, **k))
         total += k['density']
         print('%-9s %4d triangles' % (name, o.count()))
-    sheet = Image.new('RGB', (384 * 4, 384 * 2))
+    sheet = Image.new('RGB', (384 * 5, 384 * ((len(shots) + 4) // 5)))
     for i, p in enumerate(shots):
-        sheet.paste(p, (384 * (i % 4), 384 * (i // 4)))
+        sheet.paste(p, (384 * (i % 5), 384 * (i // 5)))
     sheet.save(os.path.join(out, 'sheet.png'))
     with open(os.path.join(out, 'clutter_trees.txt'), 'w') as f:
         f.write('; MW4VR trees (Content\\Models\\clutter\\mw4vr, built by MW4VR tools\\trees\\build_trees.py). A kind off: enabled = 0.\n'
@@ -430,4 +555,4 @@ def main(src, out):
 
 
 if __name__ == '__main__':
-    main(sys.argv[1], sys.argv[2])
+    main(sys.argv[1], sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else None)
