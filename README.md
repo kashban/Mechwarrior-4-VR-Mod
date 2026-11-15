@@ -40,6 +40,7 @@ To remove it, delete `d3d11.dll` from the game's folder.
 | Ctrl+Home | recentre |
 | Ctrl+F11 | own cockpit mesh on / off |
 | Ctrl+Alt+F11 (with Shift: back) | the next cockpit mesh; remembered for the mech you sit in |
+| Ctrl+Alt+1 … 5 | the monitor you look at shows radar / target / damage / lance list / weapons (0: nothing); remembered per cockpit |
 | Ctrl+Alt+arrows, PgUp / PgDn | eye position in the cockpit mesh, its size (remembered per cockpit) |
 | Ctrl+Ins / Del | the cockpit's size |
 | Ctrl+F10 | this cockpit fits: remember it for this mech |

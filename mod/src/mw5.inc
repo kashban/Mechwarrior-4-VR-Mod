@@ -21,7 +21,9 @@ struct Mw5Group {
     ID3D11ShaderResourceView *clr, *ems;
     int screen;   // 0: the mesh; n + 1: monitor n, shown with a part of the game's HUD
     float aspect; // a monitor's width / height
+    float centre[3]; // its middle in the mesh
 };
+static volatile int g_m5Looked; // the monitor the pilot looks at (n + 1; 0: none), for Ctrl+Alt+1..5
 #define MW5_GROUPS 40
 static Mw5Group g_m5[MW5_GROUPS];
 static int g_m5N;
@@ -244,6 +246,10 @@ static bool mw5LoadFile() {
             sd.pSysMem = ix.data();
             HRESULT h2 = ORIG(PFN_CreateBuffer, g_dev, VT_Dev_CreateBuffer)(g_dev, &bd, &sd, &g.ib);
             g.nIdx = h.ni;
+            for (uint32_t k = 0; k < h.nv; ++k) {
+                const float *vp = (const float *)(v.data() + (size_t)k * 32);
+                for (int a = 0; a < 3; ++a) g.centre[a] += vp[a] / (float)h.nv;
+            }
             h.name[47] = 0;
             if (!strncmp(h.name, "SCREEN:", 7)) {
                 g.screen = atoi(h.name + 7) + 1;
@@ -459,6 +465,19 @@ static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw) {
         cb[i * 4 + 3] = R[0 * 3 + i] * o[0] + R[1 * 3 + i] * o[1] + R[2 * 3 + i] * o[2];
     }
     cb[15] = 1;
+    if (e == 0) { // which monitor lies nearest the middle of the view (within 12 degrees)?
+        int looked = 0;
+        float best = 0.978f;
+        for (int i = 0; i < g_m5N; ++i) {
+            if (!g_m5[i].screen) continue;
+            const float *q = g_m5[i].centre;
+            float p[3];
+            for (int a = 0; a < 3; ++a) p[a] = cb[a * 4] * q[0] + cb[a * 4 + 1] * q[1] + cb[a * 4 + 2] * q[2] + cb[a * 4 + 3];
+            float l = sqrtf(p[0] * p[0] + p[1] * p[1] + p[2] * p[2]);
+            if (p[2] > 0 && l > 0 && p[2] / l > best) best = p[2] / l, looked = g_m5[i].screen;
+        }
+        g_m5Looked = looked;
+    }
     cb[16] = g_P00, cb[17] = g_P11, cb[18] = g_near, cb[19] = (float)rev;
     cb[20] = 0.25f, cb[21] = 0.85f, cb[22] = 0.45f; // the lamp: above, a little ahead and to the right
     cb[23] = g_mw5DepthFront;
@@ -577,6 +596,9 @@ static void mw5ForMech() {
     if (!name[0] || !_wcsicmp(name, g_mw5Name)) return;
     logf("mw5: cockpit '%ls' for mech profile %d", name, g_mechCur + 1);
     mw5Switch(name);
+    wchar_t note[160];
+    swprintf(note, 160, L"Cockpit: %ls  (mech %d)", name, g_mechCur + 1);
+    noteShow(note);
 }
 
 // Ctrl+Alt+F11: the next cockpit file (Shift: the one before), remembered for this mech
@@ -590,7 +612,8 @@ static void mw5Next(int step) {
     int n = (int)v.size(), at = step > 0 ? -1 : 0;
     for (int i = 0; i < n; ++i)
         if (!_wcsicmp(v[i].c_str(), g_mw5Name)) at = i;
-    const std::wstring &name = v[((at + step) % n + n) % n];
+    int pick = ((at + step) % n + n) % n;
+    const std::wstring &name = v[pick];
     wchar_t sec[32];
     swprintf(sec, 32, L"mech_%d", g_mechCur + 1);
     if (g_mechCur >= 0) WritePrivateProfileStringW(sec, L"mw5_cockpit", name.c_str(), mechIni().c_str());
@@ -598,7 +621,54 @@ static void mw5Next(int step) {
     logf(g_mechCur >= 0 ? "mw5: cockpit '%ls' chosen for mech profile %d" : "mw5: cockpit '%ls' chosen (no mech known: for all)", name.c_str(), g_mechCur + 1);
     mw5Switch(name.c_str());
     g_mw5On = true;
+    wchar_t note[160];
+    if (g_mechCur >= 0) swprintf(note, 160, L"Cockpit %d / %d: %ls  (mech %d)", pick + 1, n, name.c_str(), g_mechCur + 1);
+    else swprintf(note, 160, L"Cockpit %d / %d: %ls  (no mech known)", pick + 1, n, name.c_str());
+    noteShow(note);
     Beep(1000, 40);
+}
+
+// a cockpit's value written: into its own file or, without one, into mw4vr.ini (nullptr: the key goes)
+static void mw5CockpitPutStr(const wchar_t *key, const wchar_t *val) {
+    wchar_t k[48];
+    swprintf(k, 48, L"mw5_%ls", key);
+    if (g_mw5Own) WritePrivateProfileStringW(L"cockpit", key, val, mw5OwnIni().c_str());
+    else WritePrivateProfileStringW(L"vr", k, val, (g_dir + L"mw4vr.ini").c_str());
+}
+
+// Ctrl+Alt+1..5: the monitor looked at shows this part of the HUD from now on (0: nothing); remembered for the cockpit
+static void mw5Assign(int part) {
+    static const wchar_t *names[6] = {L"nothing", L"radar", L"target", L"damage", L"lance list", L"weapons"};
+    static const wchar_t *rects[6] = {nullptr, L"0.320 0.770 0.690 0.990", L"0.000 0.772 0.180 1.000", L"0.820 0.772 1.005 1.000",
+                                      L"0.000 0.000 0.243 0.108", L"0.716 0.000 1.000 0.124"};
+    static const wchar_t *lanceAlt = L"0.000 0.000 0.243 0.435 0.210 0.125"; // the list with the open orders menu, and where that shows
+    int n = g_m5Looked - 1;
+    wchar_t note[160], k[32];
+    if (n < 0 || n >= MW5_SCREENS) {
+        noteShow(L"Look at a monitor, then Ctrl+Alt+1..5 (radar, target, damage, lance, weapons), 0 = dark", 4);
+        Beep(300, 150);
+        return;
+    }
+    float want[4] = {};
+    if (part) swscanf(rects[part], L"%f %f %f %f", want, want + 1, want + 2, want + 3);
+    for (int i = 0; i < MW5_SCREENS && part; ++i) { // the part leaves the monitor that showed it
+        const float *r = g_m5Rect[i];
+        if (i == n || fabsf(r[0] - want[0]) + fabsf(r[1] - want[1]) + fabsf(r[2] - want[2]) + fabsf(r[3] - want[3]) > 0.002f) continue;
+        swprintf(k, 32, L"screen_%d", i);
+        mw5CockpitPutStr(k, nullptr);
+        swprintf(k, 32, L"screen_%d_alt", i);
+        mw5CockpitPutStr(k, nullptr);
+    }
+    swprintf(k, 32, L"screen_%d", n);
+    mw5CockpitPutStr(k, rects[part]);
+    swprintf(k, 32, L"screen_%d_alt", n);
+    mw5CockpitPutStr(k, part == 4 ? lanceAlt : nullptr);
+    if (part) mw5CockpitPutStr(L"screens", L"1");
+    mw5ReadIni();
+    swprintf(note, 160, L"%ls: monitor %d shows %ls", g_mw5Name, n, names[part]);
+    noteShow(note, 4);
+    logf("mw5: cockpit '%ls': monitor %d shows %ls (saved)", g_mw5Name, n, names[part]);
+    Beep(1200, 40);
 }
 
 // hot keys, once a frame
@@ -623,12 +693,23 @@ static void mw5OnPresent() {
             } else {
                 g_mw5On = !g_mw5On;
                 logf("mw5: cockpit '%ls' %s", g_mw5Name, g_mw5On ? "on" : "off");
+                wchar_t note[160];
+                swprintf(note, 160, g_mw5On ? L"Cockpit: %ls" : L"Cockpit off (%ls)", g_mw5Name);
+                noteShow(note, 3);
                 Beep(g_mw5On ? 1200 : 600, 60);
             }
         }
         was = down;
     }
     if (!g_mw5On) return;
+    {
+        static bool wasN[6];
+        for (int k = 0; k < 6; ++k) {
+            bool down = ctrl && alt && (GetAsyncKeyState('0' + k) & 0x8000);
+            if (down && !wasN[k]) mw5Assign(k);
+            wasN[k] = down;
+        }
+    }
     static bool was[6];
     const int keys[6] = {VK_UP, VK_DOWN, VK_RIGHT, VK_LEFT, VK_PRIOR, VK_NEXT};
     for (int k = 0; k < 6; ++k) {
@@ -644,6 +725,9 @@ static void mw5OnPresent() {
             mw5CockpitPutF(L"eye_forward_m", g_mw5Eye[2]);
             mw5CockpitPutF(L"scale", g_mw5Scale);
             logf("mw5: eye %.2f m up, %.2f m forward, size %.3f (saved)", g_mw5Eye[1], g_mw5Eye[2], g_mw5Scale);
+            wchar_t note[160];
+            swprintf(note, 160, L"%ls: eye %+.2f m up, %+.2f m forward, size %.2f", g_mw5Name, g_mw5Eye[1], g_mw5Eye[2], g_mw5Scale);
+            noteShow(note, 3);
             Beep(k < 2 ? 800 : k < 4 ? 1000 : 1400, 30);
         }
         was[k] = down;
