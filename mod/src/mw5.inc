@@ -52,7 +52,7 @@ static bool g_mw5IniRead;
 static wchar_t g_mw5Name[64];
 static float g_mw5Scale = 1, g_mw5Eye[3], g_mw5Ems = 1.5f, g_mw5Amb = 0.45f;
 static int g_mw5LinearOut, g_mw5Reversed = 1;
-static float g_mw5DepthFront = 0.5f;
+static float g_mw5DepthFront = 0.92f;
 static ID3D11VertexShader *g_m5VS;
 static ID3D11PixelShader *g_m5PS;
 static ID3D11InputLayout *g_m5IL;
@@ -184,8 +184,10 @@ static void mw5ReadIni() {
     g_mw5Eye[2] = mw5CockpitF(L"eye_forward_m", 0);
     g_mw5Ems = mw5GetF(L"mw5_emissive", 1.5f);
     g_mw5Amb = mw5GetF(L"mw5_ambient", 0.45f);
-    g_mw5DepthFront = mw5GetF(L"mw5_depth_front", 0.5f);
-    if (!(g_mw5DepthFront >= 0 && g_mw5DepthFront <= 0.95f)) g_mw5DepthFront = 0.5f;
+    // What of the world is nearer than the game's near plane / this share still shows in front of the mesh: at 0.5
+    // the mech's own hull beside a narrow cockpit did (the Archer's launchers, within 2 m). At least 0.9.
+    g_mw5DepthFront = mw5GetF(L"mw5_depth_front", 0.92f);
+    if (!(g_mw5DepthFront >= 0.9f && g_mw5DepthFront <= 0.98f)) g_mw5DepthFront = 0.92f;
     g_mw5LinearOut = GetPrivateProfileIntW(L"vr", L"mw5_linear_output", 0, ini.c_str());
     g_mw5Reversed = GetPrivateProfileIntW(L"vr", L"mw5_reversed_depth", 1, ini.c_str());
     g_mw5ScreensWanted = GetPrivateProfileIntW(L"vr", L"mw5_screens", 1, ini.c_str()) && mw5CockpitF(L"screens", 1) != 0;

@@ -123,8 +123,8 @@ hud_extra_width=1.02
 ; a monitor's second part: mw5_screen_<n>_alt = u0 v0 u1 v1 pu pv - shown instead while something is drawn at pu pv
 ; of the HUD picture (monitor 0: the lance list with the open orders menu below it)
 mw5_screen_0_alt=0.000 0.000 0.243 0.435 0.210 0.125
-; share of the depth range kept for the own cockpit alone: the ground cannot cut through its floor (0 = off)
-mw5_depth_front=0.5
+; share of the depth range kept for the own cockpit alone (0.9 .. 0.98): the ground and the mech's own hull cannot cut through it
+mw5_depth_front=0.92
 mw5_screen_0=0.000 0.000 0.243 0.108
 mw5_screen_1=0.000 0.772 0.180 1.000
 mw5_screen_2=0.320 0.770 0.690 0.990
