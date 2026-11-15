@@ -48,6 +48,8 @@ To remove it, delete `d3d11.dll` (and `dinput.dll`) from the game's folder.
 | Ctrl+Alt+F11 (with Shift: back) | the next cockpit mesh; remembered for the mech you sit in |
 | Ctrl+Alt+1 … 6 | radar / target / damage / lance list / weapons / top strip: onto the monitor you look at or, looking elsewhere, onto the glass there (0: the monitor goes dark); remembered per cockpit |
 | Ctrl+Alt+7 | all parts on the glass back to their automatic places (in the cockpit's windows) |
+| Ctrl+Alt+9 | this cockpit's monitors off / on (off: all of the HUD on the glass) |
+| Ctrl+Alt+Shift+9 | the chosen part leaves its monitor and goes onto the glass |
 | Ctrl+Alt+Shift+1 … 6 | choose a part on the glass; then Ctrl+Alt+Shift + arrows move it, PgUp / PgDn size it, Ins / Del put it farther / nearer, 0 takes it off the glass |
 | Ctrl+Alt+arrows, PgUp / PgDn | eye position in the cockpit mesh, its size (remembered per cockpit) |
 | Ctrl+Ins / Del | the cockpit's size |

@@ -843,7 +843,8 @@ static void mw5GlassPut(int p) {
 
 // Ctrl+Alt+1..6 (radar, target, damage, lance list, weapons, top strip): the monitor looked at shows this part of the
 // HUD from now on; looking elsewhere, the part goes onto the glass there. Ctrl+Alt+0: the monitor looked at goes dark.
-// Ctrl+Alt+7: all parts on the glass are placed automatically again.
+// Ctrl+Alt+7: all parts on the glass are placed automatically again. Ctrl+Alt+9: this cockpit's monitors off / on
+// (off: all of the HUD on the glass); Ctrl+Alt+Shift+9: the chosen part leaves its monitor for the glass.
 // With Shift: 1..6 chooses the part the Ctrl+Alt+Shift keys change (arrows: its place, PgUp / PgDn: its size,
 // Ins / Del: farther / nearer), 0 takes that part off the glass. Remembered for the cockpit.
 static void mw5Assign(int part, bool shift) {
@@ -863,6 +864,40 @@ static void mw5Assign(int part, bool shift) {
         Beep(1000, 40);
         return;
     }
+    if (part == 9 && !shift) { // all of this cockpit's monitors off / on: off, every part is on the glass
+        bool on = !g_mw5ScreensWanted;
+        mw5CockpitPutStr(L"screens", on ? L"1" : L"0");
+        mw5ReadIni();
+        swprintf(note, 200, on ? L"%ls: the monitors show the HUD again" : L"%ls: monitors off - all of the HUD on the glass", g_mw5Name);
+        noteShow(note, 4);
+        logf("mw5: cockpit '%ls': monitors %s (saved)", g_mw5Name, on ? "on" : "off - the HUD on the glass");
+        Beep(on ? 1200 : 700, 40);
+        return;
+    }
+    if (part == 9) { // the chosen part leaves its monitor and goes onto the glass
+        p = g_m5GlassLast;
+        int mon = p >= 0 && p < 5 ? mw5MonitorOf(p) : -1;
+        if (mon < 0) {
+            noteShow(p < 0 ? L"Choose a part first: Ctrl+Alt+Shift+1..5 (radar, target, damage, lance, weapons)" : L"That part is not on a monitor", 4);
+            Beep(300, 150);
+            return;
+        }
+        swprintf(k, 32, L"screen_%d", mon);
+        mw5CockpitPutStr(k, nullptr);
+        swprintf(k, 32, L"screen_%d_alt", mon);
+        mw5CockpitPutStr(k, nullptr);
+        if (!(g_m5Glass[p][2] > 0.5f)) { // it was taken off the glass once: placed automatically
+            swprintf(k, 32, L"glass_%ls", g_m5PartKey[p]);
+            mw5CockpitPutStr(k, nullptr);
+        }
+        mw5ReadIni();
+        swprintf(note, 200, L"%ls: %ls off monitor %d, on the glass now (Ctrl+Alt+Shift + arrows move it)", g_mw5Name, g_m5PartName[p], mon);
+        noteShow(note, 5);
+        logf("mw5: cockpit '%ls': %ls off monitor %d, onto the glass (saved)", g_mw5Name, g_m5PartName[p], mon);
+        Beep(1000, 40);
+        return;
+    }
+    if (part == 8) return;
     if (shift && p >= 0) {
         g_m5GlassLast = p;
         if (p < 5 && mw5MonitorOf(p) >= 0)
@@ -1029,8 +1064,8 @@ static void mw5OnPresent() {
         }
     }
     {
-        static bool wasN[8];
-        for (int k = 0; k < 8; ++k) {
+        static bool wasN[10];
+        for (int k = 0; k < 10; ++k) {
             bool down = ctrl && alt && (GetAsyncKeyState('0' + k) & 0x8000);
             if (down && !wasN[k]) mw5Assign(k, shift);
             wasN[k] = down;
