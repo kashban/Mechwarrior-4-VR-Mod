@@ -960,8 +960,12 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
                 memcpy(hd.glass[hd.nGlass++], r, sizeof hd.glass[0]);
                 mcTopSpan(hd.span, hd.nSpan, r, T);
                 if (r[1] < T) { // the lists with what hangs below them (the lance menu, the weapons): not the far columns' any more
-                    hd.leftAlt = mcLeftAlt(r, L, hd.leftAlt);
-                    hd.rightAlt = mcRightAlt(r, R, hd.rightAlt);
+                    // one that reaches below the strip and into the middle (the weapon list's frame begins left of
+                    // hud_right): the middle ends where it begins - middle and columns are shown alike here
+                    if (r[3] > T + 0.01f && r[0] > 0.5f && r[0] < hd.R) hd.R = r[0];
+                    if (r[3] > T + 0.01f && r[2] < 0.5f && r[2] > hd.L) hd.L = r[2];
+                    hd.leftAlt = mcLeftAlt(r, hd.L, hd.leftAlt);
+                    hd.rightAlt = mcRightAlt(r, hd.R, hd.rightAlt);
                 }
             }
         }
