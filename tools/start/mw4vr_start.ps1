@@ -1,17 +1,23 @@
 # MW4VR starter: MW4Mercs.exe often dies right at start-up (heap corruption while DirectInput
 # enumerates the input devices, before any rendering) or hangs there with a grey or black window.
+# (The mod's dinput.dll in the game folder removes that cause; this script stays as the safety net.)
 # This starts it again until frames are really being presented: the probe's log (mw4vr.log,
 # written anew by every start that gets as far as Direct3D) gains a statistics line "<n> fps | ..."
 # with more than 5 fps, which it only writes while the game presents frames.
 # An attempt is ended and repeated when the game ends, when one of its windows is hung for 6 s,
 # when the probe has not been loaded after -LoadSec seconds, or when no frames came after -TimeoutSec.
 # What happened is written to mw4vr_start.log.
-param([int]$MaxTries = 10, [int]$TimeoutSec = 45, [int]$LoadSec = 20)
+param([int]$MaxTries = 10, [int]$TimeoutSec = 45, [int]$LoadSec = 20, [switch]$Admin)
 
 $dir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $exe = Join-Path $dir 'MW4Mercs.exe'
 $probeLog = Join-Path $dir 'mw4vr.log'
 $startLog = Join-Path $dir 'mw4vr_start.log'
+
+# MW4Mercs.exe asks for administrator rights in its manifest, so Windows asks the user at every start (and
+# at every repeated attempt). The game does not need them when its folder is writable: start it as the
+# user who called us. -Admin keeps the old behaviour.
+if (-not $Admin) { $env:__COMPAT_LAYER = 'RunAsInvoker' }
 
 Add-Type -Namespace MW4VR -Name Win -MemberDefinition @'
 [DllImport("user32.dll")] public static extern bool IsHungAppWindow(IntPtr hWnd);

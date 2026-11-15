@@ -29,9 +29,15 @@ It sits behind the *MW4Engine DX11* renderer mod (`mw4hook.dll`, by another auth
 
 1. In `mw4hook.ini`: `antihack=0`, `fov=130`, `vsync=0`.
 2. Copy `d3d11.dll` and `mw4vr.ini` (from `docs/mw4vr.ini.example`) into the game's folder.
-3. Start the game with the headset connected. `Ctrl+Home` recentres the view.
+3. Optional, if the game often dies or hangs right at start-up: copy `dinput.dll` into the game's folder too.
+   On some PCs the system's old DirectInput damages the heap while it lists "other HID devices" (light
+   controllers, receivers); this one lists only mice, keyboards and joysticks. It writes `mw4vr_dinput.log`.
+4. Start the game with the headset connected. `Ctrl+Home` recentres the view.
 
-To remove it, delete `d3d11.dll` from the game's folder.
+`tools/start/mw4vr_start.cmd` (copy it and the `.ps1` into the game's folder) starts the game without the
+administrator prompt its manifest asks for, and starts it again if it does not come up.
+
+To remove it, delete `d3d11.dll` (and `dinput.dll`) from the game's folder.
 
 ## Keys (in a battle)
 

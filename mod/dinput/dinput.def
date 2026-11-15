@@ -1,0 +1,5 @@
+LIBRARY dinput
+EXPORTS
+    DirectInputCreateEx = _MW4VR_DirectInputCreateEx@20
+    DirectInputCreateA = _MW4VR_DirectInputCreateA@16
+    DirectInputCreateW = _MW4VR_DirectInputCreateW@16
