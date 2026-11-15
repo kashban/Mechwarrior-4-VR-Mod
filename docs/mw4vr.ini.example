@@ -91,6 +91,10 @@ mw5_reversed_depth=1
 ; monitors of the MW5 cockpit show parts of the game HUD: u0 v0 u1 v1 of the HUD picture (0..1, origin top left)
 ; Arctic Wolf: 0 left side, 1 left of centre, 2 centre, 3 right of centre, 4 right side. mw5_screens=0: old floating panels
 mw5_screens=1
+; the parts of the HUD no monitor shows (and the top strip: compass, mission texts) on the cockpit's glass, each where
+; the cockpit's own file says: [cockpit] glass_<radar|target|damage|lance|weapons|top> = degrees right, degrees up,
+; width in degrees (width 0: not shown); glass_distance_m (1.2). In a battle: look there, Ctrl+Alt+1..6. 0 = off
+mw5_glass=1
 ; with the monitors on: the torso mark (below the cross-hair) is cut out of the HUD picture (u0 v0 u1 v1)
 ; and shown higher by hud_twist_shift (negative = up; 0 = leave it where it is)
 hud_twist_rect=0.42 0.585 0.58 0.665

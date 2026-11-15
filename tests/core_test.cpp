@@ -339,6 +339,7 @@ static McHud hud() {
     const float stale[4] = {0.4f, 0.3f, 0.6f, 0.5f};
     for (int i = 0; i < MC_CAMS; ++i) memcpy(h.cam[i], stale, sizeof stale);
     for (int i = 0; i < MC_SPANS; ++i) h.span[i][0] = 0.4f, h.span[i][1] = 0.6f;
+    for (int i = 0; i < MC_GLASSES; ++i) memcpy(h.glass[i], stale, sizeof stale);
     return h;
 }
 static void setCam(McHud &h, float u0, float v0, float u1, float v1) {
@@ -475,7 +476,128 @@ static void testHudScreensZoom() {
     CHECK(same(q, want, 9));
 }
 
+// ---------------------------------------------------------------- the parts on the glass
+static void testHolds() {
+    g_test = "holds";
+    const float r[4] = {0.2f, 0.3f, 0.6f, 0.9f};
+    CHECK(mcHolds(r, 0.21f, 0.31f) && mcHolds(r, 0.59f, 0.89f));
+    CHECK(!mcHolds(r, 0.2f, 0.5f) && !mcHolds(r, 0.6f, 0.5f) && !mcHolds(r, 0.4f, 0.3f) && !mcHolds(r, 0.4f, 0.9f)); // on an edge
+    CHECK(!mcHolds(r, 0.1f, 0.5f) && !mcHolds(r, 0.7f, 0.5f) && !mcHolds(r, 0.4f, 0.2f) && !mcHolds(r, 0.4f, 0.95f));
+}
+
+static void testHudGlass() {
+    g_test = "hud glass";
+    McHud h = hud();
+    h.screens = true;
+    const float target[4] = {0, 0.772f, 0.18f, 1}, wide[4] = {0.125f, 0.25f, 0.75f, 0.625f}; // (wide holds the stale window's middle)
+    memcpy(h.glass[0], target, sizeof target), memcpy(h.glass[1], wide, sizeof wide);
+    h.nGlass = 2;
+    setCam(h, 0.01f, 0.80f, 0.07f, 0.98f); // the target's view, in the target part
+    setCam(h, 0.80f, 0.60f, 0.98f, 0.76f); // one in no part
+    setCam(h, 0, 0.3f, 0.25f, 0.5f);         // one whose middle lies on the second part's edge
+    McRects q;
+    mcHudRects(h, q);
+    CHECK(q.n == 11); // the eight without glass, then:
+    const float want[][5] = {{0, 0.772f, 0.18f, 1, MC_GLASS}, {0.01f, 0.80f, 0.07f, 0.98f, MC_GLASS_OPAQUE}, {0.125f, 0.25f, 0.75f, 0.625f, MC_GLASS + 1}};
+    for (int i = 0; i < 3 && q.n == 11; ++i)
+        for (int k = 0; k < 5; ++k) CHECK(nearly(q.rc[8 + i][k], want[i][k], 1e-6f));
+    h.nCam = 0;
+    setCam(h, 0.20f, 0.27f, 0.28f, 0.59f); // a window in the second part, off its middle both ways
+    h.cam[0][0] = 0.14f; // (left of the zoom window's range)
+    h.nGlass = 2;
+    mcHudRects(h, q);
+    CHECK(q.n == 11 && q.rc[10][4] == MC_GLASS_OPAQUE + 1 && q.rc[10][0] == 0.14f && q.rc[10][3] == 0.59f);
+    h.cam[0][0] = 0, h.cam[0][2] = 0.16f; // its middle left of the part
+    mcHudRects(h, q);
+    CHECK(q.n == 10);
+    h.cam[0][0] = 0.14f, h.cam[0][2] = 0.28f, h.cam[0][1] = 0.01f, h.cam[0][3] = 0.35f; // above it
+    mcHudRects(h, q);
+    CHECK(q.n == 10);
+    h.nGlass = 0;
+    mcHudRects(h, q);
+    CHECK(q.n == 8);
+}
+
+// v turned by the quaternion q (x y z w)
+static void turn(const float *q, const float *v, float *o) {
+    float x = q[0], y = q[1], z = q[2], w = q[3];
+    float cx = y * v[2] - z * v[1], cy = z * v[0] - x * v[2], cz = x * v[1] - y * v[0];
+    float dx = y * cz - z * cy, dy = z * cx - x * cz, dz = x * cy - y * cx;
+    o[0] = v[0] + 2 * (w * cx + dx), o[1] = v[1] + 2 * (w * cy + dy), o[2] = v[2] + 2 * (w * cz + dz);
+}
+
+static void testGlassPose() {
+    g_test = "glass pose";
+    float p[3], q[4];
+    mcGlassPose(0, 0, 1.2f, p, q);
+    CHECK(nearly(p[0], 0) && nearly(p[1], 0) && nearly(p[2], -1.2f));
+    CHECK(nearly(q[0], 0) && nearly(q[1], 0) && nearly(q[2], 0) && nearly(q[3], 1));
+    mcGlassPose(90, 0, 2, p, q);
+    CHECK(nearly(p[0], 2) && nearly(p[1], 0) && nearly(p[2], 0));
+    mcGlassPose(0, 90, 2, p, q);
+    CHECK(nearly(p[0], 0) && nearly(p[1], 2) && nearly(p[2], 0));
+    const float give[][2] = {{30, 20}, {-30, 20}, {30, -20}, {75, 50}};
+    const float want[][3] = {{0.70477f, 0.51303f, -1.22070f}, {-0.70477f, 0.51303f, -1.22070f}, {0.70477f, -0.51303f, -1.22070f}, {0.93133f, 1.14907f, -0.24955f}};
+    for (int i = 0; i < 4; ++i) {
+        mcGlassPose(give[i][0], give[i][1], 1.5f, p, q);
+        CHECK(nearly(p[0], want[i][0]) && nearly(p[1], want[i][1]) && nearly(p[2], want[i][2]));
+        CHECK(nearly(q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3], 1));
+        const float ahead[3] = {0, 0, -1.5f}, side[3] = {1, 0, 0}, top[3] = {0, 1, 0};
+        float o[3];
+        turn(q, ahead, o); // the part's own -z points from the seat to its middle: it faces the seat
+        CHECK(nearly(o[0], p[0]) && nearly(o[1], p[1]) && nearly(o[2], p[2]));
+        turn(q, side, o); // its lower edge stays level, its right side to the right as seen from the seat
+        CHECK(nearly(o[1], 0) && o[0] * -p[2] + o[2] * p[0] > 0);
+        turn(q, top, o);
+        CHECK(o[1] > 0);
+    }
+}
+
+static void testGlassScale() {
+    g_test = "glass scale";
+    CHECK(nearly(mcGlassScale(90, 1, 0.5f), 4));
+    CHECK(nearly(mcGlassScale(60, 2, 0.25f), 9.23760f));
+    CHECK(nearly(mcGlassScale(20, 1.2f, 0.37f), 1.14371f));
+}
+
+static void testGlassAim() {
+    g_test = "glass aim";
+    float r, u;
+    const float seat[3] = {0, 0, 0}, ahead[3] = {0, 0, -1};
+    mcGlassAim(seat, ahead, 1.2f, &r, &u);
+    CHECK(nearly(r, 0) && nearly(u, 0));
+    const float f1[3] = {0.5f, 0, -0.8660254f}, f2[3] = {0, 0.3420201f, -0.9396926f}, f3[3] = {0.5f, 0.5f, -0.7071068f}, f4[3] = {-0.5f, -0.5f, -0.7071068f};
+    mcGlassAim(seat, f1, 1.2f, &r, &u);
+    CHECK(nearly(r, 30, 1e-3f) && nearly(u, 0, 1e-3f));
+    mcGlassAim(seat, f2, 1.2f, &r, &u);
+    CHECK(nearly(r, 0, 1e-3f) && nearly(u, 20, 1e-3f));
+    mcGlassAim(seat, f3, 1.2f, &r, &u);
+    CHECK(nearly(r, 35.2644f, 1e-3f) && nearly(u, 30, 1e-3f));
+    mcGlassAim(seat, f4, 1.2f, &r, &u);
+    CHECK(nearly(r, -35.2644f, 1e-3f) && nearly(u, -30, 1e-3f));
+    // a head off the seat: the point named lies on the glass and on the line of sight, ahead of the head
+    const float heads[][3] = {{0.2f, 0, 0}, {0, 0.1f, 0.3f}, {0.3f, -0.2f, -0.4f}, {-0.25f, 0.15f, 0.2f}};
+    const float *looks[] = {ahead, f1, f3, f4};
+    for (int i = 0; i < 4; ++i)
+        for (int k = 0; k < 4; ++k) {
+            const float D = 1.1f, *p = heads[i], *f = looks[k];
+            mcGlassAim(p, f, D, &r, &u);
+            float x[3], q[4];
+            mcGlassPose(r, u, D, x, q);
+            float d[3] = {x[0] - p[0], x[1] - p[1], x[2] - p[2]};
+            float t = mcDot3(d, f);
+            CHECK(t > 0.5f && nearly(d[0], t * f[0], 1e-3f) && nearly(d[1], t * f[1], 1e-3f) && nearly(d[2], t * f[2], 1e-3f));
+        }
+    const float out[3] = {0, 0, -3}, right[3] = {1, 0, 0}; // a head outside the glass, looking past it: where the head is
+    mcGlassAim(out, right, 1, &r, &u);
+    CHECK(nearly(r, 0) && nearly(u, 0));
+    const float out2[3] = {-2, 0, -3}; // (the nearest point of its line of sight: 2 m along it)
+    mcGlassAim(out2, right, 1, &r, &u);
+    CHECK(nearly(r, 0, 1e-3f) && nearly(u, 0));
+}
+
 int main() {
+    testHolds(), testHudGlass(), testGlassPose(), testGlassScale(), testGlassAim();
     testMul34(), testViewAxis();
     testFrustum(), testFrustumSameView(), testFrustumTangent(), testFrustumNear(), testFrustumLayout();
     testWide();

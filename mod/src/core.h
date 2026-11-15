@@ -77,6 +77,8 @@ static inline unsigned mcWideWidth(unsigned w, float k) { return k > 1.001f ? ((
 
 enum { MC_RECTS = 32, MC_SPANS = 8, MC_CAMS = 4 };
 enum { MC_NEAR = 0, MC_FAR = 1, MC_NEAR_OPAQUE = 2, MC_FAR_OPAQUE = 3, MC_FAR_UP = 4, MC_FADE = 5 };
+// a part on the cockpit's glass: MC_GLASS + its number; a camera's window in it, opaque: MC_GLASS_OPAQUE + its number
+enum { MC_GLASSES = 8, MC_GLASS = 8, MC_GLASS_OPAQUE = 16 };
 struct McRects {
     float rc[MC_RECTS][5]; // u0 v0 u1 v1 kind
     int n;
@@ -146,7 +148,12 @@ struct McHud {
     float leftAlt;      // and of the left column (mcLeftAlt)
     float twist[4];     // the torso mark, shown higher
     float twistDv;
+    int nGlass;         // parts shown on the cockpit's glass (at most MC_GLASSES)
+    float glass[MC_GLASSES][4];
 };
+
+// the point u v lies in the rectangle r (not on its edge)
+static inline bool mcHolds(const float *r, float u, float v) { return r[0] < u && u < r[2] && r[1] < v && v < r[3]; }
 
 // true and zr: the zoom window (the last window whose centre lies in the middle of the picture)
 static inline bool mcZoomWindow(const McHud &h, float *zr) {
@@ -203,4 +210,39 @@ static inline void mcHudRects(const McHud &h, McRects &q) {
         if (cu > 0.3f && cu < 0.7f) continue;
         mcAdd(q, h.cam[i][0], h.cam[i][1], h.cam[i][2], h.cam[i][3], MC_NEAR_OPAQUE);
     }
+    for (int g = 0; g < h.nGlass; ++g) { // the parts on the glass, each with the windows in it (the target's view) over it
+        const float *r = h.glass[g];
+        mcAdd(q, r[0], r[1], r[2], r[3], (float)(MC_GLASS + g));
+        for (int i = 0; i < h.nCam; ++i) {
+            const float *c = h.cam[i];
+            if (mcHolds(r, 0.5f * (c[0] + c[2]), 0.5f * (c[1] + c[3]))) mcAdd(q, c[0], c[1], c[2], c[3], (float)(MC_GLASS_OPAQUE + g));
+        }
+    }
+}
+
+// ---- where a part on the glass lies (vr.inc, mw5.inc) ----
+// Seen from the seat: degrees to the right and up from straight ahead, at the distance D. The runtime's axes:
+// x right, y up, z back.
+
+static const float MC_RAD = 0.01745329252f;
+
+// the middle of the part (pos) and its turn towards the seat (q: x y z w)
+static inline void mcGlassPose(float right, float up, float D, float *pos, float *q) {
+    float a = right * MC_RAD, b = up * MC_RAD;
+    pos[0] = D * sinf(a) * cosf(b), pos[1] = D * sinf(b), pos[2] = -D * cosf(a) * cosf(b);
+    float sy = -sinf(0.5f * a), cy = cosf(0.5f * a), sx = sinf(0.5f * b), cx = cosf(0.5f * b); // about y, then about x
+    q[0] = cy * sx, q[1] = sy * cx, q[2] = -sy * sx, q[3] = cy * cx;
+}
+
+// metres for one unit of u, for a part du wide in the HUD image shown width degrees wide
+static inline float mcGlassScale(float width, float D, float du) { return 2 * D * tanf(0.5f * width * MC_RAD) / du; }
+
+// where the pilot looks at the glass: from the head p along f (a unit vector) to the sphere of radius D about the
+// seat (a head outside it: the nearest point of the line of sight)
+static inline void mcGlassAim(const float *p, const float *f, float D, float *right, float *up) {
+    float pf = mcDot3(p, f);
+    float t = sqrtf(fmaxf(pf * pf - mcDot3(p, p) + D * D, 0.0f)) - pf;
+    float x = p[0] + t * f[0], y = p[1] + t * f[1], z = p[2] + t * f[2];
+    *right = atan2f(x, -z) / MC_RAD;
+    *up = atan2f(y, sqrtf(x * x + z * z)) / MC_RAD;
 }

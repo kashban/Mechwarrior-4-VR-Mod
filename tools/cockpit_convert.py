@@ -181,7 +181,7 @@ def ini_text(places):
              '[cockpit]',
              '; the eye in the mesh (metres) and the size of the mesh; in a battle: Ctrl+Alt+arrows, Ctrl+Alt+PgUp / PgDn',
              'scale=1.000', 'eye_right_m=0.000', 'eye_up_m=0.000', 'eye_forward_m=0.000',
-             '; 1 = the monitors show the HUD; 0 = the HUD floats in front as without a cockpit of our own',
+             '; 1 = the monitors show the HUD; 0 = they stay dark. What no monitor shows is on the glass (glass_<part>)',
              'screens=%d' % bool(roles),
              '; screen_<n> = u0 v0 u1 v1: the part of the HUD picture monitor n shows (none: dark). The monitors, left to right:']
     for k, (x, z, area) in enumerate(places):

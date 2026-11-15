@@ -947,10 +947,20 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
                 o[0] = (float)r.x / g_hudW, o[1] = (float)r.y / g_hudH, o[2] = (float)(r.x + r.w) / g_hudW, o[3] = (float)(r.y + r.h) / g_hudH;
             }
         hd.margin = g_vr.zoomWinMargin;
-        hd.screens = mw5ScreensOn(); // the own cockpit's monitors show the near frame; what none of them shows stays, far
+        // the own cockpit's monitors show the near frame, its glass what no monitor shows; the rest stays, far
+        static GlassItem gi[MC_GLASSES];
+        int ng = mw5GlassItems(gi);
+        float gd = mw5GlassDistance();
+        hd.screens = mw5ScreensOn() || ng > 0;
         if (hd.screens) {
-            hd.nSpan = mw5TopSpans(T, hd.span);
-            hd.leftAlt = mw5LeftAltBottom(L); // the lance orders' menu is on a monitor
+            hd.nSpan = mw5ScreensOn() ? mw5TopSpans(T, hd.span) : 0;
+            hd.leftAlt = mw5ScreensOn() ? mw5LeftAltBottom(L) : 0; // the lance orders' menu is on a monitor
+            for (int g = 0; g < ng; ++g) {
+                const float *r = gi[g].rc;
+                memcpy(hd.glass[hd.nGlass++], r, sizeof hd.glass[0]);
+                mcTopSpan(hd.span, hd.nSpan, r, T);
+                if (r[1] < T) hd.leftAlt = mcLeftAlt(r, L, hd.leftAlt); // (the lance list with its menu, not the target below)
+            }
         }
         memcpy(hd.twist, g_vr.twist, sizeof hd.twist);
         hd.twistDv = g_vr.twistDv;
@@ -972,6 +982,36 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
             bool isFar = rc[i][4] == 1 || rc[i][4] >= 3, opaque = rc[i][4] == 2 || rc[i][4] == 3;
 
             if (rc[i][4] != 5 && (u1 - u0 < 0.005f || v1 - v0 < 0.005f)) continue;
+            if (rc[i][4] >= MC_GLASS) { // on the cockpit's glass: where its part's middle is seen from the seat, facing the seat
+                bool solid = rc[i][4] >= MC_GLASS_OPAQUE;
+                const GlassItem &it = gi[(int)rc[i][4] - (solid ? MC_GLASS_OPAQUE : MC_GLASS)];
+                float gp[3], gq[4];
+                mcGlassPose(it.right, it.up, gd, gp, gq);
+                float mu = mcGlassScale(it.width, gd, it.base[2] - it.base[0]), mv = mu * (float)g_vr.h / (float)g_vr.w;
+                XrQuaternionf lq = {gq[0], gq[1], gq[2], gq[3]};
+                XrVector3f off = qrot(lq, XrVector3f{mu * 0.5f * (u0 + u1 - it.base[0] - it.base[2]), -mv * 0.5f * (v0 + v1 - it.base[1] - it.base[3]), 0});
+                XrVector3f local = {gp[0] + off.x, gp[1] + off.y, gp[2] + off.z};
+                XrQuaternionf qo = qmul(g_vr.ref.orientation, lq);
+                if (g_swayValid) { // it moves with the cockpit
+                    XrVector3f l2 = qrot(swq, local);
+                    local = {l2.x + swt.x, l2.y + swt.y, l2.z + swt.z};
+                    qo = qmul(g_vr.ref.orientation, qmul(swq, lq));
+                }
+                XrVector3f wpos = qrot(g_vr.ref.orientation, local);
+                XrCompositionLayerQuad &q = hq[i];
+                q.type = XR_TYPE_COMPOSITION_LAYER_QUAD;
+                q.layerFlags = solid ? 0 : XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
+                q.space = g_vr.space;
+                q.eyeVisibility = XR_EYE_VISIBILITY_BOTH;
+                q.subImage.swapchain = g_vr.hudSc;
+                q.subImage.imageRect.offset = {(int32_t)(u0 * g_vr.w), (int32_t)(v0 * g_vr.h)};
+                q.subImage.imageRect.extent = {(int32_t)((u1 - u0) * g_vr.w), (int32_t)((v1 - v0) * g_vr.h)};
+                q.pose.orientation = qo;
+                q.pose.position = {g_vr.ref.position.x + wpos.x, g_vr.ref.position.y + wpos.y, g_vr.ref.position.z + wpos.z};
+                q.size = {mu * (u1 - u0), mv * (v1 - v0)};
+                layers[nl++] = (const XrCompositionLayerBaseHeader *)&q;
+                continue;
+            }
             float D = isFar ? far_ : g_vr.hudNear;
             float sc = isFar ? 1.0f : g_vr.hudPanelScale; // the middle spans the game's view: marks stay on their targets
             XrCompositionLayerQuad &q = hq[i];
