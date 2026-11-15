@@ -1291,9 +1291,21 @@ static void hotpatchScan(ID3D11DeviceContext *ctx);
 #include "note.inc"
 #include "hud.inc"
 #include "shot.inc"
+// a picture that stands still: who held the frame up - the game, the system's Present, or our own work in it?
+static DWORD g_presOurs, g_presReal, g_presWait; // ms: our part of the last Present, the system's, xrWaitFrame in ours
 #include "vr.inc"
 
+static void presentGap() {
+    static DWORD last;
+    DWORD now = GetTickCount();
+    if (last && now - last >= 3000)
+        logf("present: no frame for %.1f s (frame %u; of the last Present our part took %.1f s - xrWaitFrame %.1f s -, the system's %.1f s; "
+             "the rest was the game's)", (now - last) / 1000.0f, g_frame, g_presOurs / 1000.0f, g_presWait / 1000.0f, g_presReal / 1000.0f);
+    last = now;
+}
+
 static void onPresent(IDXGISwapChain *sc) {
+    presentGap();
     if (!g_firstPresentLogged) {
         g_firstPresentLogged = true;
         DXGI_SWAP_CHAIN_DESC d;
@@ -2277,8 +2289,12 @@ static BOOL STDMETHODCALLTYPE H_GetStatus(ID3DUserDefinedAnnotation *a) {
 
 typedef HRESULT(STDMETHODCALLTYPE *PFN_Present)(IDXGISwapChain *, UINT, UINT);
 static HRESULT STDMETHODCALLTYPE H_Present(IDXGISwapChain *sc, UINT si, UINT fl) {
+    DWORD t0 = GetTickCount();
     if (!(fl & DXGI_PRESENT_TEST)) onPresent(sc);
-    return ORIG(PFN_Present, sc, VT_Sc_Present)(sc, si, fl);
+    DWORD t1 = GetTickCount();
+    HRESULT hr = ORIG(PFN_Present, sc, VT_Sc_Present)(sc, si, fl);
+    g_presOurs = t1 - t0, g_presReal = GetTickCount() - t1;
+    return hr;
 }
 typedef HRESULT(STDMETHODCALLTYPE *PFN_Present1)(IDXGISwapChain1 *, UINT, UINT, const DXGI_PRESENT_PARAMETERS *);
 static HRESULT STDMETHODCALLTYPE H_Present1(IDXGISwapChain1 *sc, UINT si, UINT fl, const DXGI_PRESENT_PARAMETERS *pp) {
@@ -2744,7 +2760,7 @@ BOOL WINAPI DllMain(HINSTANCE h, DWORD reason, LPVOID) {
         if (g_dbg) g_shlog = _wfsopen((g_dir + L"mw4vr_shaders.txt").c_str(), L"w", _SH_DENYNO);
         wchar_t exe[MAX_PATH];
         GetModuleFileNameW(nullptr, exe, MAX_PATH);
-        logf("MW4VR v11.28 (debug level %d) loaded into %s", g_dbg, narrow(exe).c_str());
+        logf("MW4VR v11.29 (debug level %d) loaded into %s", g_dbg, narrow(exe).c_str());
         if (!loadReal()) logf("ERROR: the system d3d11.dll could not be loaded");
     }
     return TRUE;

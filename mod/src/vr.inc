@@ -759,7 +759,10 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
     bool renderedOk = renderedEye >= 0 && g_vr.usedOk[renderedEye];
 
     XrFrameState fs = {XR_TYPE_FRAME_STATE};
-    if (!vrCheck(g_vr.WaitFrame(g_vr.session, nullptr, &fs), "xrWaitFrame")) return;
+    DWORD waitT0 = GetTickCount();
+    XrResult waited = g_vr.WaitFrame(g_vr.session, nullptr, &fs);
+    g_presWait = GetTickCount() - waitT0;
+    if (!vrCheck(waited, "xrWaitFrame")) return;
     if (!vrCheck(g_vr.BeginFrame(g_vr.session, nullptr), "xrBeginFrame")) return;
     bool track = g_vr.tracking && g_P00 > 0 && g_P11 > 0;
     g_vrTracking = track;
@@ -781,6 +784,10 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
         bb->GetDesc(&bd);
         D3D11_BOX box = {0, 0, 0, min(bd.Width, g_vr.w), min(bd.Height, g_vr.h), 1};
         bool bothNow = g_camBothFrame == g_frame && g_eyeTexFrame[0] == g_frame && g_eyeTexFrame[1] == g_frame;
+        // a menu or a film is one flat picture: into both eyes' images at once. Taking turns, the screen in the
+        // headset (it shows the left image) ran a frame behind the desktop - and showed the old scene for as long
+        // as the game then took to bring its next frame
+        if (g_menuMode || (g_srcCamActive && g_camEyeFrame != g_frame)) eye = -1;
         for (int e = 0; e < 2; ++e) {
             if (!bothNow && eye >= 0 && e != eye) continue;
             uint32_t idx = 0;
