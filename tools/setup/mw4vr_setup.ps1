@@ -282,17 +282,22 @@ function Find-Mw5Paks {
 # the Python to use: @{Exe; Arg} or $null; $Modules: are numpy and Pillow there?
 function Find-Python([ref]$Modules) {
     $Modules.Value = $false
-    foreach ($c in @(@('python', ''), @('py', '-3'))) {
-        $cmd = Get-Command $c[0] -ErrorAction SilentlyContinue
-        if (-not $cmd -or $cmd.Source -like '*WindowsApps*') { continue }
-        $a = @(); if ($c[1]) { $a += $c[1] }
-        try {
-            $v = & $cmd.Source @a -c 'import sys; print(sys.version_info[0])' 2>$null
-            if ("$v".Trim() -ne '3') { continue }
-            & $cmd.Source @a -c 'import numpy, PIL' 2>$null | Out-Null
-            $Modules.Value = ($LASTEXITCODE -eq 0)
-            return @{ Exe = $cmd.Source; Arg = $c[1] }
-        } catch { }
+    # (not 'Stop' in here: with it, what a program writes to its error output - Python saying a module is missing -
+    # ends the try, and a Python without numpy counted as no Python at all)
+    $ErrorActionPreference = 'Continue'
+    foreach ($c in @(@('python', ''), @('py', '-3'), @('python3', ''))) {
+        # every one of that name on the PATH: the first may be Windows' placeholder that only points to the Store
+        # (it answers nothing), a real Python from the Store lies in the same WindowsApps folder and does answer
+        foreach ($cmd in @(Get-Command $c[0] -All -CommandType Application -ErrorAction SilentlyContinue)) {
+            $a = @(); if ($c[1]) { $a += $c[1] }
+            try {
+                $v = & $cmd.Source @a -c 'import sys; print(sys.version_info[0])' 2>$null
+                if ("$v".Trim() -ne '3') { continue }
+                & $cmd.Source @a -c 'import numpy, PIL' 2>$null | Out-Null
+                $Modules.Value = ($LASTEXITCODE -eq 0)
+                return @{ Exe = $cmd.Source; Arg = $c[1] }
+            } catch { }
+        }
     }
     return $null
 }
