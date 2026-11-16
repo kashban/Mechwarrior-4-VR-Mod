@@ -362,6 +362,76 @@ static void testHudPlain() {
     CHECK(same(q, want, 5));
 }
 
+static bool isRect(const float *r, float u0, float v0, float u1, float v1, float kind) {
+    return nearly(r[0], u0) && nearly(r[1], v0) && nearly(r[2], u1) && nearly(r[3], v1) && r[4] == kind;
+}
+
+static void testHudCross() {
+    g_test = "HUD cross-hair";
+    CHECK(MC_FAR_SMALL == 6 && MC_SHOWN == 15);
+    McHud h = {};
+    McRects q;
+    h.T = 0.12f, h.B = 0.77f, h.L = 0.25f, h.R = 0.72f, h.UR = 1;
+    const float cr[4] = {0.39f, 0.415f, 0.61f, 0.585f};
+    memcpy(h.cross, cr, sizeof cr);
+    mcHudRects(h, q); // the middle around it (above, below, left, right), the near frame, then the cross-hair
+    CHECK(q.n == 9);
+    CHECK(isRect(q.rc[0], 0.25f, 0.12f, 0.72f, 0.415f, MC_FAR));
+    for (int i = 1; i <= 4; ++i) CHECK(q.rc[i][4] == MC_NEAR);
+    CHECK(isRect(q.rc[5], 0.25f, 0.585f, 0.72f, 0.77f, MC_FAR));
+    CHECK(isRect(q.rc[6], 0.25f, 0.415f, 0.39f, 0.585f, MC_FAR));
+    CHECK(isRect(q.rc[7], 0.61f, 0.415f, 0.72f, 0.585f, MC_FAR));
+    CHECK(isRect(q.rc[8], 0.39f, 0.415f, 0.61f, 0.585f, MC_FAR_SMALL));
+    McRects w;
+    mcHudRectsWith(h, w, false); // not wanted
+    CHECK(w.n == 5);
+    for (int i = 0; i < w.n; ++i) CHECK(w.rc[i][4] != MC_FAR_SMALL);
+    h.cross[2] = h.cross[0]; // no width, no height: none
+    mcHudRects(h, q);
+    CHECK(q.n == 5);
+    h.cross[0] = 0.6f, h.cross[2] = 0.5f; // its right edge left of its left one
+    mcHudRects(h, q);
+    CHECK(q.n == 5);
+    memcpy(h.cross, cr, sizeof cr);
+    h.cross[3] = h.cross[1];
+    mcHudRects(h, q);
+    CHECK(q.n == 5);
+    memcpy(h.cross, cr, sizeof cr);
+    h.nCam = 1; // a zoom window open: the cross-hair is in it, as it is
+    h.cam[0][0] = 0.4f, h.cam[0][1] = 0.4f, h.cam[0][2] = 0.6f, h.cam[0][3] = 0.6f;
+    mcHudRects(h, q);
+    for (int i = 0; i < q.n; ++i) CHECK(q.rc[i][4] != MC_FAR_SMALL);
+    h.nCam = 0;
+    // with monitors: cut out of the far parts, after the torso mark (that one keeps its place)
+    h.screens = true;
+    h.twist[0] = 0.42f, h.twist[1] = 0.585f, h.twist[2] = 0.58f, h.twist[3] = 0.665f, h.twistDv = -0.045f;
+    mcHudRects(h, q);
+    int small = 0, up = 0;
+    float area = 0;
+    for (int i = 0; i < q.n; ++i) {
+        const float *r = q.rc[i];
+        small += r[4] == MC_FAR_SMALL, up += r[4] == MC_FAR_UP;
+        area += (r[2] - r[0]) * (r[3] - r[1]);
+        if (r[4] == MC_FAR) CHECK(!mcMeet(cr, r[0], r[1], r[2], r[3]) && !mcMeet(h.twist, r[0], r[1], r[2], r[3]));
+    }
+    CHECK(small == 1 && up == 1 && q.rc[q.n - 1][4] == MC_FAR_SMALL);
+    CHECK(nearly(area, 0.77f, 1e-3f)); // all of the picture above the bottom strip, each piece once
+    // more parts than the runtime shows: the cross-hair stays in the middle
+    h.nGlass = 8;
+    for (int g = 0; g < 8; ++g) h.glass[g][0] = 0.1f * g, h.glass[g][1] = 0.8f, h.glass[g][2] = 0.1f * g + 0.08f, h.glass[g][3] = 0.9f;
+    mcHudRects(h, q);
+    CHECK(q.n == 14);
+    for (int i = 0; i < q.n; ++i) CHECK(q.rc[i][4] != MC_FAR_SMALL);
+    mcHudRectsWith(h, w, true);
+    CHECK(w.n == 17);
+    h.nGlass = 7; // one too many
+    mcHudRects(h, q);
+    CHECK(q.n == 13);
+    h.nGlass = 6; // just as many as it shows: small
+    mcHudRects(h, q);
+    CHECK(q.n == 15 && q.rc[8][4] == MC_FAR_SMALL);
+}
+
 static void testHudZoom() {
     g_test = "hud zoom";
     McHud h = hud();
@@ -932,7 +1002,7 @@ static void testGridFit() {
 }
 
 int main() {
-    testHolds(), testTurnNorm(), testTurnFit(), testEyeInMesh(), testHudGlass(), testGlassPose(), testGlassScale(), testGlassAim();
+    testHolds(), testTurnNorm(), testTurnFit(), testEyeInMesh(), testHudCross(), testHudGlass(), testGlassPose(), testGlassScale(), testGlassAim();
     testGridMark(), testGridPlace(), testGridTri(), testGridCells(), testGridFree(), testGridRim(), testGridFit();
     testMul34(), testViewAxis();
     testFrustum(), testFrustumSameView(), testFrustumTangent(), testFrustumNear(), testFrustumLayout();

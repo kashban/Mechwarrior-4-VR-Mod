@@ -56,6 +56,7 @@ struct VrState {
     float twist[4] = {0.42f, 0.585f, 0.58f, 0.665f}, twistDv = -0.045f;
     float seatFwd = 0, seatUp = 0; // the eyes moved forward / up in the cockpit, game metres
     float zoomWinScale = 0.45f;    // the zoom window's size against the game's picture (smaller = weaker zoom, less in the way)
+    float cross[4] = {0.39f, 0.415f, 0.61f, 0.585f}, crossScale = 0.5f; // the cross-hair's part of the HUD image, and its size
     float zoomWinMargin = 0.02f;   // the HUD cut away around the zoom window (the game's frame of it), part of the picture
     float zoomScale = 0.9f;        // zoomed: the image shown at this share of the full view (smaller = weaker zoom)
     float baseP00 = 0, baseP11 = 0; // the game's projection at its widest (not zoomed): what the layers span
@@ -258,6 +259,12 @@ static void vrReadIni() {
     GetPrivateProfileStringW(L"vr", L"hud_right", L"0.72", b, 64, p.c_str());
     g_vr.hudRight = (float)_wtof(b);
     if (!(g_vr.hudLeft >= 0 && g_vr.hudLeft < g_vr.hudRight && g_vr.hudRight <= 1)) g_vr.hudLeft = 0.25f, g_vr.hudRight = 0.72f;
+    // the cross-hair with its range, pitch scale and weapon groups: a part about the picture's middle, shown smaller
+    GetPrivateProfileStringW(L"vr", L"hud_cross_rect", L"0.39 0.415 0.61 0.585", b, 64, p.c_str());
+    if (swscanf(b, L"%f %f %f %f", g_vr.cross, g_vr.cross + 1, g_vr.cross + 2, g_vr.cross + 3) != 4) g_vr.cross[0] = g_vr.cross[2] = 0;
+    GetPrivateProfileStringW(L"vr", L"hud_cross_scale", L"0.5", b, 64, p.c_str());
+    g_vr.crossScale = (float)_wtof(b);
+    if (!(g_vr.crossScale >= 0.2f && g_vr.crossScale <= 1.0f)) g_vr.crossScale = 0.5f;
     GetPrivateProfileStringW(L"vr", L"hud_twist_rect", L"0.42 0.585 0.58 0.665", b, 64, p.c_str());
     if (swscanf(b, L"%f %f %f %f", g_vr.twist, g_vr.twist + 1, g_vr.twist + 2, g_vr.twist + 3) != 4) g_vr.twist[0] = g_vr.twist[2] = 0;
     GetPrivateProfileStringW(L"vr", L"hud_twist_shift", L"-0.045", b, 64, p.c_str());
@@ -985,6 +992,7 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
         }
         memcpy(hd.twist, g_vr.twist, sizeof hd.twist);
         hd.twistDv = g_vr.twistDv;
+        if (g_vr.crossScale < 0.995f) memcpy(hd.cross, g_vr.cross, sizeof hd.cross);
         static McRects hq_;
         mcHudRects(hd, hq_);
         float (*rc)[5] = hq_.rc;
@@ -1062,7 +1070,8 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
             XrVector3f wpos = qrot(g_vr.ref.orientation, local);
             q.pose.orientation = qo;
             q.pose.position = {g_vr.ref.position.x + wpos.x, g_vr.ref.position.y + wpos.y, g_vr.ref.position.z + wpos.z};
-            float ws = rc[i][4] == 3 ? g_vr.zoomWinScale : 1.0f; // the zoom window smaller, about its centre
+            // the zoom window smaller, about its centre; and the cross-hair
+            float ws = rc[i][4] == 3 ? g_vr.zoomWinScale : rc[i][4] == MC_FAR_SMALL ? g_vr.crossScale : 1.0f;
             q.size = {W * (u1 - u0) * ws, H * (v1 - v0) * ws};
             if (rc[i][4] == 5) { // straight ahead of the mech, many times the view
                 XrVector3f c = qrot(g_vr.ref.orientation, XrVector3f{0, 0, -D});

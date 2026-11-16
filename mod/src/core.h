@@ -76,7 +76,8 @@ static inline unsigned mcWideWidth(unsigned w, float k) { return k > 1.001f ? ((
 // u, v: 0..1 over the game's picture (u beyond 1 with the wide HUD), v down.
 
 enum { MC_RECTS = 32, MC_SPANS = 8, MC_CAMS = 4 };
-enum { MC_NEAR = 0, MC_FAR = 1, MC_NEAR_OPAQUE = 2, MC_FAR_OPAQUE = 3, MC_FAR_UP = 4, MC_FADE = 5 };
+enum { MC_NEAR = 0, MC_FAR = 1, MC_NEAR_OPAQUE = 2, MC_FAR_OPAQUE = 3, MC_FAR_UP = 4, MC_FADE = 5, MC_FAR_SMALL = 6 };
+enum { MC_SHOWN = 15 }; // as many parts the runtime shows beside the world's layer
 // a part on the cockpit's glass: MC_GLASS + its number; a camera's window in it, opaque: MC_GLASS_OPAQUE + its number
 enum { MC_GLASSES = 8, MC_GLASS = 8, MC_GLASS_OPAQUE = 16 };
 struct McRects {
@@ -154,6 +155,7 @@ struct McHud {
     float twistDv;
     int nGlass;         // parts shown on the cockpit's glass (at most MC_GLASSES)
     float glass[MC_GLASSES][4];
+    float cross[4];     // the cross-hair with what belongs to it, shown smaller about its middle (empty: as it is)
 };
 
 // the point u v lies in the rectangle r (not on its edge)
@@ -199,9 +201,10 @@ static inline bool mcZoomWindow(const McHud &h, float *zr) {
 }
 
 // The list, in the order drawn: the far middle around the zoom window; with monitors what none of them shows
-// (top strip, side columns) far and the torso mark moved up, without monitors the near frame; the zoom window
-// far and opaque; without monitors the other windows near and opaque.
-static inline void mcHudRects(const McHud &h, McRects &q) {
+// (top strip, side columns) far and the torso mark moved up, without monitors the near frame; the cross-hair
+// (small: a part of its own, while no zoom window is open); the zoom window far and opaque; without monitors the
+// other windows near and opaque.
+static inline void mcHudRectsWith(const McHud &h, McRects &q, bool small) {
     q.n = 0;
     float zr[4], zc[4]; // the zoom window, and with its frame: what is cut out of the rest
     const float *cut = nullptr;
@@ -240,6 +243,8 @@ static inline void mcHudRects(const McHud &h, McRects &q) {
             }
         }
     }
+    const float *cr = h.cross;
+    if (small && !cut && cr[2] > cr[0] && cr[3] > cr[1]) mcMoveOut(q, cr, MC_FAR_SMALL);
     if (cut) mcAdd(q, zr[0], zr[1], zr[2], zr[3], MC_FAR_OPAQUE);
     for (int i = 0; i < h.nCam && !h.screens; ++i) { // the other windows (the target's view), over the frame
         float cu = 0.5f * (h.cam[i][0] + h.cam[i][2]);
@@ -254,6 +259,12 @@ static inline void mcHudRects(const McHud &h, McRects &q) {
             if (mcHolds(r, 0.5f * (c[0] + c[2]), 0.5f * (c[1] + c[3]))) mcAdd(q, c[0], c[1], c[2], c[3], (float)(MC_GLASS_OPAQUE + g));
         }
     }
+}
+
+// (the cross-hair's own part costs up to four more: left as it is where the runtime would not show them all)
+static inline void mcHudRects(const McHud &h, McRects &q) {
+    mcHudRectsWith(h, q, true);
+    if (q.n > MC_SHOWN) mcHudRectsWith(h, q, false);
 }
 
 // ---- where a part on the glass lies (vr.inc, mw5.inc) ----
