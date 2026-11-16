@@ -59,6 +59,8 @@ mw4vr.log              written by the mod: what it did; send it along when you r
 
 KEYS (in a battle)
 ------------------
+  Ctrl+F1                      all keys as a page in the headset; the game waits until you close it
+
 View and seat
   Ctrl+Home                    recentre the view
   Ctrl+Up / Down               seat forward / back
@@ -75,6 +77,7 @@ The HUD's parts: 1 radar, 2 target, 3 damage, 4 lance list, 5 weapons, 6 top str
       Ins / Del                farther / nearer
       0                        hide it
   Ctrl+Alt+7                   all parts back to their automatic places
+  The part the keys change has a yellow frame for some seconds.
 
 Other
   Ctrl+F12                     a picture of both eyes into mw4vr_shots\
@@ -221,6 +224,8 @@ mw4vr.log              schreibt der Mod: was er getan hat; bei Fehlermeldungen m
 
 TASTEN (im Gefecht)       Strg = Ctrl, Pos1 = Home, Bild auf/ab = PgUp/PgDn, Einfg/Entf = Ins/Del
 ------------------
+  Strg+F1                      alle Tasten als Seite im Headset (englisch); das Spiel wartet, bis du sie schließt
+
 Blick und Sitz
   Strg+Pos1                    Blick neu ausrichten
   Strg+Hoch / Runter           Sitz vor / zurück
@@ -237,6 +242,7 @@ Teile des HUD: 1 Radar, 2 Ziel, 3 Schaden, 4 Lanzenliste, 5 Waffen, 6 Kopfleiste
       Einfg / Entf             weiter weg / näher
       0                        ausblenden
   Strg+Alt+7                   alle Teile zurück an ihre automatischen Plätze
+  Der Teil, den die Tasten gerade ändern, hat einige Sekunden einen gelben Rahmen.
 
 Sonstiges
   Strg+F12                     Bild beider Augen nach mw4vr_shots\

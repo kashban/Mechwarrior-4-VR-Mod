@@ -61,6 +61,7 @@ Ctrl+Alt keys below.
 
 | Key | |
 |---|---|
+| Ctrl+F1 | the keys as a page in the headset; the game waits until it is closed |
 | Ctrl+Home | recentre |
 | Ctrl+F11 | own cockpit mesh on / off |
 | Ctrl+Alt+F11 (with Shift: back) | the next cockpit mesh; remembered for the mech you sit in |
@@ -68,7 +69,7 @@ Ctrl+Alt keys below.
 | Ctrl+Alt+7 | all floating parts back to their automatic places (in the cockpit's windows; without a cockpit of our own: their row) |
 | Ctrl+Alt+9 | this cockpit's monitors off / on (off: all of the HUD on the glass) |
 | Ctrl+Alt+Shift+9 | the chosen part leaves its monitor and goes onto the glass |
-| Ctrl+Alt+Shift+1 … 6 | choose a part; then Ctrl+Alt+Shift + arrows move it, PgUp / PgDn size it, Ins / Del put it farther / nearer, 0 hides it. A part on a monitor: arrows move what the monitor shows of the HUD, PgUp / PgDn nearer / more, Ins / Del longer / shorter |
+| Ctrl+Alt+Shift+1 … 6 | choose a part (it gets a yellow frame for some seconds); then Ctrl+Alt+Shift + arrows move it, PgUp / PgDn size it, Ins / Del put it farther / nearer, 0 hides it. A part on a monitor: arrows move what the monitor shows of the HUD, PgUp / PgDn nearer / more, Ins / Del longer / shorter |
 | Ctrl+Alt+arrows, PgUp / PgDn | eye position in the cockpit mesh, its size (remembered per cockpit) |
 | Ctrl+Ins / Del | the cockpit's size (with Shift: the world's) |
 | Ctrl+arrows | the seat: up / down = forward / back, right / left = higher / lower |

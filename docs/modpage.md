@@ -16,6 +16,7 @@ renderer mod and needs it.
 - **A HUD with depth.** Cross-hair and target marks lie far out on their targets. Radar, target and damage
   displays, the lance and weapon lists float before you as panes of their own - move, size and set each nearer or
   farther with a few keys.
+- **Help in the headset.** Ctrl+F1 pauses the game and shows all keys.
 - **Every mech remembered.** The mod reads which mech you sit in and keeps seat, scale and HUD places for each.
 - **MechWarrior 5 cockpits (optional).** If you own MechWarrior 5: Mercenaries you can convert its cockpits
   with the tools in the package and sit in them in MW4, the HUD on their monitors or on their glass. All

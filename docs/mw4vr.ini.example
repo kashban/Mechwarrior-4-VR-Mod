@@ -95,6 +95,11 @@ mw5_screen_gain=1.0
 ; dark red on the monitors (an enemy's weapon list) is shown up to this many times brighter; 1 = as it is
 mw5_screen_red_boost=6
 
+; Ctrl+F1 in a battle shows the keys as a page in the headset. help_pause=1: the game waits while it is up;
+; help_clock=1: the time it was up is taken off the clocks the game reads (0: the game sees one long frame)
+help_pause=1
+help_clock=1
+
 ; --- for finding faults ---
 ; mw4hook_any_build=1: use the parts that reach into mw4hook.dll although it is not the build this was made for
 ; cam_planes=1: the game culls trees and tiles with the head's view (0 = with the mech's own: things vanish)

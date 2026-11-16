@@ -640,6 +640,7 @@ static bool mw5ScreensOn();
 static int mw5TopSpans(float T, float (*iv)[2]);
 static float mw5LeftAltBottom(float L);
 static void mw5MonitorLists(McHud &hd, float T);
+static void mw5HighlightDraw(ID3D11DeviceContext *c);
 // a part of the HUD on the cockpit's glass (mw5.inc): what is shown (rc), the part its place is given for (base),
 // that place as seen from the seat (degrees right and up of base's middle, base's width in degrees, metres away)
 struct GlassItem {
@@ -1284,11 +1285,38 @@ static void hotpatchScan(ID3D11DeviceContext *ctx);
 
 #include "mech.inc"
 #include "note.inc"
+#include "help.inc"
 #include "hud.inc"
 #include "shot.inc"
 // a picture that stands still: who held the frame up - the game, the system's Present, or our own work in it?
 static DWORD g_presOurs, g_presReal, g_presWait; // ms: our part of the last Present, the system's, xrWaitFrame in ours
 #include "vr.inc"
+
+// The keys' page is up (help.inc): the frame just handed over is handed over again and again, until Ctrl+F1 is
+// pressed once more. The game is not returned to in that time, so it does nothing; what the page took is taken
+// off the clocks it reads.
+static void helpPause(IDXGISwapChain *sc, int eye) {
+    if (!g_helpOn || !g_helpPause || !g_vr.ok) return;
+    LARGE_INTEGER q0, q1;
+    QueryPerformanceCounter(&q0);
+    DWORD t0 = GetTickCount();
+    logf("help: the keys' page is up, the game waits (frame %u)", g_frame);
+    while (g_helpOn && g_vr.ok) {
+        MSG msg;
+        PeekMessageW(&msg, nullptr, 0, 0, PM_NOREMOVE); // (the window stays "responding"; nothing is taken out)
+        helpKey(true);
+        if (!g_helpOn) break;
+        DWORD a = GetTickCount();
+        vrOnPresent(sc, eye);
+        if (GetTickCount() - a < 3) Sleep(8);                // no frame of the runtime's to wait for: not a busy loop
+        if (GetTickCount() - t0 > 15 * 60 * 1000) g_helpOn = false; // a quarter of an hour: back to the game
+    }
+    g_helpOn = false;
+    QueryPerformanceCounter(&q1);
+    DWORD ms = GetTickCount() - t0;
+    if (g_helpClock) g_helpOffQpc += q1.QuadPart - q0.QuadPart, g_helpOffMs += ms;
+    logf("help: closed after %.1f s%s", ms / 1000.0f, g_helpClock ? "" : " (the clocks are left alone: the game sees one long frame)");
+}
 
 static void presentGap() {
     static DWORD last;
@@ -1320,7 +1348,11 @@ static void onPresent(IDXGISwapChain *sc) {
         camKeepKey();
         mw5OnPresent();
         shotKeys();
+        bool inBattle = g_vr.ok && g_hudLayerOn && g_srcCamActive && g_camEyeFrame != ~0u && g_frame - g_camEyeFrame < 30 && !g_menuMode;
+        if (inBattle) helpClocks();
+        helpKey(inBattle);
         vrOnPresent(sc, eye);
+        helpPause(sc, eye);
         camAtPresent();
     }
     ++g_frame;
@@ -2755,7 +2787,7 @@ BOOL WINAPI DllMain(HINSTANCE h, DWORD reason, LPVOID) {
         if (g_dbg) g_shlog = _wfsopen((g_dir + L"mw4vr_shaders.txt").c_str(), L"w", _SH_DENYNO);
         wchar_t exe[MAX_PATH];
         GetModuleFileNameW(nullptr, exe, MAX_PATH);
-        logf("MW4VR v11.36 (debug level %d) loaded into %s", g_dbg, narrow(exe).c_str());
+        logf("MW4VR v11.37 (debug level %d) loaded into %s", g_dbg, narrow(exe).c_str());
         if (!loadReal()) logf("ERROR: the system d3d11.dll could not be loaded");
     }
     return TRUE;

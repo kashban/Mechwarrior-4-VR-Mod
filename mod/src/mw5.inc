@@ -43,6 +43,8 @@ static std::vector<uint32_t> g_m5Tri;
 static void mw5GlassFit();
 static bool g_m5GlassOn = true; // [vr] mw5_glass
 static int g_m5GlassLast = -1;  // the part chosen (Ctrl+Alt+Shift+1..6) or placed last: what the Ctrl+Alt+Shift keys change
+static ULONGLONG g_m5HiUntil;   // until then that part is framed in the HUD picture, to show which one the keys change
+static void mw5HiTouch() { g_m5HiUntil = GetTickCount64() + 6000; }
 #define MW5_GROUPS 40
 static Mw5Group g_m5[MW5_GROUPS];
 static int g_m5N;
@@ -893,6 +895,39 @@ static void mw5GlassPut(int p) {
     g_m5GlassSaved[p] = true;
 }
 
+// The part the keys change, for some seconds after it was chosen, placed or changed: a yellow frame around it in
+// the HUD picture of this frame - seen wherever the part is shown, on a monitor, on the glass or in the row.
+static void mw5HighlightDraw(ID3D11DeviceContext *c) {
+    int p = g_m5GlassLast;
+    if (p < 0 || p >= M5_PARTS || !g_m5HiUntil || !c) return;
+    if (GetTickCount64() > g_m5HiUntil) {
+        g_m5HiUntil = 0;
+        return;
+    }
+    if (!(mw5Active() || mw5Plain()) || !g_hudRtv || !g_hudW || !g_hudH) return;
+    float rc[4];
+    int mon = p < 5 ? mw5MonitorOf(p) : -1;
+    if (mon >= 0) {
+        memcpy(rc, g_m5Rect[mon], sizeof rc);
+    } else {
+        if (!(mw5G(p)[2] > 0.5f)) return; // hidden
+        memcpy(rc, g_m5Part[p], sizeof rc);
+        if (p == 3) rc[3] = g_m5LanceMenu;
+        if (p == 4) rc[0] = g_m5WeaponsLeft, rc[3] = g_m5LanceMenu;
+        if (p == 5) rc[3] = g_vr.hudTop, rc[2] = g_m5WeaponsLeft;
+    }
+    LONG W = (LONG)g_hudTexW, H = (LONG)g_hudH, t = max(3L, H / 400);
+    LONG x0 = (LONG)(rc[0] * g_hudW), y0 = (LONG)(rc[1] * g_hudH), x1 = (LONG)(rc[2] * g_hudW), y1 = (LONG)(rc[3] * g_hudH);
+    x0 = max(0L, x0), y0 = max(0L, y0), x1 = min(W, x1), y1 = min(H, y1);
+    if (x1 - x0 < 4 * t || y1 - y0 < 4 * t) return;
+    ID3D11DeviceContext1 *c1 = nullptr;
+    if (FAILED(c->QueryInterface(__uuidof(ID3D11DeviceContext1), (void **)&c1)) || !c1) return;
+    const D3D11_RECT r[4] = {{x0, y0, x1, y0 + t}, {x0, y1 - t, x1, y1}, {x0, y0, x0 + t, y1}, {x1 - t, y0, x1, y1}};
+    const float yellow[4] = {1.0f, 0.8f, 0.0f, 1.0f};
+    c1->ClearView(g_hudRtv, yellow, r, 4);
+    c1->Release();
+}
+
 // Ctrl+Alt+1..6 (radar, target, damage, lance list, weapons, top strip): the monitor looked at shows this part of the
 // HUD from now on; looking elsewhere, the part goes onto the glass there. Ctrl+Alt+0: the monitor looked at goes dark.
 // Ctrl+Alt+7: all parts on the glass are placed automatically again. Ctrl+Alt+9: this cockpit's monitors off / on
@@ -960,7 +995,7 @@ static void mw5Assign(int part, bool shift) {
     }
     if (part == 8) return;
     if (shift && p >= 0) {
-        g_m5GlassLast = p;
+        g_m5GlassLast = p, mw5HiTouch();
         if (p < 5 && mw5MonitorOf(p) >= 0)
             swprintf(note, 200, L"%ls (on a monitor) chosen: Ctrl+Alt+Shift + arrows move what it shows, PgUp/PgDn nearer/more, Ins/Del longer/shorter",
                      g_m5PartName[p]);
@@ -1017,7 +1052,7 @@ static void mw5Assign(int part, bool shift) {
         mw5GlassPut(p);
         mw5ReadIni();
         g = mw5G(p);
-        g_m5GlassLast = p;
+        g_m5GlassLast = p, mw5HiTouch();
         swprintf(note, 200, plain ? L"%ls: %ls at %+.0f right %+.0f up" : L"%ls: %ls on the glass, %+.0f right %+.0f up", mw5Who(), g_m5PartName[p], right, up);
         logf("mw5: cockpit '%ls': %ls on the glass at %.1f right, %.1f up, %.1f wide, %.2f m away (saved)", g_mw5Name, g_m5PartName[p], right, up, g[2], g[3]);
     }
@@ -1033,6 +1068,7 @@ static void mw5GlassAdjust(int k) {
         Beep(300, 150);
         return;
     }
+    mw5HiTouch();
     int mon = p < 5 ? mw5MonitorOf(p) : -1;
     if (mon >= 0) { // on a monitor: which piece of the HUD image it shows
         float *r = g_m5Rect[mon], was[4];

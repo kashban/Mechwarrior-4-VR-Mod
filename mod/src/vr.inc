@@ -821,6 +821,7 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
                   bothNow ? "both eyes of this frame" : "one picture, no eye pair in this frame");
     }
     // the HUD drawn in this frame
+    if (ctx && g_hudLayerOn && g_hudTex && g_hudDrawnFrame == g_frame) mw5HighlightDraw(ctx);     // the chosen part's frame
     if (ctx && g_hudLayerOn && g_hudTex && g_hudDrawnFrame == g_frame) mw5HudCopy(ctx, g_hudTex); // for the own cockpit's monitors
     if (ctx && g_hudLayerOn && g_hudTex && g_hudDrawnFrame == g_frame) fadeProbe(ctx, g_hudTex);
     if (ctx && fs.shouldRender && g_hudLayerOn && g_hudTex && g_hudDrawnFrame == g_frame) {
@@ -833,6 +834,7 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
             D3D11_BOX hb = {0, 0, 0, min(g_hudTexW, hudWideW(g_vr.w)), min(g_hudH, g_vr.h), 1};
             ctx->CopySubresourceRegion(g_vr.hudImg[idx].texture, 0, 0, 0, 0, g_hudTex, 0, &hb);
             noteDraw(ctx, g_vr.hudImg[idx].texture, min(g_hudW, g_vr.w), hb.bottom); // a note of ours (note.inc)
+            helpDraw(ctx, g_vr.hudImg[idx].texture, min(g_hudW, g_vr.w), hb.bottom, g_vr.hudLeft, g_vr.hudRight, g_vr.hudTop, g_vr.hudBottom);
             XrSwapchainImageReleaseInfo ri = {XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
             g_vr.ReleaseSwapchainImage(g_vr.hudSc, &ri);
             if (!g_vr.hudHave) logf("vr: HUD layer running (edge strips at %.1f m, the middle at %.1f m)", g_vr.hudNear, g_vr.hudDistance);
