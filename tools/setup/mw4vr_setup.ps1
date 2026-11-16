@@ -42,31 +42,162 @@ function Copy-Kept([string]$From, [string]$To) {
     Copy-Item $From $To -Force
 }
 
+# 'v11.38' from a d3d11.dll of MW4VR's ('' = the file is not there or not MW4VR's)
+function Get-ModVersion([string]$Dll) {
+    if (-not (Test-Path $Dll)) { return '' }
+    $fs = [IO.File]::Open($Dll, 'Open', 'Read', 'ReadWrite')
+    try {
+        $b = New-Object byte[] $fs.Length
+        [void]$fs.Read($b, 0, $b.Length)
+    } finally { $fs.Close() }
+    $m = [regex]::Match([Text.Encoding]::GetEncoding(28591).GetString($b), 'MW4VR (v\d+\.\d+)')
+    if ($m.Success) { return $m.Groups[1].Value }
+    return ''
+}
+
+# What the setup put there, by file: <game>\mw4vr_setup_state.txt, lines "name=hash". A settings file that is still
+# as the setup left it is not the player's work, so a later package's newer one may take its place.
+function Read-State([string]$Game) {
+    $s = @{}
+    $p = Join-Path $Game 'mw4vr_setup_state.txt'
+    if (Test-Path $p) { foreach ($l in Get-Content $p) { $i = $l.LastIndexOf('='); if ($i -gt 0) { $s[$l.Substring(0, $i)] = $l.Substring($i + 1) } } }
+    return $s
+}
+function Write-State([string]$Game, $State) {
+    $lines = @($State.Keys | Sort-Object | ForEach-Object { "$_=$($State[$_])" })
+    Set-Content -Path (Join-Path $Game 'mw4vr_setup_state.txt') -Value $lines -Encoding Default
+}
+# a default settings file: 'new' (was not there), 'updated' (was as the setup left it, the package's is newer),
+# 'same', or 'kept' (the player changed it)
+function Update-Default([string]$From, [string]$To, [string]$Key, $State) {
+    $h = (Get-FileHash $From).Hash
+    if (-not (Test-Path $To)) { Copy-Item $From $To; $State[$Key] = $h; return 'new' }
+    $have = (Get-FileHash $To).Hash
+    if ($have -eq $h) { $State[$Key] = $h; return 'same' }
+    if ($State[$Key] -and $State[$Key] -eq $have) { Copy-Item $From $To -Force; $State[$Key] = $h; return 'updated' }
+    return 'kept'
+}
+
+# keys the package's mw4vr.ini has and the player's has not are added to the player's (with the comment lines
+# above them), at the end of their section; nothing of the player's is changed. -> the keys added
+function Merge-Ini([string]$From, [string]$To) {
+    $enc = [Text.Encoding]::Default
+    $new = [IO.File]::ReadAllLines($From, $enc)
+    $old = New-Object Collections.Generic.List[string]
+    $old.AddRange([IO.File]::ReadAllLines($To, $enc))
+    $have = @{}; $sec = ''
+    foreach ($l in $old) {
+        if ($l -match '^\s*\[(.+?)\]') { $sec = $Matches[1].ToLower() }
+        elseif ($l -match '^\s*([^;=\s][^=]*?)\s*=') { $have["$sec|$($Matches[1].ToLower())"] = 1 }
+    }
+    $added = @(); $sec = ''; $note = @()
+    foreach ($l in $new) {
+        if ($l -match '^\s*\[(.+?)\]') { $sec = $Matches[1].ToLower(); $note = @(); continue }
+        if ($l -match '^\s*;') { $note += $l; continue }
+        if ($l -match '^\s*([^;=\s][^=]*?)\s*=') {
+            $k = $Matches[1]
+            if (-not $have["$sec|$($k.ToLower())"]) {
+                # where the section ends in the player's file (no such section: a new one at the end)
+                $at = -1; $in = $false
+                for ($i = 0; $i -lt $old.Count; $i++) {
+                    if ($old[$i] -match '^\s*\[(.+?)\]') {
+                        if ($in) { $at = $i; break }
+                        $in = ($Matches[1].ToLower() -eq $sec)
+                    }
+                }
+                if (-not $in) { $old.Add("[$sec]"); $at = $old.Count }
+                elseif ($at -lt 0) { $at = $old.Count }
+                while ($at -gt 0 -and $old[$at - 1].Trim() -eq '') { $at-- }
+                $old.InsertRange($at, [string[]](@($note) + $l))
+                $have["$sec|$($k.ToLower())"] = 1
+                $added += $k
+            }
+        }
+        $note = @()
+    }
+    if ($added.Count) { [IO.File]::WriteAllLines($To, $old, $enc) }
+    return $added
+}
+
+# mechs the package's mw4vr_mechs.ini knows by name (model=) and the player's does not are added to the player's
+# as new profiles; the player's own profiles stay as they are. -> how many
+function Merge-Mechs([string]$From, [string]$To) {
+    $enc = [Text.Encoding]::Default
+    $read = {
+        param($p)
+        $secs = [ordered]@{}; $cur = $null
+        foreach ($l in [IO.File]::ReadAllLines($p, $enc)) {
+            if ($l -match '^\s*\[(.+?)\]') { $cur = $Matches[1].ToLower(); $secs[$cur] = New-Object Collections.Generic.List[string] }
+            elseif ($cur -and $l.Trim()) { $secs[$cur].Add($l) }
+        }
+        return $secs
+    }
+    $model = { param($lines) foreach ($l in $lines) { if ($l -match '^\s*model\s*=\s*(\S+)') { return $Matches[1].ToLower() } }; return '' }
+    $new = & $read $From
+    $old = & $read $To
+    $count = 0
+    if ($old.Contains('mechs')) { foreach ($l in $old['mechs']) { if ($l -match '^\s*count\s*=\s*(\d+)') { $count = [int]$Matches[1] } } }
+    $known = @{}
+    for ($i = 1; $i -le $count; $i++) { if ($old.Contains("mech_$i")) { $m = & $model $old["mech_$i"]; if ($m) { $known[$m] = 1 } } }
+    $add = New-Object Collections.Generic.List[string]
+    $n = 0
+    foreach ($k in $new.Keys) {
+        if ($k -notmatch '^mech_\d+$') { continue }
+        $m = & $model $new[$k]
+        if (-not $m -or $known[$m]) { continue }
+        $count++; $n++; $known[$m] = 1
+        $add.Add("[mech_$count]")
+        $add.AddRange($new[$k])
+    }
+    if (-not $n) { return 0 }
+    $out = New-Object Collections.Generic.List[string]
+    $sec = ''; $done = $false
+    foreach ($l in [IO.File]::ReadAllLines($To, $enc)) {
+        if ($l -match '^\s*\[(.+?)\]') { $sec = $Matches[1].ToLower() }
+        if ($sec -eq 'mechs' -and $l -match '^\s*count\s*=') { $out.Add("count=$count"); $done = $true } else { $out.Add($l) }
+    }
+    if (-not $done) { $out.Insert(0, "count=$count"); $out.Insert(0, '[mechs]') }
+    $out.AddRange($add)
+    Copy-Item $To "$To.before_update" -Force
+    [IO.File]::WriteAllLines($To, $out, $enc)
+    return $n
+}
+
+# First time and every later one (an update): the program files are replaced, the player's settings never -
+# they only get what is new (keys, mechs, cockpit settings the player has not touched).
 function Install-Mod([string]$Game, [bool]$Dinput) {
     $src = Join-Path $script:Pkg 'game'
+    $was = Get-ModVersion (Join-Path $Game 'd3d11.dll')
+    $now = Get-ModVersion (Join-Path $src 'd3d11.dll')
     Copy-Kept (Join-Path $src 'd3d11.dll') (Join-Path $Game 'd3d11.dll')
     if ($Dinput) { Copy-Kept (Join-Path $src 'dinput.dll') (Join-Path $Game 'dinput.dll') }
     foreach ($f in 'mw4vr_cockpit_map.ini', 'mw4vr_start.cmd', 'mw4vr_start.ps1', 'mw4vr_readme.txt') {
         Copy-Kept (Join-Path $src $f) (Join-Path $Game $f)
     }
-    # settings of the player's own are never replaced
+    $state = Read-State $Game
     $ini = Join-Path $Game 'mw4vr.ini'
     if (Test-Path $ini) {
-        Copy-Item (Join-Path $src 'mw4vr.ini') "$ini.new" -Force
-        Say 'mw4vr.ini is there already: kept. The new default settings are beside it as mw4vr.ini.new.'
+        $keys = @(Merge-Ini (Join-Path $src 'mw4vr.ini') $ini)
+        if ($keys.Count) { Say "mw4vr.ini: your settings kept, new ones added: $($keys -join ', ')." }
+        else { Say 'mw4vr.ini: your settings kept, nothing new to add.' }
     } else {
         Copy-Item (Join-Path $src 'mw4vr.ini') $ini
     }
     $mechs = Join-Path $Game 'mw4vr_mechs.ini'
     if (-not (Test-Path $mechs)) { Copy-Item (Join-Path $src 'mw4vr_mechs.ini') $mechs }
+    else {
+        $m = Merge-Mechs (Join-Path $src 'mw4vr_mechs.ini') $mechs
+        if ($m) { Say "mw4vr_mechs.ini: $m mechs new (the file as it was: mw4vr_mechs.ini.before_update)." }
+    }
     $cp = Join-Path $Game 'mw4vr_cockpits'
     New-Item -ItemType Directory $cp -Force | Out-Null
-    $n = 0
+    $n = @{ new = 0; updated = 0; same = 0; kept = 0 }
     Get-ChildItem (Join-Path $src 'mw4vr_cockpits') -Filter *.ini -ErrorAction SilentlyContinue | ForEach-Object {
-        $t = Join-Path $cp $_.Name
-        if (-not (Test-Path $t)) { Copy-Item $_.FullName $t; $n++ }
+        $n[(Update-Default $_.FullName (Join-Path $cp $_.Name) "mw4vr_cockpits\$($_.Name)" $state)]++
     }
-    Say "The mod is in the game's folder ($n cockpit settings new)."
+    Write-State $Game $state
+    $what = if (-not $was) { "MW4VR $now is in the game's folder" } elseif ($was -eq $now) { "MW4VR $now is in the game's folder again" } else { "MW4VR updated: $was -> $now" }
+    Say "$what (cockpit settings: $($n.new) new, $($n.updated) updated, $($n.kept) of your own kept)."
 }
 
 # sets the keys MW4VR needs in mw4hook.ini (the file as it was: mw4hook.ini.before_mw4vr)
@@ -256,9 +387,14 @@ $script:PyMods = $false
 function Show-Game {
     $g = $tGame.Text.Trim()
     if (-not (Test-Game $g)) { $lGame.Text = 'MW4Mercs.exe is not in this folder.'; $lGame.ForeColor = 'Firebrick'; return }
+    # an update? the button and the line say so
+    $was = Get-ModVersion (Join-Path $g 'd3d11.dll')
+    $now = Get-ModVersion (Join-Path $script:Pkg 'game\d3d11.dll')
+    $bGo.Text = if ($was) { 'Update' } else { 'Install' }
+    $ver = if (-not $was) { '' } elseif ($was -eq $now) { " MW4VR $was is installed (the same as this package)." } else { " MW4VR $was is installed - this package: $now. Your settings are kept." }
     switch (Get-HookState $g) {
-        'ok' { $lGame.Text = 'Found: the game and MW4Engine DX11 in the build MW4VR was made for.'; $lGame.ForeColor = 'DarkGreen' }
-        'other' { $lGame.Text = 'Found the game. MW4Engine DX11 is another build than MW4VR was made for: parts of MW4VR will stay off.'; $lGame.ForeColor = 'DarkOrange' }
+        'ok' { $lGame.Text = "Found: the game and MW4Engine DX11 in the build MW4VR was made for.$ver"; $lGame.ForeColor = 'DarkGreen' }
+        'other' { $lGame.Text = 'Found the game. MW4Engine DX11 is another build than MW4VR was made for: parts of MW4VR will stay off.' + $ver; $lGame.ForeColor = 'DarkOrange' }
         default { $lGame.Text = 'Found the game, but no mw4hook.dll: install MW4Engine DX11 first.'; $lGame.ForeColor = 'Firebrick' }
     }
 }

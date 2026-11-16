@@ -27,6 +27,10 @@ The easy way: unpack the package anywhere and start MW4VR_Setup.cmd. Its window 
 folder and does the steps below; it can also install the trees and export and convert your
 MechWarrior 5 cockpits. Settings you already have are kept.
 
+A newer version: unpack its package and start MW4VR_Setup.cmd again - the button reads "Update". The
+program files are replaced; your settings stay and only get what is new (new keys in mw4vr.ini, new
+mechs, cockpit settings you have not changed).
+
 By hand:
 1. In mw4hook.ini set:
        antihack=0
@@ -190,6 +194,10 @@ INSTALLATION
 Der einfache Weg: Paket irgendwo entpacken und MW4VR_Setup.cmd starten. Das Fenster fragt nach dem
 Spielordner und erledigt die Schritte unten; es kann auch die Bäume installieren und deine
 MechWarrior-5-Cockpits exportieren und umwandeln. Vorhandene Einstellungen bleiben erhalten.
+
+Eine neuere Version: ihr Paket entpacken und MW4VR_Setup.cmd erneut starten - der Knopf heißt dann
+"Update". Die Programmdateien werden ersetzt; deine Einstellungen bleiben und bekommen nur, was neu ist
+(neue Schlüssel in mw4vr.ini, neue Mechs, Cockpit-Einstellungen, die du nicht geändert hast).
 
 Von Hand:
 1. In mw4hook.ini eintragen:
