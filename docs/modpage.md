@@ -50,3 +50,28 @@ game's folder, start with `mw4vr_start.cmd`.
 
 Source: https://github.com/kashban/Mechwarrior-4-VR-Mod. PolyForm Noncommercial 1.0.0: free for any noncommercial use, with the
 licence and copyright notice kept. MW4Engine DX11 is the work of its author; this mod only builds on it.
+
+## Comments to post on the related pages
+
+A comment on each of the two pages below ties MW4VR to what it builds on. MW4VR's own pages link to MW4Engine
+DX11 and name MekTek MekPak 3.1c without a link. Fill in the addresses once the Nexus Mods and ModDB pages exist.
+
+**On the MW4Engine DX11 page (ModDB):**
+
+> Thank you for this renderer - it made something possible I did not expect to see: MechWarrior 4: Mercenaries
+> in VR. MW4VR is an add-on for MW4Engine v1.0.7: real stereo with head tracking in the cockpit, the HUD as
+> panes with depth, optionally the cockpits of MechWarrior 5 for those who own it. Single player only, free,
+> source included.
+> GitHub: https://github.com/kashban/Mechwarrior-4-VR-Mod
+> Nexus Mods: <address>
+> ModDB: <address>
+> It reaches into this build's memory in a few places, so a new build of MW4Engine needs an update on my side;
+> if you ever add a hook for a per-eye camera I will gladly switch to it.
+
+**On the MekTek MW4: Mercenaries page (ModDB):**
+
+> For VR players: MW4VR plays MekPak 3.1c in a VR headset (needs the MW4Engine DX11 mod, v1.0.7). Real stereo,
+> head tracking in the cockpit, a HUD with depth. Single player only, free.
+> GitHub: https://github.com/kashban/Mechwarrior-4-VR-Mod
+> Nexus Mods: <address>
+> ModDB: <address>
