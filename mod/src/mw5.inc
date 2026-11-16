@@ -574,13 +574,45 @@ static void mw5HudCopy(ID3D11DeviceContext *c, ID3D11Texture2D *hud) {
 static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw) {
     int e = g_camPassEye;
     if (e < 0 || e > 1 || !g_camInMain || !g_kTlOnly) return;
-    static unsigned done[2] = {~0u, ~0u};
+    static unsigned done[2] = {~0u, ~0u}, seen[2] = {~0u, ~0u};
+    static void *usual[2]; // the target the eye's cockpit was drawn into last
+    static int looks[2];
     if (done[e] == g_frame) return;
+    if (seen[e] != g_frame) {
+        if (done[e] != seen[e]) usual[e] = nullptr; // not drawn at all in the frame before: any target again
+        seen[e] = g_frame, looks[e] = 0;
+    }
     { // a small camera (the target's view) drawn inside the main camera's pass: not there
         D3D11_VIEWPORT vp[1] = {};
         UINT nvp = 1;
         c->RSGetViewports(&nvp, vp);
         if (nvp && g_eyeTexW && vp[0].Width < 0.9f * g_eyeTexW) return;
+    }
+    { // Now and then the pass's first such draw goes somewhere else than into the eye's picture (seen: the cockpit
+      // missing in one eye for a frame): the cockpit waits for the target it was drawn into before, with a depth
+      // buffer - for the first 200 draws of the pass, then it takes what there is
+        ID3D11RenderTargetView *rt = nullptr;
+        ID3D11DepthStencilView *dv = nullptr;
+        c->OMGetRenderTargets(1, &rt, &dv);
+        void *rtp = rt;
+        bool depth = dv != nullptr;
+        if (rt) rt->Release();
+        if (dv) dv->Release();
+        bool other = !rtp || !depth || (usual[e] && rtp != usual[e]);
+        if (other && ++looks[e] <= 200) {
+            static int told;
+            if (looks[e] == 1 && told < 40) {
+                ++told;
+                logf("mw5: frame %u, eye %d: the pass's first cockpit draw has another target (%p, depth %d; usual %p) - waiting for the usual one",
+                     g_frame, e, rtp, (int)depth, usual[e]);
+            }
+            return;
+        }
+        if (looks[e] > 200) {
+            static int told;
+            if (told++ < 10) logf("mw5: frame %u, eye %d: the usual target did not come - drawn into %p (depth %d)", g_frame, e, rtp, (int)depth);
+        }
+        usual[e] = rtp;
     }
     done[e] = g_frame;
     if (g_mw5State == 0 && g_mw5Name[0]) mw5Load();
