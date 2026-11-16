@@ -1122,16 +1122,10 @@ static void eyeReadIni() {
     if (GetFileAttributesW(p.c_str()) == INVALID_FILE_ATTRIBUTES) {
         FILE *f = _wfsopen(p.c_str(), L"w", _SH_DENYNO);
         if (f) {
-            fputs("; MW4VR - eye offset experiment. Ctrl+F7 cycles: off -> right eye -> left eye -> alternating.\n"
-                  "; Read again every 2 seconds while the game runs.\n"
-                  "[eye]\n"
-                  "; distance of the eye from the centre in metres (real: 0.032; large values make the shift obvious)\n"
-                  "offset_m=1.0\n"
-                  "; which matrices are moved: meshes and terrain (Mlr), the deferred view (View), particles (Cards),\n"
-                  "; water reflections (Reflect)\n"
-                  "apply_mlr=1\napply_view=1\napply_cards=1\napply_reflect=0\n"
-                  "; start mode: 0 off, 1 right, 2 left, 3 alternating\n"
-                  "mode=0\n",
+            fputs("; MW4VR - no settings were found. Copy mw4vr.ini from the mod's package (docs/mw4vr.ini.example) over this file:\n"
+                  "; it has every key with a comment. Until then the mod stays switched off.\n"
+                  "[vr]\n"
+                  "enabled=0\n",
                   f);
             fclose(f);
         }
@@ -2761,7 +2755,7 @@ BOOL WINAPI DllMain(HINSTANCE h, DWORD reason, LPVOID) {
         if (g_dbg) g_shlog = _wfsopen((g_dir + L"mw4vr_shaders.txt").c_str(), L"w", _SH_DENYNO);
         wchar_t exe[MAX_PATH];
         GetModuleFileNameW(nullptr, exe, MAX_PATH);
-        logf("MW4VR v11.34 (debug level %d) loaded into %s", g_dbg, narrow(exe).c_str());
+        logf("MW4VR v11.35 (debug level %d) loaded into %s", g_dbg, narrow(exe).c_str());
         if (!loadReal()) logf("ERROR: the system d3d11.dll could not be loaded");
     }
     return TRUE;

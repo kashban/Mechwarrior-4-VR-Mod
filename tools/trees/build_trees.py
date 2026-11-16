@@ -504,8 +504,14 @@ def main(src, out, ph=None):
     if ph:
         # with Poly Haven's other plants at hand (fetch_polyhaven.py) the photographed ones take the drawn ones' places:
         # name, asset, which of its meshes, scale, domes, the clutter kind's name and values
-        trees = [t for t in trees if t[0] not in ('oak_01', 'bush_01')]
+        trees = [t for t in trees if t[0] not in ('oak_01', 'oak_02', 'birch_01', 'bush_01')]
         real = [
+            ('leaf_01', 'tree_small_02', None, 3.4, [(0.5, 0.95, 0.1), (0.72, 0.85, 0.2), (0.9, 0.5, 0.25)], 'tree_leaf',
+             dict(density=0.0006, size=(0.75, 1.25), patch=(80, 0.45), seed=108, wind=(0.008, 0.3))),
+            ('leaf_02', 'island_tree_01', None, 3.2, [(0.5, 0.95, 0.1), (0.72, 0.85, 0.2), (0.9, 0.5, 0.25)], 'tree_leaf_wide',
+             dict(density=0.0005, size=(0.75, 1.25), patch=(80, 0.45), seed=109, wind=(0.008, 0.3))),
+            ('leaf_03', 'island_tree_03', None, 3.4, [(0.6, 0.95, 0.12), (0.85, 0.7, 0.25)], 'tree_leaf_small',
+             dict(density=0.0006, size=(0.7, 1.3), patch=(55, 0.4), seed=110, wind=(0.012, 0.4))),
             ('jacaranda_01', 'jacaranda_tree', None, 0.85, [(0.5, 0.95, 0.1), (0.72, 0.85, 0.2), (0.9, 0.5, 0.25)], 'tree_jacaranda',
              dict(density=0.0005, size=(0.7, 1.1), patch=(80, 0.45), seed=101, wind=(0.006, 0.25))),
             ('island_01', 'island_tree_02', None, 3.2, [(0.6, 0.95, 0.12), (0.85, 0.7, 0.25)], 'tree_island',

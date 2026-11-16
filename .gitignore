@@ -31,3 +31,6 @@ re/
 
 # left behind by a mutant of the converter (tests/mutate.py)
 /.mwc.ini
+
+# release packages
+release/
