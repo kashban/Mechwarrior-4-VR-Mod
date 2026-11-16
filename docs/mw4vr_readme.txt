@@ -133,6 +133,18 @@ clutter_trees.txt to the end of Content\Clutter\clutter.txt. Too many for your P
 "enabled = 0" or lower its density there.
 
 
+TOO FEW PICTURES A SECOND
+-------------------------
+The game draws every picture twice, so a battle with many trees and enemies is heavy; how heavy
+depends on your PC. What helps, strongest first:
+- The streaming quality of your headset's software (Virtual Desktop: "VR Graphics Quality") sets the
+  size of the pictures. Tested on Medium; go lower on a weaker PC.
+- clutter_density in mw4hook.ini: 1.0 = all the grass and trees, 0.5 = half, 0 = none. Read again
+  when the file is saved, so you can try it during a battle.
+- Fewer enemies and smaller maps in the instant action's settings.
+A cable or a good 5/6 GHz WiFi link to the PC: short freezes are mostly the network, not the game.
+
+
 IF SOMETHING IS WRONG
 ---------------------
 Nothing in the headset        Is the OpenXR runtime 32-bit capable and active? mw4vr.log tells what
@@ -307,6 +319,18 @@ Vierzehn Arten Bäume und Sträucher für den Geländebewuchs von MW4Engine, gem
 von Poly Haven (CC0). Ordner "Content" aus "trees" über den des Spiels kopieren und den Text von
 clutter_trees.txt ans Ende von Content\Clutter\clutter.txt anfügen. Zu viel für deinen PC: dort bei
 einer Art "enabled = 0" setzen oder ihre Dichte senken.
+
+
+ZU WENIG BILDER PRO SEKUNDE
+---------------------------
+Das Spiel zeichnet jedes Bild zweimal, ein Gefecht mit vielen Bäumen und Gegnern ist also schwer;
+wie schwer, hängt von deinem PC ab. Was hilft, das Stärkste zuerst:
+- Die Streaming-Qualität der Headset-Software (Virtual Desktop: "VR Graphics Quality") bestimmt die
+  Bildgröße. Getestet mit Medium; auf schwächerem PC niedriger.
+- clutter_density in mw4hook.ini: 1.0 = alles Gras und alle Bäume, 0.5 = die Hälfte, 0 = nichts.
+  Wird beim Speichern der Datei neu gelesen, lässt sich also im Gefecht ausprobieren.
+- Weniger Gegner und kleinere Karten in den Einstellungen der Instant Action.
+Kabel oder gutes 5/6-GHz-WLAN zum PC: kurze Hänger kommen meist vom Netz, nicht vom Spiel.
 
 
 WENN ETWAS NICHT STIMMT

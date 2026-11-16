@@ -105,6 +105,17 @@ the other cockpits everything - is shown on the glass, fixed to the cockpit: the
 as seen from the seat and puts each part into an open place near the cross-hair. A part you place yourself stays
 there (`glass_<part>` in the same file: degrees right, degrees up, width in degrees, metres away).
 
+## Performance
+
+Every picture is drawn twice, so a battle with many trees and enemies is heavy; how heavy depends on the PC.
+Each player sets this for their own machine:
+
+- the streaming quality of the headset's software (Virtual Desktop: "VR Graphics Quality"; tested on Medium),
+- `clutter_density` in `mw4hook.ini` (1.0 = all grass and trees, 0 = none; read again when the file is saved),
+- fewer enemies and smaller maps.
+
+Short freezes over WiFi are mostly the network; a cable to the PC cured them in our test.
+
 ## Share your settings, report faults
 
 Every mech wants its seat, sizes and HUD places set once, and there are more than a hundred. What ships as the
