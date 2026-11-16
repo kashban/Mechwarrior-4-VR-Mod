@@ -38,6 +38,14 @@ def main(argv):
         screens = sum(1 for s in said if s.startswith('  screen '))
         print('%-16s %2d monitors, %4d MB' % (name, screens, os.path.getsize(target) >> 20))
     print('%d converted, %d failed' % (done, failed))
+    detail = os.path.join(out, cc.DETAIL_FILE)
+    if not os.path.exists(detail):  # what painted metal is drawn with: from the first export that has the game's pictures
+        for r in [own[0] for _, _, *own in rows if own and own[0]] + [root]:
+            im = cc.detail_map(r)
+            if im:
+                cc.write_detail(detail, im)
+                print('painted metal: %s written' % cc.DETAIL_FILE)
+                break
 
 
 if __name__ == '__main__':

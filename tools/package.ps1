@@ -49,7 +49,7 @@ if ($Trees) {
     Copy-Item (Join-Path $Trees 'clutter_trees.txt') (Join-Path $dir 'trees')
 }
 
-$bad = @(Get-ChildItem $dir -Recurse -File | Where-Object { $_.Extension -in '.mwc', '.gltf', '.bin', '.uasset', '.uexp', '.pak', '.psk', '.log', '.bmp' -or $_.Length -gt 30MB })
+$bad = @(Get-ChildItem $dir -Recurse -File | Where-Object { $_.Extension -in '.mwc', '.mwd', '.gltf', '.bin', '.uasset', '.uexp', '.pak', '.psk', '.log', '.bmp' -or $_.Length -gt 30MB })
 if ($bad.Count) { throw "not for a release: $($bad.FullName -join ', ')" }
 
 $zip = Join-Path $out "$name.zip"

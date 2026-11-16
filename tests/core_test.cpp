@@ -541,6 +541,28 @@ static void testTurnNorm() {
     CHECK(mcTurnNorm(nan) == 0);
 }
 
+static void testEyeInMesh() {
+    g_test = "eye in mesh";
+    float eye[3];
+    const float id[12] = {1, 0, 0, -4, 0, 1, 0, 5, 0, 0, 1, -6}; // only shifted: the eye is where the shift takes to 0
+    mcEyeInMesh(id, 1, eye);
+    CHECK(eye[0] == 4 && eye[1] == -5 && eye[2] == 6);
+    const float tw[12] = {2, 0, 0, -4, 0, 2, 0, 6, 0, 0, 2, 8}; // and twice the size
+    mcEyeInMesh(tw, 2, eye);
+    CHECK(eye[0] == 2 && eye[1] == -3 && eye[2] == -4);
+    // turned about the upright by 30 degrees, then about the right by 20, 1.7 times the size, the eye at 0.3 -0.2 0.5
+    const float s = 1.7f, cy = cosf(0.5236f), sy = sinf(0.5236f), cx = cosf(0.349f), sx = sinf(0.349f);
+    const float r[3][3] = {{cy, 0, sy}, {sx * sy, cx, -sx * cy}, {-cx * sy, sx, cx * cy}};
+    const float want[3] = {0.3f, -0.2f, 0.5f};
+    float m[12];
+    for (int i = 0; i < 3; ++i) {
+        for (int j = 0; j < 3; ++j) m[i * 4 + j] = s * r[i][j];
+        m[i * 4 + 3] = -s * (r[i][0] * want[0] + r[i][1] * want[1] + r[i][2] * want[2]);
+    }
+    mcEyeInMesh(m, s, eye);
+    CHECK(nearly(eye[0], want[0], 1e-5f) && nearly(eye[1], want[1], 1e-5f) && nearly(eye[2], want[2], 1e-5f));
+}
+
 static void testTurnFit() {
     g_test = "turn fit";
     float m[4];
@@ -910,7 +932,7 @@ static void testGridFit() {
 }
 
 int main() {
-    testHolds(), testTurnNorm(), testTurnFit(), testHudGlass(), testGlassPose(), testGlassScale(), testGlassAim();
+    testHolds(), testTurnNorm(), testTurnFit(), testEyeInMesh(), testHudGlass(), testGlassPose(), testGlassScale(), testGlassAim();
     testGridMark(), testGridPlace(), testGridTri(), testGridCells(), testGridFree(), testGridRim(), testGridFit();
     testMul34(), testViewAxis();
     testFrustum(), testFrustumSameView(), testFrustumTangent(), testFrustumNear(), testFrustumLayout();

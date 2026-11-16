@@ -27,6 +27,12 @@ QUARTERS = range(1, 181)  # the turns tried to stand a monitor upright: quarter 
 WHITE = (255, 255, 255)
 VC_SHARE = 0.5  # how much of the vertex colours' shade a painted part takes
 METAL = np.array([0.15, 0.15, 0.16])  # bare metal, linear light
+PAINT = 'PAINT:'  # before the name of a group of painted metal: the mod draws the game's patches, wear and gloss on it
+DETAIL = 1024  # the size of the picture those come from
+DETAIL_FILE = 'mw4vr_paint.mwd'
+GRAIN = 3  # the grain's slopes are written this much steeper than the game's
+DETAIL_PATCHES = 'Game/Objects/_common/Materials/Textures/MacroVariation_CLR.png'
+DETAIL_GRAIN = 'Game/Objects/Mechs/_common/Material/Textures/CastMetal_NRM.png'
 # the parts of the game's HUD picture (u0 v0 u1 v1, 0..1 from the top left) a monitor can show
 HUD_PARTS = {'lance': '0.000 0.000 0.243 0.108', 'target': '0.000 0.772 0.180 1.000', 'radar': '0.320 0.770 0.690 0.990',
              'damage': '0.820 0.772 1.005 1.000', 'weapons': '0.716 0.000 1.000 0.124'}
@@ -98,6 +104,32 @@ def masked_paint(mask, paints):
             out = out + m[..., k:k + 1] * (np.array(paints[k]) - out)
     out = np.round(255 * out ** (1 / 2.2)).astype(np.uint8)
     return Image.fromarray(out, 'RGB').convert('RGBA')
+
+
+def is_paint(text):
+    """is the material painted metal - no picture of its own, its colour a paint (the game's PaintedMetal: the look
+    comes from patches, wear and gloss its shader adds)?"""
+    tex = parse_props(text)[0]
+    return 'basecolor' not in tex and ('rgbpaintmask' in tex or paint_light(text) is not None)
+
+
+def detail_map(root, size=DETAIL):
+    """the picture the mod draws painted metal with, from the game's own two under the export root: red and green
+    the fine grain's slope to the right and up (steeper, see GRAIN), blue the patches' lightness; None while the export has them not"""
+    try:
+        patches = Image.open(os.path.join(root, *DETAIL_PATCHES.split('/'))).convert('L').resize((size, size), Image.LANCZOS)
+        grain = Image.open(os.path.join(root, *DETAIL_GRAIN.split('/'))).convert('RGB').resize((size, size), Image.LANCZOS)
+    except OSError:
+        return None
+    slope = np.asarray(grain, np.float64)[..., :2]  # faint, and not about the middle: about it, GRAIN times as steep
+    slope = np.clip(np.round(127.5 + GRAIN * (slope - slope.mean((0, 1)))), 0, 255).astype(np.uint8)
+    full = np.full((size, size, 1), 255, np.uint8)
+    return Image.fromarray(np.concatenate([slope, np.asarray(patches)[..., None], full], 2), 'RGBA')
+
+
+def write_detail(path, im):
+    with open(path, 'wb') as o:
+        o.write(b'MWD1' + struct.pack('<I', im.width) + mips(im, im.width))
 
 
 def is_hologram(text):
@@ -364,6 +396,9 @@ def build_groups(g, buf, props, root, log=print, shade=False):
             log('  %s: shaded by its vertices, %d colours' % (name, n))
         if clr is None:
             clr = flat(80, 80, 84)
+        # (a mod's part without any material: bare metal - but for the game's own picture materials)
+        if shade and ems is None and (is_paint(text) or not (text or is_display(name))):
+            name = PAINT + name
         groups.append((name, P, N, UV, I, clr, ems, strength))
     return groups, lo, hi, places
 
@@ -421,7 +456,7 @@ def read_mwc(path):
 
 def convert(gltf, root, out, tmax=TMAX, log=print, shade=False):
     """shade: a cockpit of a mod - its one-coloured parts take the shade of their vertex colours (in the game's own
-    cockpits those colours mean other things)"""
+    cockpits those colours mean other things), and its painted metal is marked for the mod to draw as such"""
     with open(gltf) as f:
         g = json.load(f)
     with open(os.path.join(os.path.dirname(gltf), g['buffers'][0]['uri']), 'rb') as f:

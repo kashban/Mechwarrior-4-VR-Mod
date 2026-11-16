@@ -22,6 +22,7 @@ struct Mw5Group {
     int screen;   // 0: the mesh; n + 1: monitor n, shown with a part of the game's HUD
     float aspect; // a monitor's width / height
     float centre[3]; // its middle in the mesh
+    bool paint;      // painted metal: drawn with the patches, the wear and the gloss of MW5's own
 };
 static volatile int g_m5Looked; // the monitor the pilot looks at (n + 1; 0: none), for Ctrl+Alt+1..5
 // The parts of the HUD image (u0 v0 u1 v1): radar, target, damage, lance list, weapons; and the top strip between
@@ -54,6 +55,10 @@ static bool g_mw5IniRead;
 static wchar_t g_mw5Name[64];
 static float g_mw5Scale = 1, g_mw5Eye[3], g_mw5Ems = 1.5f, g_mw5Amb = 0.45f;
 static int g_mw5LinearOut, g_mw5Reversed = 1;
+// painted metal (the parts the converter marks; mw4vr_cockpits\mw4vr_paint.mwd, made by it, holds the picture for it)
+static ID3D11ShaderResourceView *g_m5Detail;
+static bool g_m5DetailTried;
+static float g_m5Paint = 1, g_m5PaintWear = 0.5f; // [vr] mw5_paint (0: plain colours), mw5_paint_wear
 static float g_mw5DepthFront = 0.92f;
 static ID3D11VertexShader *g_m5VS;
 static ID3D11PixelShader *g_m5PS;
@@ -96,9 +101,11 @@ cbuffer C : register(b13) {
     float4 alt2;          // zw: the probe point
     float4 rot;           // the monitor's uv (about its middle) -> the part's (about its middle): xy the row for u, zw for v
     float4 rot2;          // as rot, for the second part
+    float4 eye;           // xyz: the eye in the mesh; w > 0: painted metal, as strongly
+    float4 pnt;           // x: how much of the paint is worn off
 };
 struct VSIn { float3 pos : POSITION; float3 nrm : NORMAL; float2 uv : TEXCOORD0; };
-struct VSOut { float4 pos : SV_Position; float3 nrm : NORMAL; float2 uv : TEXCOORD0; };
+struct VSOut { float4 pos : SV_Position; float3 nrm : NORMAL; float2 uv : TEXCOORD0; float3 mp : TEXCOORD1; };
 VSOut vs(VSIn v) {
     VSOut o;
     float3 p = mul(M, float4(v.pos, 1)).xyz;
@@ -109,12 +116,18 @@ VSOut vs(VSIn v) {
     if (g_screen.z > 0) o.pos.xy += g_rtJitter.zw * p.z;
     o.nrm = v.nrm;
     o.uv = v.uv;
+    o.mp = v.pos;
     return o;
 }
 Texture2D tc : register(t0);
 Texture2D te : register(t1);
 Texture2D th : register(t2);
+Texture2D td : register(t3); // painted metal: rg the fine grain's slope, b the patches' lightness
 SamplerState sm : register(s0);
+// the picture laid flat on the mesh from its three sides (w: the normal's squares), s times a metre
+float4 flatOn(float3 p, float3 w, float s) {
+    return td.Sample(sm, p.zy * s) * w.x + td.Sample(sm, p.xz * s) * w.y + td.Sample(sm, p.xy * s) * w.z;
+}
 float4 ps(VSOut i) : SV_Target {
     if (par.w > 0) { // a monitor: its part of the HUD image, whole, on black
         float4 r = scr;
@@ -140,8 +153,24 @@ float4 ps(VSOut i) : SV_Target {
         return float4(h, 1);
     }
     float3 n = normalize(i.nrm);
+    float3 a = tc.Sample(sm, i.uv).rgb;
+    float gloss = 0;
+    if (eye.w > 0) {
+        // MW5's painted metal has no picture: a colour, large patches of lighter and darker over it, the paint worn
+        // off to the metal in places, a fine grain, and gloss
+        float3 w = n * n;
+        float patch = flatOn(i.mp, w, 1.3).b;
+        // (dark paint shows little of it: black parts are no painted steel)
+        float worn = pnt.x * smoothstep(0.50, 0.38, flatOn(i.mp + 0.37, w, 3.7).b) * saturate(0.1 + 4 * dot(a, 0.333));
+        float2 g = (flatOn(i.mp, w, 9).rg * 2 - 1) * 1.5 * eye.w;
+        a *= lerp(1, saturate(0.55 + 0.6 * patch), eye.w);
+        a = lerp(a, float3(0.42, 0.42, 0.44), worn * eye.w);
+        n = normalize(n + float3(0, g.y, g.x) * w.x + float3(g.x, 0, g.y) * w.y + float3(g.x, g.y, 0) * w.z);
+        float3 h = normalize(normalize(eye.xyz - i.mp) + lamp.xyz);
+        gloss = pow(saturate(dot(n, h)), 28) * lerp(0.18, 0.50, worn) * eye.w;
+    }
     float l = par.y + (1 - par.y) * saturate(dot(n, lamp.xyz) * 0.5 + 0.5);
-    float3 c = tc.Sample(sm, i.uv).rgb * l + te.Sample(sm, i.uv).rgb * par.x;
+    float3 c = a * l + gloss + te.Sample(sm, i.uv).rgb * par.x;
     if (par.z > 0) c = pow(saturate(c), 2.2);
     return float4(c, 1);
 }
@@ -213,6 +242,10 @@ static void mw5ReadIni() {
     g_mw5Eye[2] = mw5CockpitF(L"eye_forward_m", 0);
     g_mw5Ems = mw5GetF(L"mw5_emissive", 1.5f);
     g_mw5Amb = mw5GetF(L"mw5_ambient", 0.45f);
+    g_m5Paint = mw5GetF(L"mw5_paint", 1);
+    if (!(g_m5Paint >= 0 && g_m5Paint <= 1)) g_m5Paint = 1;
+    g_m5PaintWear = mw5GetF(L"mw5_paint_wear", 0.5f);
+    if (!(g_m5PaintWear >= 0 && g_m5PaintWear <= 1)) g_m5PaintWear = 0.5f;
     // What of the world is nearer than the game's near plane / this share still shows in front of the mesh: at 0.5
     // the mech's own hull beside a narrow cockpit did (the Archer's launchers, within 2 m). At least 0.9.
     g_mw5DepthFront = mw5GetF(L"mw5_depth_front", 0.92f);
@@ -306,7 +339,22 @@ static ID3D11ShaderResourceView *mw5Texture(FILE *f, UINT size) {
     return v;
 }
 
+// the picture painted metal is drawn with (once; without it such parts stay plainly coloured)
+static void mw5LoadDetail() {
+    if (g_m5DetailTried) return;
+    g_m5DetailTried = true;
+    std::wstring path = g_dir + L"mw4vr_cockpits\\mw4vr_paint.mwd";
+    FILE *f = _wfopen(path.c_str(), L"rb");
+    char magic[4];
+    uint32_t size = 0;
+    if (f && fread(magic, 1, 4, f) == 4 && !memcmp(magic, "MWD1", 4) && fread(&size, 4, 1, f) == 1 && size >= 4 && size <= 4096 && !(size & (size - 1)))
+        g_m5Detail = mw5Texture(f, size);
+    if (f) fclose(f);
+    logf(g_m5Detail ? "mw5: painted metal from mw4vr_paint.mwd (%u)" : "mw5: no mw4vr_paint.mwd - painted metal stays plainly coloured", size);
+}
+
 static bool mw5LoadFile() {
+    mw5LoadDetail();
     std::wstring path = g_dir + L"mw4vr_cockpits\\" + g_mw5Name + L".mwc";
     FILE *f = _wfopen(path.c_str(), L"rb");
     if (!f) {
@@ -345,6 +393,7 @@ static bool mw5LoadFile() {
                 for (int a = 0; a < 3; ++a) g.centre[a] += vp[a] / (float)h.nv;
             }
             h.name[47] = 0;
+            g.paint = !strncmp(h.name, "PAINT:", 6);
             if (!strncmp(h.name, "SCREEN:", 7)) {
                 g.screen = atoi(h.name + 7) + 1;
                 g.aspect = h.k > 0.05f ? h.k : 1;
@@ -390,7 +439,7 @@ static bool mw5CreateStates() {
     HRESULT h3 = g_dev->CreateInputLayout(il, 3, vc->GetBufferPointer(), vc->GetBufferSize(), &g_m5IL);
     vc->Release();
     pc->Release();
-    D3D11_BUFFER_DESC bd = {208, D3D11_USAGE_DYNAMIC, D3D11_BIND_CONSTANT_BUFFER, D3D11_CPU_ACCESS_WRITE, 0, 0};
+    D3D11_BUFFER_DESC bd = {240, D3D11_USAGE_DYNAMIC, D3D11_BIND_CONSTANT_BUFFER, D3D11_CPU_ACCESS_WRITE, 0, 0};
     HRESULT h4 = ORIG(PFN_CreateBuffer, g_dev, VT_Dev_CreateBuffer)(g_dev, &bd, nullptr, &g_m5CB);
     D3D11_SAMPLER_DESC sd = {};
     sd.Filter = D3D11_FILTER_ANISOTROPIC, sd.MaxAnisotropy = 8;
@@ -545,7 +594,7 @@ static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw) {
     DXGI_FORMAT oIFmt = DXGI_FORMAT_UNKNOWN;
     ID3D11VertexShader *oVS = nullptr;
     ID3D11PixelShader *oPS = nullptr;
-    ID3D11ShaderResourceView *oSRV[3] = {};
+    ID3D11ShaderResourceView *oSRV[4] = {};
     ID3D11SamplerState *oSamp = nullptr;
     ID3D11BlendState *oBlend = nullptr;
     ID3D11DepthStencilState *oDS = nullptr;
@@ -559,7 +608,7 @@ static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw) {
     c->PSGetShader(&oPS, nullptr, nullptr);
     c->VSGetConstantBuffers(13, 1, &oVCB);
     c->PSGetConstantBuffers(13, 1, &oPCB);
-    c->PSGetShaderResources(0, 3, oSRV);
+    c->PSGetShaderResources(0, 4, oSRV);
     c->PSGetSamplers(0, 1, &oSamp);
     c->OMGetBlendState(&oBlend, oFactor, &oMask);
     c->OMGetDepthStencilState(&oDS, &oRef);
@@ -598,7 +647,7 @@ static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw) {
     // mesh -> this eye's view: c = S (v - eye); p = R^T (c - t - raw (cockpit scale - world scale))
     const float *R = g_vrR[e], *T = g_vrT[e], *raw = g_vrRaw[e];
     float S = g_vr.cockpitScale * g_mw5Scale;
-    float cb[52] = {};
+    float cb[60] = {};
     float o[3];
     for (int i = 0; i < 3; ++i) o[i] = -S * g_mw5Eye[i] - T[i] - raw[i] * g_cockpitDelta;
     for (int i = 0; i < 3; ++i) {
@@ -606,6 +655,8 @@ static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw) {
         cb[i * 4 + 3] = R[0 * 3 + i] * o[0] + R[1 * 3 + i] * o[1] + R[2 * 3 + i] * o[2];
     }
     cb[15] = 1;
+    mcEyeInMesh(cb, S, cb + 52);
+    cb[56] = g_m5PaintWear;
     if (e == 0) { // which monitor lies nearest the middle of the view (within 12 degrees)?
         int looked = 0;
         float best = 0.978f;
@@ -648,8 +699,13 @@ static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw) {
             UINT stride = 32, off = 0;
             c->IASetVertexBuffers(0, 1, &g.vb, &stride, &off);
             c->IASetIndexBuffer(g.ib, DXGI_FORMAT_R32_UINT, 0);
-            ID3D11ShaderResourceView *sv[3] = {g.clr, g.ems, nullptr};
+            ID3D11ShaderResourceView *sv[4] = {g.clr, g.ems, nullptr, g_m5Detail};
             bool scr = g.screen && g_mw5ScreensWanted;
+            float paint = g.paint && g_m5Detail ? g_m5Paint : 0;
+            if (cb[55] != paint) {
+                cb[55] = paint;
+                if (!scr && !put()) continue;
+            }
             if (scr) { // the part of the HUD image, whole and undistorted in the monitor
                 const float *r = g_m5Rect[g.screen - 1];
                 bool have = g_m5HudSrv && r[2] > r[0] && r[3] > r[1] && g_m5HudH;
@@ -669,7 +725,7 @@ static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw) {
                 sv[2] = have ? g_m5HudSrv : nullptr;
                 if (!put()) continue;
             }
-            c->PSSetShaderResources(0, 3, sv);
+            c->PSSetShaderResources(0, 4, sv);
             draw(c, g.nIdx, 0, 0);
             if (scr) {
                 cb[27] = 0;
@@ -687,12 +743,12 @@ static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw) {
     ORIG(PFN_SetShader, c, VT_Ctx_PSSetShader)(c, oPS, nullptr, 0);
     ORIG(PFN_SetCB, c, VT_Ctx_VSSetConstantBuffers)(c, 13, 1, &oVCB);
     ORIG(PFN_SetCB, c, VT_Ctx_PSSetConstantBuffers)(c, 13, 1, &oPCB);
-    c->PSSetShaderResources(0, 3, oSRV);
+    c->PSSetShaderResources(0, 4, oSRV);
     c->PSSetSamplers(0, 1, &oSamp);
     c->OMSetBlendState(oBlend, oFactor, oMask);
     c->OMSetDepthStencilState(oDS, oRef);
     c->RSSetState(oRS);
-    IUnknown *rel[] = {oIL, oVB, oIB, oVS, oPS, oVCB, oPCB, oSRV[0], oSRV[1], oSRV[2], oSamp, oBlend, oDS, oRS};
+    IUnknown *rel[] = {oIL, oVB, oIB, oVS, oPS, oVCB, oPCB, oSRV[0], oSRV[1], oSRV[2], oSRV[3], oSamp, oBlend, oDS, oRS};
     for (IUnknown *u : rel)
         if (u) u->Release();
 }

@@ -82,6 +82,9 @@ mw5_cockpit=
 ; brightness of its lit displays; its base light (0..1); mw5_linear_output=1 if it looks washed out
 mw5_emissive=1.5
 mw5_ambient=0.45
+; painted metal of mod cockpits: the patches, worn paint and gloss (0: plain colours .. 1); how much paint is worn off (0..1)
+mw5_paint=1
+mw5_paint_wear=0.5
 mw5_linear_output=1
 mw5_reversed_depth=1
 ; share of the depth range kept for the cockpit alone (0.9 .. 0.98): the ground and the mech's own hull cannot

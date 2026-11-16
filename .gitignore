@@ -8,6 +8,7 @@ __pycache__/
 cockpits/
 mw5export/
 *.mwc
+*.mwd
 *.uasset
 *.gltf
 *.props.txt

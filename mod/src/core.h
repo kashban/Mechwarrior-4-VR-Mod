@@ -180,6 +180,11 @@ static inline void mcTurnFit(float mon, float part, float deg, float *m) {
     m[2] = -mon * s / k, m[3] = c / k;
 }
 
+// The eye's place in a mesh drawn with m (3 rows of 4, mesh -> view: a rotation times the size s, then a shift)
+static inline void mcEyeInMesh(const float *m, float s, float *eye) {
+    for (int j = 0; j < 3; ++j) eye[j] = -(m[j] * m[3] + m[4 + j] * m[7] + m[8 + j] * m[11]) / (s * s);
+}
+
 // true and zr: the zoom window (the last window whose centre lies in the middle of the picture)
 static inline bool mcZoomWindow(const McHud &h, float *zr) {
     bool zoom = false;

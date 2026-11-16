@@ -973,10 +973,78 @@ class Shaded(unittest.TestCase):
             put(os.path.join(d, 'Monitor_MTI.props.txt'), HOLOGRAM.replace('Projection_Hologram_MTL', 'Widget3D_Paperdoll1_MTL'))
             groups, said = self.cockpit(d, [('Monitor_MTI',) + quad(0, 0, 0.3, 0.2, -1), ('MiniMapGenerator1_MTL',) + quad(1, 0, 1.3, 0.2, -1),
                                             ('Dash',) + quad(2, 0, 3, 1, -1)])
-            self.assertEqual([g[0] for g in groups], ['SCREEN:0', 'SCREEN:1', 'Dash'])
+            self.assertEqual([g[0] for g in groups], ['SCREEN:0', 'SCREEN:1', 'PAINT:Dash'])
             # with the game's own monitor material in the cockpit they are none
             groups, said = self.cockpit(d, [('MiniMapGenerator1_MTL',) + quad(1, 0, 1.3, 0.2, -1), ('Panels_MTI',) + quad(0.5, 0, 0.8, 0.2, -1)])
             self.assertEqual([g[0] for g in groups], ['MiniMapGenerator1_MTL', 'SCREEN:0'])
+
+
+class PaintedMetal(unittest.TestCase):
+    """a mod's painted metal is marked, and the picture the mod draws it with is made from the game's own"""
+
+    def test_names(self):
+        self.assertEqual((cc.PAINT, cc.DETAIL, cc.DETAIL_FILE, cc.GRAIN), ('PAINT:', 1024, 'mw4vr_paint.mwd', 3))
+        self.assertEqual(cc.DETAIL_PATCHES, 'Game/Objects/_common/Materials/Textures/MacroVariation_CLR.png')
+        self.assertEqual(cc.DETAIL_GRAIN, 'Game/Objects/Mechs/_common/Material/Textures/CastMetal_NRM.png')
+
+    def test_is_paint(self):
+        self.assertTrue(cc.is_paint(PAINT))
+        self.assertTrue(cc.is_paint(MASKED))
+        self.assertTrue(cc.is_paint(MASKED.replace('PaintColorPrimary', 'Other')))  # a mask alone
+        self.assertFalse(cc.is_paint(''))
+        self.assertFalse(cc.is_paint(Props.TEXT))
+        self.assertFalse(cc.is_paint(PAINT + '\n' + Props.TEXT))  # a picture of its own
+        self.assertFalse(cc.is_paint(PAINT.replace('PaintColorPrimary', 'PaintColorSecondary')))
+
+    def pictures(self, d, patches=True, grain=True):
+        if patches:
+            os.makedirs(os.path.join(d, 'Game', 'Objects', '_common', 'Materials', 'Textures'))
+            im = Image.new('RGB', (2, 2))
+            im.putdata([(10, 10, 10), (20, 20, 20), (30, 30, 30), (40, 40, 40)])
+            im.save(os.path.join(d, *cc.DETAIL_PATCHES.split('/')))
+        if grain:
+            os.makedirs(os.path.join(d, 'Game', 'Objects', 'Mechs', '_common', 'Material', 'Textures'))
+            im = Image.new('RGB', (2, 2))
+            im.putdata([(100, 0, 77), (111, 0, 77), (120, 255, 77), (131, 255, 77)])
+            im.save(os.path.join(d, *cc.DETAIL_GRAIN.split('/')))
+
+    def test_detail_map(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.pictures(d)
+            im = cc.detail_map(d, 2)
+            self.assertEqual((im.mode, im.size), ('RGBA', (2, 2)))
+            # the slopes about their mean (115.5; 127.5), three times as steep, about the middle; cut to 0..255
+            self.assertEqual(pixels(im), [(81, 0, 10, 255), (114, 0, 20, 255), (141, 255, 30, 255), (174, 255, 40, 255)])
+            self.assertEqual(cc.detail_map(d).size, (1024, 1024))
+            self.assertEqual(cc.detail_map(d, 1).getpixel((0, 0))[2:], (25, 255))  # smaller: the mean
+        for patches, grain in ((True, False), (False, True), (False, False)):
+            with tempfile.TemporaryDirectory() as d:
+                self.pictures(d, patches, grain)
+                self.assertIsNone(cc.detail_map(d, 2))
+
+    def test_write_detail(self):
+        with tempfile.TemporaryDirectory() as d:
+            im = Image.new('RGBA', (4, 4), (1, 2, 3, 255))
+            cc.write_detail(os.path.join(d, 'p.mwd'), im)
+            self.assertEqual(get(os.path.join(d, 'p.mwd')), b'MWD1' + struct.pack('<I', 4) + bytes([1, 2, 3, 255]) * 21)
+
+    def names(self, d, prims, shade=True):
+        return [g[0] for g in cc.convert(write_gltf(d, prims), d, os.path.join(d, 'c.mwc'), log=lambda *a: None, shade=shade)]
+
+    def test_a_mods_painted_metal_is_marked(self):
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, 'Game', 'A', 'B'))
+            Image.new('RGB', (8, 8), (10, 20, 30)).save(os.path.join(d, 'Game', 'A', 'B', 'Hull_CLR.png'))
+            Image.new('RGB', (8, 8), (200, 0, 0)).save(os.path.join(d, 'Game', 'A', 'B', 'Hull_EMS.png'))
+            put(os.path.join(d, 'Dash_LOD.props.txt'), PAINT)
+            put(os.path.join(d, 'Hull_MTI.props.txt'), Props.TEXT)
+            put(os.path.join(d, 'Lamp_MTI.props.txt'), PAINT + '\n' + Props.TEXT.replace('BaseColor', 'Other'))  # paint that glows
+            q = quad(0, 0, 1, 1, -1)
+            prims = [('Dash_LOD',) + q, ('Hull_MTI',) + q, ('Lamp_MTI',) + q, ('dummy_material_0',) + q, ('Panels_MTI',) + quad(2, 0, 2.3, 0.2, -1),
+                     ('Widget3D_Map_MTL',) + q]  # (with the game's monitors there, a picture material is a part like others)
+            self.assertEqual(self.names(d, prims), ['PAINT:Dash_LOD', 'Hull_MTI', 'Lamp_MTI', 'PAINT:dummy_material_0', 'SCREEN:0', 'Widget3D_Map_MTL'])
+            self.assertEqual(self.names(d, prims, shade=False), ['Dash_LOD', 'Hull_MTI', 'Lamp_MTI', 'dummy_material_0', 'SCREEN:0', 'Widget3D_Map_MTL'])
+            self.assertEqual([g['name'] for g in cc.read_mwc(os.path.join(d, 'c.mwc'))][:4], ['Dash_LOD', 'Hull_MTI', 'Lamp_MTI', 'dummy_material_0'])
 
 
 if __name__ == '__main__':

@@ -100,6 +100,10 @@ cockpits belong to Piranha Games. You convert your own:
 
 A cockpit of a mod often has no pictures, only one paint a part: the converter takes that paint (and a paint mask's
 second and third), shades it with the mesh's vertex colours and takes the mod's hologram materials as monitors.
+Such parts are MechWarrior 5's painted metal, whose look its shader makes; the converter marks them (`PAINT:` before
+the group's name) and writes `mw4vr_paint.mwd` from two of the game's own pictures, and the mod draws them with
+patches, worn paint, a fine grain and gloss (`[vr] mw5_paint`, `mw5_paint_wear`). An approximation: the game's
+shader itself cannot be exported.
 
 The converter turns the larger faces of the material `Panels*` into monitors and writes a `<name>.ini` beside
 each `.mwc`: which part of the HUD each monitor shows (`screen_<n>`; `screen_<n>_turn`: its picture turned by so

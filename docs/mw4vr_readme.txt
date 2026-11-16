@@ -108,7 +108,10 @@ name.
 
 Cockpits of MechWarrior 5 mods: the setup can export those too ("Also the cockpits of the MechWarrior 5
 mods installed there"; by hand: export_cockpits.ps1 -Mods <...\MW5Mercs\Mods>). They are often plainer
-than the game's own - painted in one colour a part, without pictures. A line of mw4vr_cockpit_map.ini
+than the game's own - painted in one colour a part, without pictures. MechWarrior 5 draws such painted
+metal with patches, worn paint and gloss of its own; the mod does the like ([vr] mw5_paint=0..1 how
+strongly, 0: plain colours; mw5_paint_wear=0..1 how much paint is worn off). Cockpits converted before
+v11.42 lack the mark for it: delete their .mwc and run the setup again. A line of mw4vr_cockpit_map.ini
 may name several cockpits, the best first (kodiak=kodiak,atlas): the first there is a file of is used.
 
   Ctrl+F11                     the cockpits on / off
@@ -296,7 +299,11 @@ sonst eines mit ähnlichem Gesicht. Bei Gefechtsbeginn zeigt der Mod Mech- und C
 
 Cockpits aus MechWarrior-5-Mods: Das Setup kann auch die exportieren ("Also the cockpits of the
 MechWarrior 5 mods installed there"; von Hand: export_cockpits.ps1 -Mods <...\MW5Mercs\Mods>). Sie sind
-oft schlichter als die des Spiels - je Teil einfarbig lackiert, ohne Bilder. Eine Zeile in
+oft schlichter als die des Spiels - je Teil einfarbig lackiert, ohne Bilder. MechWarrior 5 zeichnet
+solches lackiertes Metall mit eigenen Flecken, abgenutztem Lack und Glanz; der Mod macht es ähnlich
+([vr] mw5_paint=0..1 wie stark, 0: reine Farben; mw5_paint_wear=0..1 wie viel Lack abgenutzt ist).
+Vor v11.42 umgewandelten Cockpits fehlt die Markierung dafür: ihre .mwc löschen und das Setup noch
+einmal starten. Eine Zeile in
 mw4vr_cockpit_map.ini darf mehrere Cockpits nennen, das beste zuerst (kodiak=kodiak,atlas): benutzt
 wird das erste, für das es eine Datei gibt.
 
