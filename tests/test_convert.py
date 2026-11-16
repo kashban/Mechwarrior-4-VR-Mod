@@ -601,5 +601,81 @@ class Cockpit(unittest.TestCase):
             self.assertIn('screens=0', get(os.path.join(d, 'c.ini'), 'r'))
 
 
+PAINT = """Parent = MaterialInstanceConstant'/Game/Objects/Mechs/X/Body_LOD.Body_LOD'
+VectorParameterValues[0] =
+{
+    ParameterInfo = { Name=PaintColorPrimary }
+    ParameterValue = { R=0.5, G=2, B=-1, A=1 }
+}"""
+HOLOGRAM = """ScalarParameterValues[0] = {}
+Parent = Material3'/Game/Objects/Mechs/_common/Cockpit/Material/Projection_Hologram_MTL.Projection_Hologram_MTL'"""
+
+
+class PlayerMade(unittest.TestCase):
+    """cockpits of MechWarrior 5 mods: paint colours, monitors as holograms, the canopy's glass"""
+
+    def test_paint_colour(self):
+        self.assertEqual(cc.paint_colour(PAINT), (186, 255, 0))  # 255 * 0.5 ** (1 / 2.2) = 186.1; cut to 0..1
+        self.assertEqual(cc.paint_colour(PAINT.replace('R=0.5', 'R=5e-1')), (186, 255, 0))
+        self.assertIsNone(cc.paint_colour(PAINT.replace('PaintColorPrimary', 'Fringe Color')))
+        self.assertIsNone(cc.paint_colour(''))
+
+    def test_hologram(self):
+        self.assertTrue(cc.is_hologram(HOLOGRAM))
+        self.assertTrue(cc.is_hologram(HOLOGRAM.replace('Projection_Hologram', 'PROJECTION_hologram')))
+        self.assertIs(cc.is_hologram(PAINT), False)
+        self.assertIs(cc.is_hologram('Name=Projection_Hologram'), False)  # no parent named
+
+    def test_props_text(self):
+        with tempfile.TemporaryDirectory() as d:
+            put(os.path.join(d, 'Body_MTI.props.txt'), PAINT)
+            props = cc.find_props(d)
+            self.assertEqual(cc.props_text(props, 'BODY_mti'), PAINT)
+            self.assertEqual(cc.props_text(props, 'Other'), '')
+
+    def test_material_without_a_texture_takes_its_paint(self):
+        with tempfile.TemporaryDirectory() as d:
+            put(os.path.join(d, 'Body_MTI.props.txt'), PAINT)
+            clr, ems, strength = cc.material(cc.find_props(d), d, 'Body_MTI')
+            self.assertEqual(clr.getpixel((0, 0)), (186, 255, 0, 255))
+            self.assertEqual((ems, strength), (None, 1.0))
+
+    def test_a_texture_wins_over_the_paint(self):
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, 'Game', 'A', 'B'))
+            Image.new('RGB', (8, 8), (10, 20, 30)).save(os.path.join(d, 'Game', 'A', 'B', 'Hull_CLR.png'))
+            put(os.path.join(d, 'Hull_MTI.props.txt'), Props.TEXT + '\n' + PAINT)
+            clr, ems, strength = cc.material(cc.find_props(d), d, 'Hull_MTI', log=lambda *a: None)
+            self.assertEqual(clr.getpixel((0, 0)), (10, 20, 30, 255))
+
+    def test_canopy_glass(self):
+        self.assertTrue(cc.is_canopy_glass('TimberwolfGlass_CockpitTP_MTL'))
+        self.assertFalse(cc.is_canopy_glass('Glass_CockpitTP_Opaque_MTI'))  # the game's own, kept
+        self.assertFalse(cc.is_canopy_glass('Glass_Equipment_MTI'))
+        self.assertFalse(cc.is_canopy_glass('Opaque_MTI'))
+
+    def cockpit(self, d, prims):
+        put(os.path.join(d, 'Monitor_MTI1.props.txt'), HOLOGRAM)
+        put(os.path.join(d, 'Dash_LOD.props.txt'), PAINT)
+        path = write_gltf(d, prims)
+        out = os.path.join(d, 'c.mwc')
+        said = []
+        cc.convert(path, d, out, log=lambda *a: said.append(' '.join(str(x) for x in a)))
+        return [g['name'] for g in cc.read_mwc(out)], said
+
+    def test_holograms_are_the_monitors_of_a_cockpit_without_panels(self):
+        with tempfile.TemporaryDirectory() as d:
+            names, said = self.cockpit(d, [('Dash_LOD',) + quad(0, 0, 1, 1, -1), ('Monitor_MTI1',) + quad(0, 0, 0.3, 0.2, -1),
+                                           ('MyGlass_CockpitTP_MTL',) + quad(-1, -1, 1, 1, -0.5)])
+            self.assertEqual(names, ['Dash_LOD', 'SCREEN:0'])
+            self.assertIn('  MyGlass_CockpitTP_MTL: the glass of the canopy, left out', said)
+            self.assertTrue(any(s.startswith('  screen 0: centre 0.15 0.10 1.00 m, 30 x 20 cm') for s in said), said)
+
+    def test_with_panels_a_hologram_is_no_monitor(self):
+        with tempfile.TemporaryDirectory() as d:
+            names, said = self.cockpit(d, [('Monitor_MTI1',) + quad(0, 0, 0.3, 0.2, -1), ('Panels_MTI',) + quad(0.5, 0, 0.8, 0.2, -1)])
+            self.assertEqual(names, ['Monitor_MTI1', 'SCREEN:0'])
+
+
 if __name__ == '__main__':
     unittest.main()

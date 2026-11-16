@@ -7,6 +7,9 @@
 # each, named SCREEN:<n> from left to right: uv 0..1 over the monitor (v down), the strength field its
 # width / height; the mod shows parts of the game's HUD on them. Only parts of at least SCREEN_MIN metres
 # each way count as monitors (the SCREEN_MAX largest); the others (buttons, lamps) stay with their material.
+# Cockpits made by players (MechWarrior 5 mods) are often built otherwise: a material without a colour texture
+# takes its paint colour (PaintColorPrimary), a cockpit without Panels* has its monitors in the materials made
+# from the game's Projection_Hologram, and the canopy's glass - a sheet over the windows - is left out.
 # Beside the .mwc a <name>.ini is written once - which monitor shows which part of the HUD, the eye's place -
 # for the mod to read and for you to change.
 import json, struct, sys, os, re
@@ -60,13 +63,33 @@ def parse_props(text):
     return tex, strength
 
 
+def paint_colour(text):
+    """the material's paint colour (PaintColorPrimary, linear light) as (r, g, b) 0..255 for the screen, or None"""
+    m = re.search(r"Name=PaintColorPrimary \}\s*ParameterValue = \{ R=([-\d.eE]+), G=([-\d.eE]+), B=([-\d.eE]+)", text)
+    if not m:
+        return None
+    return tuple(int(round(255 * min(1.0, max(0.0, float(v))) ** (1 / 2.2))) for v in m.groups())
+
+
+def is_hologram(text):
+    """is the material made from the game's Projection_Hologram (what a monitor shows)?"""
+    m = re.search(r"^Parent = \w+'([^']*)'", text, re.M)
+    return bool(m) and 'projection_hologram' in m.group(1).lower()
+
+
+def props_text(props, name):
+    """the text of the material's .props.txt, '' without one"""
+    p = props.get(name.lower())
+    if not p:
+        return ''
+    with open(p, encoding='utf-8', errors='replace') as f:
+        return f.read()
+
+
 def material(props, root, name, log=print):
     """-> (colour image or None, emissive image or None, emissive strength)"""
-    tex, strength = {}, 1.0
-    p = props.get(name.lower())
-    if p:
-        with open(p, encoding='utf-8', errors='replace') as f:
-            tex, strength = parse_props(f.read())
+    text = props_text(props, name)
+    tex, strength = parse_props(text)
 
     def load(key):
         t = tex.get(key)
@@ -78,7 +101,12 @@ def material(props, root, name, log=print):
         except Exception as e:
             log('   texture not usable:', f, e)
             return None
-    return load('basecolor'), load('emissive'), strength
+    clr = load('basecolor')
+    if clr is None:
+        paint = paint_colour(text)
+        if paint is not None:
+            clr = flat(*paint)
+    return clr, load('emissive'), strength
 
 
 def mips(im, size):
@@ -203,13 +231,23 @@ def is_screen_material(name):
     return name.lower().startswith('panels')
 
 
+def is_canopy_glass(name):
+    """the sheet of glass over a player-made cockpit's windows (the game's own cockpits have none of that name)"""
+    n = name.lower()
+    return 'glass_cockpittp' in n and 'opaque' not in n
+
+
 def build_groups(g, buf, props, root, log=print):
     """-> (groups, lo, hi, places); a group: (name, P, N, UV, I, colour image, emissive image or None, emissive
     strength - for a screen its width / height); places: the monitors' (x, z, area)"""
     groups, places = [], []
     lo, hi = np.full(3, 1e9), np.full(3, -1e9)
-    for prim in g['meshes'][0]['primitives']:
-        name = g['materials'][prim['material']]['name']
+    names = [g['materials'][prim['material']]['name'] for prim in g['meshes'][0]['primitives']]
+    panels = any(is_screen_material(n) for n in names)  # the game's way of naming monitors; else: the holograms
+    for prim, name in zip(g['meshes'][0]['primitives'], names):
+        if is_canopy_glass(name):
+            log('  %s: the glass of the canopy, left out' % name)
+            continue
         P = acc(g, buf, prim['attributes']['POSITION']).astype(np.float32).copy()
         N = acc(g, buf, prim['attributes']['NORMAL']).astype(np.float32).copy()
         UV = acc(g, buf, prim['attributes']['TEXCOORD_0']).astype(np.float32)
@@ -217,7 +255,7 @@ def build_groups(g, buf, props, root, log=print):
         P[:, 2] = -P[:, 2]  # glTF looks down -z; the mod's view space looks down +z
         N[:, 2] = -N[:, 2]
         lo, hi = np.minimum(lo, P.min(0)), np.maximum(hi, P.max(0))
-        if is_screen_material(name):  # the monitors: one group each, shown with the game's HUD
+        if is_screen_material(name) or (not panels and is_hologram(props_text(props, name))):  # the monitors: one group each
             found, I = monitors(P, N, I)
             for p, n, uv, i, asp, (w, h) in found:
                 c = p.mean(0)

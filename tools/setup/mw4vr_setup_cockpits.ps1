@@ -2,7 +2,7 @@
 # MechWarrior 5: Mercenaries with UE Viewer and converts them for MW4VR. Everything it says goes into -Log.
 # Exit code: 0 done, 1 the Python packages, 2 the export, 3 the conversion.
 param([string]$Tools, [string]$Paks, [string]$Umodel, [string]$Game, [string]$Python, [string]$PythonArg = '', [string]$Log,
-      [switch]$Pip, [switch]$DeleteExport)
+      [switch]$Pip, [switch]$DeleteExport, [string]$Mods = '')
 $ErrorActionPreference = 'Continue'
 function Say([string]$t) { Add-Content -Path $Log -Value $t -Encoding UTF8 }
 function Run([string]$exe, [string[]]$a) {
@@ -18,7 +18,7 @@ if ($Pip) {
     if ((Run $Python ($py + @('-m', 'pip', 'install', '--user', 'numpy', 'pillow'))) -ne 0) { Say 'pip failed.'; exit 1 }
 }
 Say 'Exporting the cockpits from MechWarrior 5 (about 2 GB) ...'
-$code = Run 'powershell' @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $Tools 'export_cockpits.ps1'), '-Paks', $Paks, '-Out', $export, '-Umodel', $Umodel)
+$code = Run 'powershell' (@('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $Tools 'export_cockpits.ps1'), '-Paks', $Paks, '-Out', $export, '-Umodel', $Umodel) + $(if ($Mods) { @('-Mods', $Mods) } else { @() }))
 if ($code -ne 0 -or -not (Test-Path (Join-Path $export 'cockpits.txt'))) { Say 'The export failed.'; exit 2 }
 Say 'Converting the cockpits (about 4 GB) ...'
 if ((Run $Python ($py + @((Join-Path $Tools 'convert_all.py'), $export, $out))) -ne 0) { Say 'The conversion failed.'; exit 3 }

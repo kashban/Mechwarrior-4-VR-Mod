@@ -732,12 +732,21 @@ static void mw5ForMech() {
     const char *from = "chosen for it";
     GetPrivateProfileStringW(sec, L"mw5_cockpit", L"", name, 64, mechIni().c_str());
     if (!name[0] && model[0]) { // the list of mechs and their cockpits
-        GetPrivateProfileStringW(L"mechs", model, L"", name, 64, (g_dir + L"mw4vr_cockpit_map.ini").c_str());
+        // several names, the best first (a mod's cockpit, then one of the game's): the first there is a file of
+        wchar_t list[256] = L"";
+        GetPrivateProfileStringW(L"mechs", model, L"", list, 256, (g_dir + L"mw4vr_cockpit_map.ini").c_str());
         from = "from mw4vr_cockpit_map.ini";
-        if (name[0] && GetFileAttributesW((g_dir + L"mw4vr_cockpits\\" + name + L".mwc").c_str()) == INVALID_FILE_ATTRIBUTES) {
-            logf("mw5: mw4vr_cockpit_map.ini names '%ls' for the mech '%ls', but there is no such cockpit file", name, model);
-            name[0] = 0;
+        for (wchar_t *p = list; *p && !name[0];) {
+            wchar_t *e = wcschr(p, L',');
+            if (e) *e = 0;
+            while (*p == L' ') ++p;
+            size_t n = wcslen(p);
+            while (n && p[n - 1] == L' ') p[--n] = 0;
+            if (n && n < 64 && GetFileAttributesW((g_dir + L"mw4vr_cockpits\\" + p + L".mwc").c_str()) != INVALID_FILE_ATTRIBUTES) wcscpy(name, p);
+            if (!e) break;
+            p = e + 1;
         }
+        if (list[0] && !name[0]) logf("mw5: mw4vr_cockpit_map.ini has no cockpit file for the mech '%ls'", model);
     }
     if (!name[0]) {
         GetPrivateProfileStringW(L"vr", L"mw5_cockpit", L"", name, 64, (g_dir + L"mw4vr.ini").c_str());

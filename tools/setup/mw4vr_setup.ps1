@@ -358,7 +358,7 @@ Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 [Windows.Forms.Application]::EnableVisualStyles()
 $f = New-Object Windows.Forms.Form
 $f.Text = 'MW4VR Setup'
-$f.ClientSize = New-Object Drawing.Size(720, 740)
+$f.ClientSize = New-Object Drawing.Size(720, 770)
 $f.StartPosition = 'CenterScreen'
 $f.FormBorderStyle = 'FixedDialog'
 $f.MaximizeBox = $false
@@ -408,6 +408,7 @@ $cLink = Add-Check 'Shortcut "MechWarrior 4 VR" on the desktop' $true
 $script:y += 6
 [void](Add-Label '3. MechWarrior 5 cockpits (optional - only if you own MechWarrior 5: Mercenaries)' 14 690 $true)
 $cMw5 = Add-Check 'Export my MechWarrior 5 cockpits and convert them for MW4VR (about 20 minutes, 6 GB while it runs)' $false
+$cMods = Add-Check 'Also the cockpits of the MechWarrior 5 mods installed there (some more minutes)' $false 32
 [void](Add-Label '...\MW5Mercs\Content\Paks of MechWarrior 5: Mercenaries:')
 $tPaks, $bPaks = Add-PathRow $(if ($saved['paks'] -and (Test-Path $saved['paks'])) { $saved['paks'] } else { Find-Mw5Paks })
 $lMw5 = Add-Label ''
@@ -440,13 +441,14 @@ $bClose.Text = 'Close'; $bClose.Location = New-Object Drawing.Point(586, $script
 $f.Controls.AddRange(@($bGo, $bClose)); $script:y += 38
 $log = New-Object Windows.Forms.TextBox
 $log.Multiline = $true; $log.ReadOnly = $true; $log.ScrollBars = 'Vertical'
-$log.Location = New-Object Drawing.Point(14, $script:y); $log.Size = New-Object Drawing.Size(692, (740 - $script:y - 12))
+$log.Location = New-Object Drawing.Point(14, $script:y); $log.Size = New-Object Drawing.Size(692, (770 - $script:y - 12))
 $log.Font = New-Object Drawing.Font('Consolas', 8.5)
 $f.Controls.Add($log)
 $script:Say = { param($t) $log.AppendText($t + "`r`n") }
 
 $script:Py = $null
 $script:PyMods = $false
+$script:ModsDir = ''
 function Show-Game {
     $g = $tGame.Text.Trim()
     if (-not (Test-Game $g)) { $lGame.Text = 'MW4Mercs.exe is not in this folder.'; $lGame.ForeColor = 'Firebrick'; return }
@@ -485,6 +487,14 @@ function Show-Mw5 {
     if ($have) { $lMw5.Text = 'MechWarrior 5: Mercenaries found.'; $lMw5.ForeColor = 'DarkGreen' }
     else { $lMw5.Text = 'MechWarrior 5: Mercenaries was not found on this PC. Buy or install it, then choose its Paks folder or start the setup again:'; $lMw5.ForeColor = 'DarkOrange' }
     $bEpic.Visible = $bSteam.Visible = (-not $have) # the stores only for who has not got it
+    # mods: the folder Mods beside Content, with something in it
+    $script:ModsDir = ''
+    if ($have) {
+        $m = Join-Path (Split-Path -Parent (Split-Path -Parent $p.TrimEnd(''))) 'Mods'
+        if ((Test-Path $m) -and @(Get-ChildItem $m -Directory -ErrorAction SilentlyContinue).Count) { $script:ModsDir = $m }
+    }
+    $cMods.Enabled = [bool]$script:ModsDir -and $cMw5.Checked
+    if (-not $cMods.Enabled) { $cMods.Checked = $false }
 }
 $bPySite.Add_Click({ Start-Process 'https://www.python.org/downloads/windows/' })
 $bPyAgain.Add_Click({ Update-Path; Show-Python; if ($script:Py) { Say "Python found: $($script:Py.Exe)" } else { Say 'Python 3 is still not found.' } })
@@ -506,6 +516,7 @@ $bPyGet.Add_Click({
     if ($script:Py) { Say "Python found: $($script:Py.Exe)" } else { Say 'Python 3 is still not found - install it from python.org ("Add to PATH"), then "Look again".' }
 })
 $tPaks.Add_TextChanged({ Show-Mw5 })
+$cMw5.Add_CheckedChanged({ Show-Mw5 })
 $bEpic.Add_Click({ Start-Process 'https://store.epicgames.com/p/mechwarrior-5' })
 $bSteam.Add_Click({ Start-Process 'https://store.steampowered.com/app/784080' })
 $tGame.Add_TextChanged({ Show-Game })
@@ -599,6 +610,7 @@ $bGo.Add_Click({
     if ($script:Py.Arg) { $a += @('-PythonArg', $script:Py.Arg) }
     if (-not $script:PyMods) { $a += '-Pip' }
     if ($cKeep.Checked) { $a += '-DeleteExport' }
+    if ($cMods.Checked -and $script:ModsDir) { $a += @('-Mods', "`"$($script:ModsDir)`"") }
     $script:Job = Start-Process powershell -ArgumentList $a -WindowStyle Hidden -PassThru
     $timer.Start()
 })

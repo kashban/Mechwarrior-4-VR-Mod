@@ -106,6 +106,11 @@ Every mech has a cockpit to start with (mw4vr_cockpit_map.ini): its own where Me
 otherwise one with a similar face. At the start of a battle the mod shows the mech's and the cockpit's
 name.
 
+Cockpits of MechWarrior 5 mods: the setup can export those too ("Also the cockpits of the MechWarrior 5
+mods installed there"; by hand: export_cockpits.ps1 -Mods <...\MW5Mercs\Mods>). They are often plainer
+than the game's own - painted in one colour a part, without pictures. A line of mw4vr_cockpit_map.ini
+may name several cockpits, the best first (kodiak=kodiak,atlas): the first there is a file of is used.
+
   Ctrl+F11                     the cockpits on / off
   Ctrl+Alt+F11 (Shift: back)   the next cockpit; remembered for the mech you sit in
   Ctrl+Alt+arrows              your eye's place in the cockpit
@@ -274,6 +279,12 @@ UE Viewer (umodel), Python 3 mit numpy und Pillow, etwa 6 GB Plattenplatz. Aus "
 
 Jeder Mech hat ein Cockpit vorab (mw4vr_cockpit_map.ini): sein eigenes, wo MechWarrior 5 es hat,
 sonst eines mit ähnlichem Gesicht. Bei Gefechtsbeginn zeigt der Mod Mech- und Cockpit-Namen.
+
+Cockpits aus MechWarrior-5-Mods: Das Setup kann auch die exportieren ("Also the cockpits of the
+MechWarrior 5 mods installed there"; von Hand: export_cockpits.ps1 -Mods <...\MW5Mercs\Mods>). Sie sind
+oft schlichter als die des Spiels - je Teil einfarbig lackiert, ohne Bilder. Eine Zeile in
+mw4vr_cockpit_map.ini darf mehrere Cockpits nennen, das beste zuerst (kodiak=kodiak,atlas): benutzt
+wird das erste, für das es eine Datei gibt.
 
   Strg+F11                     Cockpits an / aus
   Strg+Alt+F11 (Umschalt: zurück)   nächstes Cockpit; für den Mech gemerkt, in dem du sitzt
