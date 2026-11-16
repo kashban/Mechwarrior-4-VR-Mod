@@ -204,7 +204,7 @@ static inline bool mcZoomWindow(const McHud &h, float *zr) {
 // (top strip, side columns) far and the torso mark moved up, without monitors the near frame; the cross-hair
 // (small: a part of its own, while no zoom window is open); the zoom window far and opaque; without monitors the
 // other windows near and opaque.
-static inline void mcHudRectsWith(const McHud &h, McRects &q, bool small) {
+static inline void mcHudRectsWith(const McHud &h, McRects &q, bool shrink) {
     q.n = 0;
     float zr[4], zc[4]; // the zoom window, and with its frame: what is cut out of the rest
     const float *cut = nullptr;
@@ -244,7 +244,7 @@ static inline void mcHudRectsWith(const McHud &h, McRects &q, bool small) {
         }
     }
     const float *cr = h.cross;
-    if (small && !cut && cr[2] > cr[0] && cr[3] > cr[1]) mcMoveOut(q, cr, MC_FAR_SMALL);
+    if (shrink && !cut && cr[2] > cr[0] && cr[3] > cr[1]) mcMoveOut(q, cr, MC_FAR_SMALL);
     if (cut) mcAdd(q, zr[0], zr[1], zr[2], zr[3], MC_FAR_OPAQUE);
     for (int i = 0; i < h.nCam && !h.screens; ++i) { // the other windows (the target's view), over the frame
         float cu = 0.5f * (h.cam[i][0] + h.cam[i][2]);
