@@ -55,7 +55,7 @@ mw4vr.ini              its settings, a comment at each key; most are read again 
 dinput.dll             cures the game dying or hanging at start-up on PCs with certain USB devices
                        (it leaves "other HID devices" out of the game's device list). Not needed if you
                        never had that trouble.
-mw4vr_start.cmd/.ps1   start the game without the administrator prompt, and again if it does not come up
+mw4vr_start.cmd/.ps1   start the game without the administrator prompt
 mw4vr_cockpit_map.ini  which MechWarrior 5 cockpit each mech gets (only with converted cockpits)
 mw4vr_mechs.ini        written by the mod: what it remembers for each mech
 mw4vr.log              written by the mod: what it did; send it along when you report a fault
@@ -151,7 +151,7 @@ Nothing in the headset        Is the OpenXR runtime 32-bit capable and active? m
                               failed. enabled=1 in mw4vr.ini?
 The picture is one frame late or smeared      taa=0 in mw4hook.ini.
 Things vanish at the picture's edge           fov=130 in mw4hook.ini.
-The game dies at start-up     Use dinput.dll and mw4vr_start.cmd.
+The game dies at start-up     Is the mod's dinput.dll in the game's folder?
 Windows asks for administrator rights         Start with mw4vr_start.cmd, not the exe.
 The cockpit is too large or small, you sit wrong      Ctrl+Ins / Del and Ctrl+arrows, then Ctrl+F10.
 A new build of MW4Engine      Parts of MW4VR switch themselves off until MW4VR is updated.
@@ -242,7 +242,7 @@ mw4vr.ini              Einstellungen, Kommentar an jedem Schlüssel; die meisten
 dinput.dll             behebt Abstürze und Hänger beim Spielstart auf PCs mit bestimmten USB-Geräten
                        (lässt "sonstige HID-Geräte" aus der Geräteliste des Spiels). Unnötig, wenn du
                        das Problem nie hattest.
-mw4vr_start.cmd/.ps1   startet das Spiel ohne Administrator-Abfrage und erneut, falls es nicht hochkommt
+mw4vr_start.cmd/.ps1   startet das Spiel ohne Administrator-Abfrage
 mw4vr_cockpit_map.ini  welches MechWarrior-5-Cockpit jeder Mech bekommt (nur mit umgewandelten Cockpits)
 mw4vr_mechs.ini        schreibt der Mod: was er sich je Mech merkt
 mw4vr.log              schreibt der Mod: was er getan hat; bei Fehlermeldungen mitschicken
@@ -339,7 +339,7 @@ Nichts im Headset             OpenXR-Laufzeit 32-Bit-fähig und aktiv? mw4vr.log
                               enabled=1 in mw4vr.ini?
 Bild hängt ein Bild nach oder schmiert        taa=0 in mw4hook.ini.
 Dinge verschwinden am Bildrand                fov=130 in mw4hook.ini.
-Spiel stürzt beim Start ab    dinput.dll und mw4vr_start.cmd benutzen.
+Spiel stürzt beim Start ab    Liegt die dinput.dll des Mods im Spielordner?
 Windows fragt nach Administratorrechten       Mit mw4vr_start.cmd starten, nicht mit der exe.
 Cockpit zu groß oder klein, Sitz falsch       Strg+Einfg / Entf und Strg+Pfeile, dann Strg+F10.
 Neuer Build von MW4Engine     Teile von MW4VR schalten sich ab, bis MW4VR angepasst ist.

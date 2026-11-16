@@ -46,7 +46,7 @@ What the files are:
   the heap while it lists "other HID devices" (light controllers, receivers). This one lists only mice, keyboards
   and joysticks. It writes `mw4vr_dinput.log`. Leave it out if you never had that trouble.
 - `mw4vr_start.cmd` - starts the game without the administrator prompt its manifest asks for (the game does not
-  need the rights while its folder is writable), and starts it again if it does not come up.
+  need the rights while its folder is writable).
 - `mw4vr_cockpit_map.ini` - which MechWarrior 5 cockpit each mech gets (only used with converted cockpits, below).
 - `trees` (if the package has it) - more kinds of trees and shrubs for MW4Engine's terrain clutter, made from
   Poly Haven's plant models (CC0). Copy its `Content` folder over the game's and add the text of
