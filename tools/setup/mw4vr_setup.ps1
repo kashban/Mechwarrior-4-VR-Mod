@@ -310,6 +310,24 @@ function Find-Python([ref]$Modules) {
     return $null
 }
 
+# The folders chosen in the window, kept for the next start of the setup (also of a later package's):
+# %APPDATA%\MW4VR\setup.txt, lines "name=path"
+function Get-PathsFile { return (Join-Path $env:APPDATA 'MW4VR\setup.txt') }
+function Read-Paths {
+    $s = @{}
+    $p = Get-PathsFile
+    if (Test-Path $p) { foreach ($l in Get-Content $p -Encoding UTF8) { $i = $l.IndexOf('='); if ($i -gt 0) { $s[$l.Substring(0, $i)] = $l.Substring($i + 1) } } }
+    return $s
+}
+function Write-Paths($Paths) {
+    try {
+        $p = Get-PathsFile
+        New-Item -ItemType Directory (Split-Path -Parent $p) -Force | Out-Null
+        $lines = @($Paths.Keys | Sort-Object | Where-Object { $Paths[$_] } | ForEach-Object { "$_=$($Paths[$_])" })
+        [IO.File]::WriteAllLines($p, [string[]]$lines, (New-Object Text.UTF8Encoding($false)))
+    } catch { }
+}
+
 if ($NoGui) { return }
 
 # ---- the window ---------------------------------------------------------------------------------
@@ -352,7 +370,8 @@ function Pick-Folder([Windows.Forms.TextBox]$t, [string]$what) {
 [void](Add-Label '1. The game' 14 690 $true)
 [void](Add-Label "The folder of MechWarrior 4: Mercenaries (with MW4Mercs.exe and MW4Engine DX11's mw4hook.dll):")
 $guess = ''
-foreach ($g in @((Split-Path -Parent $script:Pkg), (Split-Path -Parent (Split-Path -Parent $script:Pkg)))) { if ($g -and (Test-Game $g)) { $guess = $g } }
+$saved = Read-Paths
+foreach ($g in @((Split-Path -Parent $script:Pkg), (Split-Path -Parent (Split-Path -Parent $script:Pkg)), $saved['game'])) { if ($g -and (Test-Game $g)) { $guess = $g } }
 $tGame, $bGame = Add-PathRow $guess
 $lGame = Add-Label ''
 $script:y += 6
@@ -367,7 +386,7 @@ $script:y += 6
 [void](Add-Label '3. MechWarrior 5 cockpits (optional - only if you own MechWarrior 5: Mercenaries)' 14 690 $true)
 $cMw5 = Add-Check 'Export my MechWarrior 5 cockpits and convert them for MW4VR (about 20 minutes, 6 GB while it runs)' $false
 [void](Add-Label '...\MW5Mercs\Content\Paks of MechWarrior 5: Mercenaries:')
-$tPaks, $bPaks = Add-PathRow (Find-Mw5Paks)
+$tPaks, $bPaks = Add-PathRow $(if ($saved['paks'] -and (Test-Path $saved['paks'])) { $saved['paks'] } else { Find-Mw5Paks })
 $lMw5 = Add-Label ''
 $bEpic = New-Object Windows.Forms.Button
 $bEpic.Text = 'MechWarrior 5 in the Epic Games Store'; $bEpic.Location = New-Object Drawing.Point(14, $script:y); $bEpic.Size = New-Object Drawing.Size(250, 25)
@@ -376,7 +395,7 @@ $bSteam.Text = 'MechWarrior 5 on Steam'; $bSteam.Location = New-Object Drawing.P
 $f.Controls.AddRange(@($bEpic, $bSteam)); $script:y += 32
 [void](Add-Label 'UE Viewer (umodel_64.exe) - a free tool by Gildor; download and unpack it, then choose the exe:')
 $um = Join-Path $script:Pkg 'cockpit_tools\umodel\umodel_64.exe'
-$tUm, $bUm = Add-PathRow $(if (Test-Path $um) { $um } else { '' })
+$tUm, $bUm = Add-PathRow $(if (Test-Path $um) { $um } elseif ($saved['umodel'] -and (Test-Path $saved['umodel'])) { $saved['umodel'] } else { '' })
 $bGet = New-Object Windows.Forms.Button
 $bGet.Text = 'Open the UE Viewer download page'; $bGet.Location = New-Object Drawing.Point(14, $script:y); $bGet.Size = New-Object Drawing.Size(230, 25)
 $f.Controls.Add($bGet); $script:y += 30
@@ -472,6 +491,16 @@ $bUm.Add_Click({
 })
 $bGet.Add_Click({ Start-Process 'https://www.gildor.org/en/projects/umodel' })
 $bClose.Add_Click({ $f.Close() })
+# what stands in the three fields is kept when the installation starts and when the window closes
+function Save-Fields {
+    if ($env:MW4VR_SETUP_TEST -and -not $env:MW4VR_SETUP_TEST_SAVE) { return } # (a test leaves the player's file alone)
+    $p = Read-Paths
+    $g = $tGame.Text.Trim(); if (Test-Game $g) { $p['game'] = $g }
+    $k = $tPaks.Text.Trim(); if ($k -and (Test-Path $k)) { $p['paks'] = $k }
+    $u = $tUm.Text.Trim(); if ($u -and (Test-Path $u)) { $p['umodel'] = $u }
+    Write-Paths $p
+}
+$f.Add_FormClosing({ Save-Fields })
 
 $script:Job = $null
 $script:JobOut = ''
@@ -515,6 +544,7 @@ $bGo.Add_Click({
         if ($why) { [void][Windows.Forms.MessageBox]::Show($f, $why, 'MW4VR Setup'); return }
     }
     $bGo.Enabled = $false
+    Save-Fields
     try {
         Say "Installing into $g"
         if ($cMod.Checked) { Install-Mod $g $cDinput.Checked }
