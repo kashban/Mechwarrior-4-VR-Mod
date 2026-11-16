@@ -40,6 +40,10 @@ hud_top=0.12
 hud_bottom=0.77
 ; size of the top and bottom HUD strips against the game image (smaller = closer to the middle)
 hud_panel_scale=0.6
+; 1 = without an MW5 cockpit the HUD's parts (radar, target, damage, lance list, weapons, top strip) are panes of
+; their own before the pilot, in a row below the view ahead, moved with the Ctrl+Alt keys like those on a cockpit's
+; glass (stored as hud_part_<name> = degrees right, up, width, metres away). 0 = the flat near frame instead.
+hud_parts=1
 ; sides of the far middle (0..1 of the width); left and right of it the HUD is near, like the strips
 hud_left=0.25
 hud_right=0.72
