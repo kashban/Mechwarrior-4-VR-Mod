@@ -111,8 +111,10 @@ mods installed there"; by hand: export_cockpits.ps1 -Mods <...\MW5Mercs\Mods>). 
 than the game's own - painted in one colour a part, without pictures. MechWarrior 5 draws such painted
 metal with patches, worn paint and gloss of its own; the mod does the like ([vr] mw5_paint=0..1 how
 strongly, 0: plain colours; mw5_paint_wear=0..1 how much paint is worn off). Cockpits converted before
-v11.42 lack the mark for it: delete their .mwc and run the setup again. A line of mw4vr_cockpit_map.ini
-may name several cockpits, the best first (kodiak=kodiak,atlas): the first there is a file of is used.
+v11.42 lack the mark for it: delete their .mwc and run the setup again. Even so they stay coarse beside
+the game's own, so mw4vr_cockpit_map.ini names none of them: choose one with Ctrl+Alt+F11, or write it
+into that file. A line there may name several cockpits, the best first (kodiak=kodiak,atlas): the first
+there is a file of is used.
 
   Ctrl+F11                     the cockpits on / off
   Ctrl+Alt+F11 (Shift: back)   the next cockpit; remembered for the mech you sit in
@@ -303,9 +305,10 @@ oft schlichter als die des Spiels - je Teil einfarbig lackiert, ohne Bilder. Mec
 solches lackiertes Metall mit eigenen Flecken, abgenutztem Lack und Glanz; der Mod macht es ähnlich
 ([vr] mw5_paint=0..1 wie stark, 0: reine Farben; mw5_paint_wear=0..1 wie viel Lack abgenutzt ist).
 Vor v11.42 umgewandelten Cockpits fehlt die Markierung dafür: ihre .mwc löschen und das Setup noch
-einmal starten. Eine Zeile in
-mw4vr_cockpit_map.ini darf mehrere Cockpits nennen, das beste zuerst (kodiak=kodiak,atlas): benutzt
-wird das erste, für das es eine Datei gibt.
+einmal starten. Auch so bleiben sie grob neben denen des Spiels, darum nennt mw4vr_cockpit_map.ini
+keines davon: mit Strg+Alt+F11 wählen oder in die Datei eintragen. Eine Zeile dort darf mehrere
+Cockpits nennen, das beste zuerst (kodiak=kodiak,atlas): benutzt wird das erste, für das es eine
+Datei gibt.
 
   Strg+F11                     Cockpits an / aus
   Strg+Alt+F11 (Umschalt: zurück)   nächstes Cockpit; für den Mech gemerkt, in dem du sitzt
