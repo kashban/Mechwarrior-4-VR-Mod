@@ -26,6 +26,8 @@ $out = Join-Path $root 'release'
 $dir = Join-Path $out $name
 if (Test-Path $dir) { Remove-Item $dir -Recurse -Force }
 New-Item -ItemType Directory (Join-Path $dir 'game'), (Join-Path $dir 'cockpit_tools') -Force | Out-Null
+# the setup window
+Copy-Item (Join-Path $root 'tools\setup\MW4VR_Setup.cmd'), (Join-Path $root 'tools\setup\mw4vr_setup.ps1'), (Join-Path $root 'tools\setup\mw4vr_setup_cockpits.ps1') $dir
 # the players' readme (English and German) on top and in the game's folder; README.md is the developers'
 Copy-Item (Join-Path $root 'docs\mw4vr_readme.txt'), (Join-Path $root 'README.md'), (Join-Path $root 'LICENSE') $dir
 Copy-Item (Join-Path $root 'docs\mw4vr_readme.txt') (Join-Path $dir 'game')

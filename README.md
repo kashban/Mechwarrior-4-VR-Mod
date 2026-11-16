@@ -27,7 +27,9 @@ It sits behind the *MW4Engine DX11* renderer mod (`mw4hook.dll`, by another auth
 
 ## Install
 
-From a release package (`MW4VR-v<version>.zip`):
+From a release package (`MW4VR-v<version>.zip`): start `MW4VR_Setup.cmd`. Its window asks for the game's folder
+and does the steps below, installs the trees and, if you own MechWarrior 5: Mercenaries, exports and converts its
+cockpits. By hand:
 
 1. In `mw4hook.ini` (MW4Engine DX11): `antihack=0`, `fov=130`, `vsync=0`, `taa=0`, `mode=windowed` and a square
    `resolution` (for example `1300x1300`; the mod renders at `render_height` whatever the window's size).

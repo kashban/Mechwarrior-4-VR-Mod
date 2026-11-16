@@ -17,6 +17,11 @@ WHAT YOU NEED
 
 INSTALL
 -------
+The easy way: unpack the package anywhere and start MW4VR_Setup.cmd. Its window asks for the game's
+folder and does the steps below; it can also install the trees and export and convert your
+MechWarrior 5 cockpits. Settings you already have are kept.
+
+By hand:
 1. In mw4hook.ini set:
        antihack=0
        fov=130
@@ -152,6 +157,11 @@ VORAUSSETZUNGEN
 
 INSTALLATION
 ------------
+Der einfache Weg: Paket irgendwo entpacken und MW4VR_Setup.cmd starten. Das Fenster fragt nach dem
+Spielordner und erledigt die Schritte unten; es kann auch die Bäume installieren und deine
+MechWarrior-5-Cockpits exportieren und umwandeln. Vorhandene Einstellungen bleiben erhalten.
+
+Von Hand:
 1. In mw4hook.ini eintragen:
        antihack=0
        fov=130
