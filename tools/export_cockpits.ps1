@@ -19,6 +19,29 @@ New-Item -ItemType Directory -Force $Out | Out-Null
 $list = & $Umodel "-path=$Paks" '-game=ue4.26' '-list' '*_Cockpit_SKM*' 2>&1
 $pkgs = $list | ForEach-Object { if ($_ -match '(/Game/\S*/Model/Cockpit/(\w+)_Cockpit_SKM)\.uasset') { [pscustomobject]@{ Pkg = $Matches[1]; Mech = $Matches[2] } } } |
     Sort-Object Pkg -Unique
+# A cockpit whose mesh has another name (the Arctic Wolf's is "acw"): every cockpit folder without a *_Cockpit_SKM
+# is looked into, and the package in it that holds a skeletal mesh is the cockpit.
+$tmp = Join-Path $Out 'packages.txt'
+# (into a file: the list has millions of lines, too many to pass through PowerShell one by one)
+$p = Start-Process -FilePath $Umodel -ArgumentList "`"-path=$Paks`"", '-game=ue4.26', '-list', '*' -NoNewWindow -Wait -PassThru `
+    -RedirectStandardOutput $tmp -RedirectStandardError "$tmp.err"
+Remove-Item "$tmp.err" -ErrorAction SilentlyContinue
+$inDirs = @(Select-String -Path $tmp -Pattern '^(/Game/\S*/Mechs/(?:CLANS/)?(\w+)/Model/Cockpit)/([^/\s]+)\.uasset\s*$' | ForEach-Object {
+        [pscustomobject]@{ Dir = $_.Matches[0].Groups[1].Value; Mech = $_.Matches[0].Groups[2].Value; Pkg = $_.Matches[0].Groups[1].Value + '/' + $_.Matches[0].Groups[3].Value } })
+Remove-Item $tmp -ErrorAction SilentlyContinue
+$known = @{}
+foreach ($p in $pkgs) { $known[($p.Pkg -replace '/[^/]+$', '').ToLower()] = 1 }
+foreach ($grp in ($inDirs | Where-Object { -not $known[$_.Dir.ToLower()] } | Group-Object Dir)) {
+    foreach ($name in @($grp.Group | ForEach-Object { $_.Pkg } | Sort-Object -Unique)) { # (-list takes one package)
+        $objs = & $Umodel "-path=$Paks" '-game=ue4.26' '-list' $name 2>&1 | ForEach-Object { "$_" }
+        if ($objs -match '^\s+\d+\s+[0-9A-Fa-f]+\s+[0-9A-Fa-f]+\s+SkeletalMesh\s') {
+            $pkgs = @($pkgs) + [pscustomobject]@{ Pkg = $name; Mech = $grp.Group[0].Mech }
+            "a cockpit under another name: $name"
+            break # (one a folder)
+        }
+    }
+}
+$pkgs = @($pkgs | Sort-Object Pkg -Unique)
 if ($Only.Count) { $pkgs = $pkgs | Where-Object { $Only -contains $_.Mech } }
 "{0} cockpits" -f @($pkgs).Count
 
