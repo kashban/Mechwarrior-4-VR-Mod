@@ -434,7 +434,26 @@ static void mechOnPresent(bool inBattle, bool zoomed) {
         g_mechNextFrame = g_frame + 60; // (the cockpit known so far stays in use until this one is recognised)
     }
     if (inBattle) g_mechLastCamFrame = g_frame;
-    if (measured) {
+    // the game tells the mech's name and there is a profile of it: no need to look at the cockpit's shape,
+    // so its values and its MechWarrior 5 cockpit are there from the battle's first picture
+    if (g_mechSearching && inBattle) {
+        char mech[32];
+        wchar_t model[32];
+        if (gmPlayerMech(mech, 32)) {
+            swprintf(model, 32, L"%hs", mech);
+            for (int i = 0; i < g_mechN; ++i) {
+                if (_wcsicmp(model, g_mechs[i].model)) continue;
+                g_mechSearching = false;
+                g_mgSampleN = 0;
+                g_mechCur = i;
+                mechReload(i);
+                logf("mech: profile %d '%s' by the mech's name, at once (%s)", i + 1, narrow(g_mechs[i].name).c_str(),
+                     g_mechs[i].tuned ? "set by hand" : "fitted from the others");
+                break;
+            }
+        }
+    }
+    if (measured && g_mechSearching) {
         static int logs;
         if (logs < 6) {
             ++logs;

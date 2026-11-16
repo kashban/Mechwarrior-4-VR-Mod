@@ -633,8 +633,11 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
     }
     if (!g_vr.ok) return;
     static DWORD lastIni;
-    if (GetTickCount() - lastIni >= 2000) { // the [vr] values can be tuned while playing
+    static int lastMech = -2;
+    // the [vr] values can be tuned while playing; another mech's values at once
+    if (GetTickCount() - lastIni >= 2000 || lastMech != g_mechCur) {
         lastIni = GetTickCount();
+        lastMech = g_mechCur;
         vrReadIni();
         g_eyeOffsetM = g_vr.eyeOffset;
     }
