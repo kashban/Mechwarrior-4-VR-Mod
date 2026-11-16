@@ -381,6 +381,14 @@ $bGet = New-Object Windows.Forms.Button
 $bGet.Text = 'Open the UE Viewer download page'; $bGet.Location = New-Object Drawing.Point(14, $script:y); $bGet.Size = New-Object Drawing.Size(230, 25)
 $f.Controls.Add($bGet); $script:y += 30
 $lPy = Add-Label ''
+# only while Python is missing: get it (winget, or its page), then look again
+$bPyGet = New-Object Windows.Forms.Button
+$bPyGet.Text = 'Install Python 3 now'; $bPyGet.Location = New-Object Drawing.Point(14, $script:y); $bPyGet.Size = New-Object Drawing.Size(170, 25)
+$bPySite = New-Object Windows.Forms.Button
+$bPySite.Text = 'Open python.org'; $bPySite.Location = New-Object Drawing.Point(192, $script:y); $bPySite.Size = New-Object Drawing.Size(130, 25)
+$bPyAgain = New-Object Windows.Forms.Button
+$bPyAgain.Text = 'Look again'; $bPyAgain.Location = New-Object Drawing.Point(330, $script:y); $bPyAgain.Size = New-Object Drawing.Size(110, 25)
+$f.Controls.AddRange(@($bPyGet, $bPySite, $bPyAgain)); $script:y += 30
 $cKeep = Add-Check 'Delete the exported files (2 GB) when the cockpits are converted' $true
 $script:y += 6
 $bGo = New-Object Windows.Forms.Button
@@ -415,9 +423,16 @@ function Show-Python {
     $m = $false
     $script:Py = Find-Python ([ref]$m)
     $script:PyMods = $m
-    if (-not $script:Py) { $lPy.Text = 'Python 3 was not found - needed for the cockpits: install it from python.org ("Add to PATH"), then start the setup again.'; $lPy.ForeColor = 'Firebrick' }
-    elseif (-not $m) { $lPy.Text = 'Python 3 found; its packages numpy and Pillow are missing - the setup installs them (pip) when it converts.'; $lPy.ForeColor = 'DarkOrange' }
+    # red: something for the player to do; green: nothing (missing packages are the setup's work)
+    if (-not $script:Py) { $lPy.Text = 'Python 3 is MISSING - needed for the cockpits only. Install it (with "Add to PATH"), then "Look again":'; $lPy.ForeColor = 'Firebrick' }
+    elseif (-not $m) { $lPy.Text = 'Python 3 found. The setup will add its packages numpy and Pillow by itself when it converts.'; $lPy.ForeColor = 'DarkGreen' }
     else { $lPy.Text = 'Python 3 with numpy and Pillow found.'; $lPy.ForeColor = 'DarkGreen' }
+    $bPyGet.Visible = $bPySite.Visible = $bPyAgain.Visible = (-not $script:Py)
+    $bPyGet.Enabled = [bool](Get-Command winget -ErrorAction SilentlyContinue)
+}
+# a program installed while the setup runs is on the PATH of new processes only: read the PATH anew
+function Update-Path {
+    $env:PATH = ([Environment]::GetEnvironmentVariable('Path', 'Machine'), [Environment]::GetEnvironmentVariable('Path', 'User') | Where-Object { $_ }) -join ';'
 }
 # without MechWarrior 5: Mercenaries on this PC the cockpits cannot be chosen - the stores' pages are a click away
 function Show-Mw5 {
@@ -427,7 +442,23 @@ function Show-Mw5 {
     if (-not $have) { $cMw5.Checked = $false }
     if ($have) { $lMw5.Text = 'MechWarrior 5: Mercenaries found.'; $lMw5.ForeColor = 'DarkGreen' }
     else { $lMw5.Text = 'MechWarrior 5: Mercenaries was not found on this PC. Buy or install it, then choose its Paks folder or start the setup again:'; $lMw5.ForeColor = 'DarkOrange' }
+    $bEpic.Visible = $bSteam.Visible = (-not $have) # the stores only for who has not got it
 }
+$bPySite.Add_Click({ Start-Process 'https://www.python.org/downloads/windows/' })
+$bPyAgain.Add_Click({ Update-Path; Show-Python; if ($script:Py) { Say "Python found: $($script:Py.Exe)" } else { Say 'Python 3 is still not found.' } })
+$bPyGet.Add_Click({
+    # Windows' own package manager, in a console of its own so that its questions and progress can be seen
+    Say 'Installing Python 3.12 with winget - follow its window; when it has closed, the setup looks again.'
+    $bPyGet.Enabled = $false
+    try {
+        $p = Start-Process winget -ArgumentList 'install', '-e', '--id', 'Python.Python.3.12', '--scope', 'user', '--accept-package-agreements', '--accept-source-agreements' -PassThru
+        while (-not $p.HasExited) { [Windows.Forms.Application]::DoEvents(); Start-Sleep -Milliseconds 150 }
+        Say "winget has finished (code $($p.ExitCode))."
+    } catch { Say "winget could not be started: $($_.Exception.Message) - use python.org instead." }
+    Update-Path
+    Show-Python
+    if ($script:Py) { Say "Python found: $($script:Py.Exe)" } else { Say 'Python 3 is still not found - install it from python.org ("Add to PATH"), then "Look again".' }
+})
 $tPaks.Add_TextChanged({ Show-Mw5 })
 $bEpic.Add_Click({ Start-Process 'https://store.epicgames.com/p/mechwarrior-5' })
 $bSteam.Add_Click({ Start-Process 'https://store.steampowered.com/app/784080' })
