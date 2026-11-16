@@ -28,7 +28,7 @@ renderer mod and needs it.
 ## Requirements
 
 - MechWarrior 4: Mercenaries, MekTek MekPak 3.1c
-- MW4Engine DX11, **build 20261107_ea16ef2** (the mod checks the build and switches parts of itself off with
+- MW4Engine DX11 (https://www.moddb.com/mods/mw4-mercenaries-dx11-renderer-overhaul), **build 20261107_ea16ef2**, that is v1.0.7 (the mod checks the build and switches parts of itself off with
   any other)
 - A VR headset with a 32-bit OpenXR runtime. Tested with a Quest 3 over Virtual Desktop (VDXR) only.
 - A fast graphics card: every frame is drawn twice at a high resolution.
@@ -39,7 +39,7 @@ renderer mod and needs it.
 - Tested on one PC and one headset. Other runtimes (SteamVR, Meta Link) are untried.
 - No motion controllers: mouse, keyboard and joystick as in the flat game.
 - Menus and films are shown on a screen in front of you.
-- The MechWarrior 5 cockpits need your own copy of that game, UE Viewer and about 6 GB of disk space.
+- The MechWarrior 5 cockpits need your own copy of that game (Epic Games Store: https://store.epicgames.com/p/mechwarrior-5, Steam: https://store.steampowered.com/app/784080), UE Viewer and about 6 GB of disk space.
 
 ## Install
 

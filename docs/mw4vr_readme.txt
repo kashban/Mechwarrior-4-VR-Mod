@@ -14,6 +14,12 @@ WHAT YOU NEED
 - A VR headset with a 32-bit OpenXR runtime. Tested with a Quest 3 over Virtual Desktop (VDXR) only.
 - A fast graphics card: every frame is drawn twice.
 
+Where to get them:
+  MW4Engine DX11         https://www.moddb.com/mods/mw4-mercenaries-dx11-renderer-overhaul   (v1.0.7)
+  MechWarrior 5: Mercenaries, for its cockpits only (optional):
+      Epic Games Store   https://store.epicgames.com/p/mechwarrior-5
+      Steam              https://store.steampowered.com/app/784080
+
 
 INSTALL
 -------
@@ -153,6 +159,12 @@ VORAUSSETZUNGEN
   von MW4VR selbst ab (steht in mw4vr.log, Zeilen mit "abi:").
 - VR-Headset mit 32-Bit-OpenXR-Laufzeit. Getestet nur mit Quest 3 über Virtual Desktop (VDXR).
 - Schnelle Grafikkarte: jedes Bild wird zweimal gezeichnet.
+
+Bezugsquellen:
+  MW4Engine DX11         https://www.moddb.com/mods/mw4-mercenaries-dx11-renderer-overhaul   (v1.0.7)
+  MechWarrior 5: Mercenaries, nur für dessen Cockpits (optional):
+      Epic Games Store   https://store.epicgames.com/p/mechwarrior-5
+      Steam              https://store.steampowered.com/app/784080
 
 
 INSTALLATION

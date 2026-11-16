@@ -20,10 +20,11 @@ It sits behind the *MW4Engine DX11* renderer mod (`mw4hook.dll`, by another auth
 ## Requirements
 
 - MechWarrior 4: Mercenaries, MekTek MekPak 3.1c
-- MW4Engine DX11 (`mw4hook.dll`) **build 20261107_ea16ef2**. The mod reaches into this build's memory; with any
+- [MW4Engine DX11](https://www.moddb.com/mods/mw4-mercenaries-dx11-renderer-overhaul) (`mw4hook.dll`) **build 20261107_ea16ef2** (v1.0.7). The mod reaches into this build's memory; with any
   other build those parts switch themselves off (see `mw4vr.log`, lines starting `abi:`).
 - A 32-bit OpenXR runtime. Tested with Virtual Desktop (VDXR) and a Quest 3 only.
-- For the MechWarrior 5 cockpits: your own copy of MechWarrior 5: Mercenaries.
+- For the MechWarrior 5 cockpits: your own copy of MechWarrior 5: Mercenaries
+  ([Epic Games Store](https://store.epicgames.com/p/mechwarrior-5), [Steam](https://store.steampowered.com/app/784080)).
 
 ## Install
 

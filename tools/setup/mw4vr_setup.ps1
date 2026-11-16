@@ -173,7 +173,7 @@ Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 [Windows.Forms.Application]::EnableVisualStyles()
 $f = New-Object Windows.Forms.Form
 $f.Text = 'MW4VR Setup'
-$f.ClientSize = New-Object Drawing.Size(720, 690)
+$f.ClientSize = New-Object Drawing.Size(720, 740)
 $f.StartPosition = 'CenterScreen'
 $f.FormBorderStyle = 'FixedDialog'
 $f.MaximizeBox = $false
@@ -224,6 +224,12 @@ $script:y += 6
 $cMw5 = Add-Check 'Export my MechWarrior 5 cockpits and convert them for MW4VR (about 20 minutes, 6 GB while it runs)' $false
 [void](Add-Label '...\MW5Mercs\Content\Paks of MechWarrior 5: Mercenaries:')
 $tPaks, $bPaks = Add-PathRow (Find-Mw5Paks)
+$lMw5 = Add-Label ''
+$bEpic = New-Object Windows.Forms.Button
+$bEpic.Text = 'MechWarrior 5 in the Epic Games Store'; $bEpic.Location = New-Object Drawing.Point(14, $script:y); $bEpic.Size = New-Object Drawing.Size(250, 25)
+$bSteam = New-Object Windows.Forms.Button
+$bSteam.Text = 'MechWarrior 5 on Steam'; $bSteam.Location = New-Object Drawing.Point(272, $script:y); $bSteam.Size = New-Object Drawing.Size(180, 25)
+$f.Controls.AddRange(@($bEpic, $bSteam)); $script:y += 32
 [void](Add-Label 'UE Viewer (umodel_64.exe) - a free tool by Gildor; download and unpack it, then choose the exe:')
 $um = Join-Path $script:Pkg 'cockpit_tools\umodel\umodel_64.exe'
 $tUm, $bUm = Add-PathRow $(if (Test-Path $um) { $um } else { '' })
@@ -240,7 +246,7 @@ $bClose.Text = 'Close'; $bClose.Location = New-Object Drawing.Point(586, $script
 $f.Controls.AddRange(@($bGo, $bClose)); $script:y += 38
 $log = New-Object Windows.Forms.TextBox
 $log.Multiline = $true; $log.ReadOnly = $true; $log.ScrollBars = 'Vertical'
-$log.Location = New-Object Drawing.Point(14, $script:y); $log.Size = New-Object Drawing.Size(692, (690 - $script:y - 12))
+$log.Location = New-Object Drawing.Point(14, $script:y); $log.Size = New-Object Drawing.Size(692, (740 - $script:y - 12))
 $log.Font = New-Object Drawing.Font('Consolas', 8.5)
 $f.Controls.Add($log)
 $script:Say = { param($t) $log.AppendText($t + "`r`n") }
@@ -264,6 +270,18 @@ function Show-Python {
     elseif (-not $m) { $lPy.Text = 'Python 3 found; its packages numpy and Pillow are missing - the setup installs them (pip) when it converts.'; $lPy.ForeColor = 'DarkOrange' }
     else { $lPy.Text = 'Python 3 with numpy and Pillow found.'; $lPy.ForeColor = 'DarkGreen' }
 }
+# without MechWarrior 5: Mercenaries on this PC the cockpits cannot be chosen - the stores' pages are a click away
+function Show-Mw5 {
+    $p = $tPaks.Text.Trim()
+    $have = [bool]($p -and (Test-Path $p) -and @(Get-ChildItem $p -Filter *.pak -ErrorAction SilentlyContinue).Count)
+    $cMw5.Enabled = $have
+    if (-not $have) { $cMw5.Checked = $false }
+    if ($have) { $lMw5.Text = 'MechWarrior 5: Mercenaries found.'; $lMw5.ForeColor = 'DarkGreen' }
+    else { $lMw5.Text = 'MechWarrior 5: Mercenaries was not found on this PC. Buy or install it, then choose its Paks folder or start the setup again:'; $lMw5.ForeColor = 'DarkOrange' }
+}
+$tPaks.Add_TextChanged({ Show-Mw5 })
+$bEpic.Add_Click({ Start-Process 'https://store.epicgames.com/p/mechwarrior-5' })
+$bSteam.Add_Click({ Start-Process 'https://store.steampowered.com/app/784080' })
 $tGame.Add_TextChanged({ Show-Game })
 $bGame.Add_Click({ Pick-Folder $tGame 'The folder of MechWarrior 4: Mercenaries' })
 $bPaks.Add_Click({ Pick-Folder $tPaks 'MW5Mercs\Content\Paks of MechWarrior 5: Mercenaries' })
@@ -349,11 +367,13 @@ $bGo.Add_Click({
 })
 
 Show-Game
+Show-Mw5
 Show-Python
 Say "MW4VR setup. Its log: $script:LogFile"
 if ($env:MW4VR_SETUP_TEST) { # (a test: the window is built and shown, then closed again)
     $f.Add_Shown({
-        Write-Host "window ok: $($lGame.Text) | $($lPy.Text) | paks '$($tPaks.Text)'"
+        if ($env:MW4VR_SETUP_TEST_NOMW5) { $tPaks.Text = '' } # (as on a PC without MechWarrior 5)
+        Write-Host "window ok: $($lGame.Text) | $($lPy.Text) | paks '$($tPaks.Text)' | $($lMw5.Text) | cockpits can be chosen: $($cMw5.Enabled)"
         if ($env:MW4VR_SETUP_TEST -like '*.png') { # its picture, to look the layout over
             $bmp = New-Object Drawing.Bitmap($f.Width, $f.Height)
             $f.DrawToBitmap($bmp, (New-Object Drawing.Rectangle(0, 0, $f.Width, $f.Height)))
