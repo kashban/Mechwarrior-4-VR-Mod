@@ -32,6 +32,11 @@ Copy-Item (Join-Path $root 'docs\mw4vr_readme.txt') (Join-Path $dir 'game')
 Copy-Item (Join-Path $root 'mod\build\d3d11.dll'), (Join-Path $root 'mod\build\dinput.dll') (Join-Path $dir 'game')
 Copy-Item (Join-Path $root 'docs\mw4vr.ini.example') (Join-Path $dir 'game\mw4vr.ini')
 Copy-Item (Join-Path $root 'docs\mw4vr_cockpit_map.ini') (Join-Path $dir 'game')
+# the tuned defaults: what is remembered for each mech, and each MW5 cockpit's settings (the converter keeps a
+# settings file it finds) - numbers of ours only
+Copy-Item (Join-Path $root 'defaults\mw4vr_mechs.ini') (Join-Path $dir 'game')
+New-Item -ItemType Directory (Join-Path $dir 'game\mw4vr_cockpits') -Force | Out-Null
+Copy-Item (Join-Path $root 'defaults\mw4vr_cockpits\*.ini') (Join-Path $dir 'game\mw4vr_cockpits')
 Copy-Item (Join-Path $root 'tools\start\mw4vr_start.cmd'), (Join-Path $root 'tools\start\mw4vr_start.ps1') (Join-Path $dir 'game')
 Copy-Item (Join-Path $root 'tools\cockpit_convert.py'), (Join-Path $root 'tools\convert_all.py'), (Join-Path $root 'tools\export_cockpits.ps1') (Join-Path $dir 'cockpit_tools')
 if ($Trees) {

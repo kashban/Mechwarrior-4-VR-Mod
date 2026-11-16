@@ -155,6 +155,18 @@ static inline bool mw5Plain() { return !mw5Active() && g_m5PlainOn && g_m5GlassO
 static inline float *mw5G(int p) { return mw5Active() ? g_m5Glass[p] : g_m5Plain[p]; }
 static inline float mw5DefW(int p) { return mw5Active() ? g_m5GlassDef[p][2] : g_m5PlainDef[p][2]; }
 static inline const wchar_t *mw5Who() { return mw5Active() ? g_mw5Name : L"HUD"; }
+// Where the row's places are kept: for each mech in its section of mw4vr_mechs.ini (true), or in [vr] of mw4vr.ini
+// while no mech is known - those are also the places of a mech that has none of its own.
+static bool mw5PlainWhere(std::wstring *file, wchar_t *sec) {
+    if (g_mechOn && g_mechCur >= 0 && g_mechCur < g_mechN) {
+        *file = mechIni();
+        swprintf(sec, 32, L"mech_%d", g_mechCur + 1);
+        return true;
+    }
+    *file = g_dir + L"mw4vr.ini";
+    wcscpy_s(sec, 32, L"vr");
+    return false;
+}
 
 // a cockpit's value: from its own file ([cockpit] <key>) or, without one, from mw4vr.ini ([vr] mw5_<key>)
 static void mw5CockpitStr(const wchar_t *key, wchar_t *b, DWORD n) {
@@ -235,7 +247,11 @@ static void mw5ReadIni() {
     for (int i = 0; i < M5_PARTS; ++i) {
         wchar_t k[32], b[96];
         swprintf(k, 32, L"hud_part_%ls", g_m5PartKey[i]);
-        GetPrivateProfileStringW(L"vr", k, L"", b, 96, ini.c_str());
+        std::wstring file;
+        wchar_t sec[32];
+        b[0] = 0;
+        if (mw5PlainWhere(&file, sec)) GetPrivateProfileStringW(sec, k, L"", b, 96, file.c_str()); // this mech's own place
+        if (!b[0]) GetPrivateProfileStringW(L"vr", k, L"", b, 96, ini.c_str());                    // else the one for all
         float *g = g_m5Plain[i];
         memcpy(g, g_m5PlainDef[i], sizeof g_m5PlainDef[i]);
         float v[4];
@@ -248,7 +264,8 @@ static void mw5ReadIni() {
     mw5GlassFit();
     if (!g_mw5IniRead) {
         g_mw5IniRead = true;
-        g_mw5On = g_mw5Name[0] && GetPrivateProfileIntW(L"vr", L"mw5_on", 0, ini.c_str()) != 0;
+        // wanted from the start; without a cockpit file it has no effect (the game's cockpit, the HUD's parts in a row)
+        g_mw5On = GetPrivateProfileIntW(L"vr", L"mw5_on", 1, ini.c_str()) != 0;
     }
     static wchar_t told[64];
     if (wcscmp(told, g_mw5Name)) {
@@ -401,8 +418,7 @@ static void mw5Load() {
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         logf("mw5: exception 0x%08lx while loading", GetExceptionCode());
     }
-    logf(g_mw5State == 1 ? "mw5: cockpit '%ls' loaded, %d parts" : "mw5: cockpit '%ls' not usable - stays off", g_mw5Name, g_m5N);
-    if (g_mw5State != 1) g_mw5On = false;
+    logf(g_mw5State == 1 ? "mw5: cockpit '%ls' loaded, %d parts" : "mw5: cockpit '%ls' not usable - the game's own cockpit stays", g_mw5Name, g_m5N);
 }
 
 // the monitors show the HUD (the near HUD quads are then left out, vr.inc)
@@ -509,7 +525,7 @@ static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw) {
         if (nvp && g_eyeTexW && vp[0].Width < 0.9f * g_eyeTexW) return;
     }
     done[e] = g_frame;
-    if (g_mw5State == 0) mw5Load();
+    if (g_mw5State == 0 && g_mw5Name[0]) mw5Load();
     if (g_mw5State != 1 || !g_vrPoseOk[e] || g_P00 <= 0 || g_P11 <= 0 || g_near <= 0) return;
 
     // what is bound now
@@ -707,6 +723,7 @@ static void mw5ForMech() {
     if (g_mechCur == g_mw5Mech) return;
     g_mw5Mech = g_mechCur;
     if (g_mechCur < 0) return; // between battles: what is loaded stays
+    mw5ReadIni();              // (this mech's own places of the HUD's parts)
     wchar_t name[64] = L"", sec[32];
     swprintf(sec, 32, L"mech_%d", g_mechCur + 1);
     const wchar_t *model = g_mechs[g_mechCur].model;
@@ -865,7 +882,10 @@ static void mw5GlassPut(int p) {
     swprintf(b, 96, L"%.1f %.1f %.1f %.2f", g[0], g[1], g[2], g[3]);
     if (!mw5Active()) {
         swprintf(k, 32, L"hud_part_%ls", g_m5PartKey[p]);
-        WritePrivateProfileStringW(L"vr", k, b, (g_dir + L"mw4vr.ini").c_str());
+        std::wstring file;
+        wchar_t sec[32];
+        mw5PlainWhere(&file, sec);
+        WritePrivateProfileStringW(sec, k, b, file.c_str());
         return;
     }
     swprintf(k, 32, L"glass_%ls", g_m5PartKey[p]);
@@ -889,8 +909,14 @@ static void mw5Assign(int part, bool shift) {
         if (shift) return;
         for (int i = 0; i < M5_PARTS; ++i) {
             swprintf(k, 32, plain ? L"hud_part_%ls" : L"glass_%ls", g_m5PartKey[i]);
-            if (plain) WritePrivateProfileStringW(L"vr", k, nullptr, (g_dir + L"mw4vr.ini").c_str());
-            else mw5CockpitPutStr(k, nullptr);
+            if (plain) { // this mech's own places go (those for all, or the row, are used again)
+                std::wstring file;
+                wchar_t sec[32];
+                mw5PlainWhere(&file, sec);
+                WritePrivateProfileStringW(sec, k, nullptr, file.c_str());
+            } else {
+                mw5CockpitPutStr(k, nullptr);
+            }
         }
         mw5ReadIni();
         swprintf(note, 200, plain ? L"%ls: its parts back in their row" : L"%ls: the HUD's parts placed in the windows automatically", mw5Who());

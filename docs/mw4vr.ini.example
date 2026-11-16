@@ -54,7 +54,8 @@ hud_extra_width=1.02
 ; panes of their own before the pilot, in a row below the view ahead. In a battle: look somewhere and press
 ; Ctrl+Alt+1..6 to put a part there; Ctrl+Alt+Shift+1..6 chooses one, then Ctrl+Alt+Shift + arrows move it,
 ; PgUp / PgDn size it, Ins / Del set it farther / nearer, 0 hides it; Ctrl+Alt+7 puts all back into the row.
-; Stored here as hud_part_<radar|target|damage|lance|weapons|top> = degrees right, up, width, metres away.
+; Stored for each mech in mw4vr_mechs.ini as hud_part_<radar|target|damage|lance|weapons|top> = degrees right, up,
+; width, metres away; the same keys here are the places for mechs that have none of their own.
 ; 0 = the flat frame of hud_parts=0 instead: the picture's edge strips near, at hud_panel_distance_m
 hud_parts=1
 hud_panel_distance_m=1.5
@@ -73,10 +74,11 @@ zoom_window_scale=0.45
 zoom_scale=0.9
 
 ; --- a cockpit mesh of our own in place of the game's (mw4vr_cockpits\<name>.mwc - see the README) ---
-; mw5_cockpit: the cockpit for mechs nothing else is chosen for (mw4vr_cockpit_map.ini names one per mech;
-; Ctrl+Alt+F11 in a battle chooses another). mw5_on=1 starts with the cockpits on; Ctrl+F11 switches in a battle.
+; mw5_on=1: the cockpits are used where there is one (mw4vr_cockpit_map.ini names one per mech; Ctrl+Alt+F11 in a
+; battle chooses another); without cockpit files it changes nothing. Ctrl+F11 switches in a battle.
+; mw5_cockpit: the cockpit for mechs nothing else names one for (empty: the game's own cockpit there)
+mw5_on=1
 mw5_cockpit=
-mw5_on=0
 ; brightness of its lit displays; its base light (0..1); mw5_linear_output=1 if it looks washed out
 mw5_emissive=1.5
 mw5_ambient=0.45
