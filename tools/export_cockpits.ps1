@@ -26,7 +26,10 @@ $i = 0
 while ($i -lt @($pkgs).Count) {
     $part = @($pkgs)[$i..([Math]::Min($i + 19, @($pkgs).Count - 1))]
     $args_ = @("-path=$Paks", '-game=ue4.26', '-export', '-gltf', '-png', "-out=$Out") + ($part | ForEach-Object { "-pkg=$($_.Pkg)" })
-    & $Umodel @args_ 2>&1 | Select-String -Pattern '^Exported|ERROR|WARNING: .*failed' | ForEach-Object { $_.Line }
+    # (UE Viewer cannot write a cockpit's animations as glTF from the command line and says so as an "ERROR" for
+    # each; the meshes and pictures - all that is needed - are exported all the same, so that line is left out)
+    & $Umodel @args_ 2>&1 | Select-String -Pattern '^Exported|ERROR|WARNING: .*failed' |
+        Where-Object { $_.Line -notmatch 'glTF animation could be exported from mesh viewer only' } | ForEach-Object { $_.Line }
     $i += 20
 }
 $pkgs | ForEach-Object { "{0}`t{1}" -f $_.Mech, (Join-Path $Out (($_.Pkg -replace '^/', '') -replace '/', '\')) } | Set-Content (Join-Path $Out 'cockpits.txt') -Encoding utf8
