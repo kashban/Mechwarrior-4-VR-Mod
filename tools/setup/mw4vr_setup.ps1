@@ -310,6 +310,29 @@ function Find-Python([ref]$Modules) {
     return $null
 }
 
+# The newest Python 3 the cockpit tools can use: the highest 3.x that numpy AND Pillow have ready-made Windows
+# packages for (asked of pypi.org) and that winget offers. The very newest Python is not always it: for a while
+# after its release the packages are missing and pip would try - and fail - to build them. -> '3.14', or the
+# tried and tested '3.12' when nothing can be asked.
+function Get-PythonToInstall {
+    $best = '3.12'
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+        $sets = @()
+        foreach ($pkg in 'numpy', 'pillow') {
+            $j = Invoke-RestMethod -Uri "https://pypi.org/pypi/$pkg/json" -TimeoutSec 15
+            $sets += , @($j.urls | ForEach-Object { if ($_.filename -match '-cp3(\d+)-cp3\1-win_amd64\.whl$') { [int]$Matches[1] } } | Sort-Object -Unique)
+        }
+        $both = @($sets[0] | Where-Object { $sets[1] -contains $_ } | Sort-Object -Descending)
+        foreach ($minor in $both) {
+            if ($minor -le 12) { break }
+            & winget show -e --id "Python.Python.3.$minor" --source winget --accept-source-agreements 2>$null | Out-Null
+            if ($LASTEXITCODE -eq 0) { $best = "3.$minor"; break }
+        }
+    } catch { }
+    return $best
+}
+
 # The folders chosen in the window, kept for the next start of the setup (also of a later package's):
 # %APPDATA%\MW4VR\setup.txt, lines "name=path"
 function Get-PathsFile { return (Join-Path $env:APPDATA 'MW4VR\setup.txt') }
@@ -467,10 +490,14 @@ $bPySite.Add_Click({ Start-Process 'https://www.python.org/downloads/windows/' }
 $bPyAgain.Add_Click({ Update-Path; Show-Python; if ($script:Py) { Say "Python found: $($script:Py.Exe)" } else { Say 'Python 3 is still not found.' } })
 $bPyGet.Add_Click({
     # Windows' own package manager, in a console of its own so that its questions and progress can be seen
-    Say 'Installing Python 3.12 with winget - follow its window; when it has closed, the setup looks again.'
     $bPyGet.Enabled = $false
+    Say 'Looking for the newest Python 3 that numpy and Pillow are ready for ...'
+    [Windows.Forms.Application]::DoEvents()
+    $ErrorActionPreference = 'Continue' # (winget's and the network's complaints are not the end of this)
+    $ver = Get-PythonToInstall
+    Say "Installing Python $ver with winget - follow its window; when it has closed, the setup looks again."
     try {
-        $p = Start-Process winget -ArgumentList 'install', '-e', '--id', 'Python.Python.3.12', '--scope', 'user', '--accept-package-agreements', '--accept-source-agreements' -PassThru
+        $p = Start-Process winget -ArgumentList 'install', '-e', '--id', "Python.Python.$ver", '--scope', 'user', '--accept-package-agreements', '--accept-source-agreements' -PassThru
         while (-not $p.HasExited) { [Windows.Forms.Application]::DoEvents(); Start-Sleep -Milliseconds 150 }
         Say "winget has finished (code $($p.ExitCode))."
     } catch { Say "winget could not be started: $($_.Exception.Message) - use python.org instead." }
