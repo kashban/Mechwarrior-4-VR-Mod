@@ -34,7 +34,7 @@ static const float g_m5Part[M5_PARTS][4] = {{0.320f, 0.770f, 0.690f, 0.990f}, {0
                                             {0.000f, 0.000f, 0.243f, 0.108f}, {0.716f, 0.000f, 1.000f, 0.124f}, {0.243f, 0.000f, 0.716f, 0.120f}};
 static const float g_m5LanceMenu = 0.435f; // the lance list with its open orders menu reaches this far down
 static const float g_m5WeaponsLeft = 0.700f; // where the weapon list's frame begins (its part for a monitor begins inside it)
-static const float g_m5GlassDef[M5_PARTS][3] = {{0, -17, 22}, {-26, -14, 16}, {26, -14, 16}, {-32, 20, 18}, {32, 20, 22}, {0, 22, 30}};
+static const float g_m5GlassDef[M5_PARTS][3] = {{0, -17, 11}, {-26, -14, 8}, {26, -14, 8}, {-32, 20, 9}, {32, 20, 11}, {0, 22, 15}};
 static float g_m5Glass[M5_PARTS][4];     // degrees right, up, width; metres away
 static bool g_m5GlassSaved[M5_PARTS];    // set by hand (in the cockpit's file); the others are placed automatically
 static float g_m5GlassDistDef = 1.2f;    // [cockpit] glass_distance_m: a part's distance where nothing else says
