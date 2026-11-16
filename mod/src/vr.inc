@@ -643,7 +643,8 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
     }
     {   // Ctrl+Home: the game camera becomes the head's current pose
         static bool was;
-        bool down = (GetAsyncKeyState(VK_CONTROL) & 0x8000) && (GetAsyncKeyState(VK_HOME) & 0x8000);
+        // (with Alt: a monitor's picture is turned, mw5.inc)
+        bool down = (GetAsyncKeyState(VK_CONTROL) & 0x8000) && !(GetAsyncKeyState(VK_MENU) & 0x8000) && (GetAsyncKeyState(VK_HOME) & 0x8000);
         if (down && !was) {
             g_vr.baseP00 = g_vr.baseP11 = 0;
             g_vr.recenter = true;

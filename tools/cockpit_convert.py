@@ -22,6 +22,11 @@ HEADER = '<48sIIIIf'
 TMAX = 1024  # the largest texture size written
 SCREEN_MIN = 0.07  # metres: what is smaller is no monitor
 SCREEN_MAX = 8  # as many as the mod shows
+DISPLAYS = ('projection_hologram', 'widget3d_', 'minimapgenerator')  # the game's materials that show a picture
+QUARTERS = range(1, 181)  # the turns tried to stand a monitor upright: quarter degrees up to 45
+WHITE = (255, 255, 255)
+VC_SHARE = 0.5  # how much of the vertex colours' shade a painted part takes
+METAL = np.array([0.15, 0.15, 0.16])  # bare metal, linear light
 # the parts of the game's HUD picture (u0 v0 u1 v1, 0..1 from the top left) a monitor can show
 HUD_PARTS = {'lance': '0.000 0.000 0.243 0.108', 'target': '0.000 0.772 0.180 1.000', 'radar': '0.320 0.770 0.690 0.990',
              'damage': '0.820 0.772 1.005 1.000', 'weapons': '0.716 0.000 1.000 0.124'}
@@ -63,18 +68,47 @@ def parse_props(text):
     return tex, strength
 
 
-def paint_colour(text):
-    """the material's paint colour (PaintColorPrimary, linear light) as (r, g, b) 0..255 for the screen, or None"""
-    m = re.search(r"Name=PaintColorPrimary \}\s*ParameterValue = \{ R=([-\d.eE]+), G=([-\d.eE]+), B=([-\d.eE]+)", text)
+def paint_light(text, which='Primary'):
+    """one of the material's paint colours (PaintColorPrimary, Secondary, Tertiary) in linear light, (r, g, b) 0..1, or None"""
+    m = re.search(r"Name=PaintColor%s \}\s*ParameterValue = \{ R=([-\d.eE]+), G=([-\d.eE]+), B=([-\d.eE]+)" % which, text)
     if not m:
         return None
-    return tuple(int(round(255 * min(1.0, max(0.0, float(v))) ** (1 / 2.2))) for v in m.groups())
+    return tuple(min(1.0, max(0.0, float(v))) for v in m.groups())
+
+
+def to_screen(light):
+    """linear light 0..1 -> 0..255 for the screen"""
+    return tuple(int(round(255 * v ** (1 / 2.2))) for v in light)
+
+
+def paint_colour(text):
+    """the material's paint colour (PaintColorPrimary, linear light) as (r, g, b) 0..255 for the screen, or None"""
+    light = paint_light(text)
+    return None if light is None else to_screen(light)
+
+
+def masked_paint(mask, paints):
+    """a paint mask's picture (red, green, blue: how much of the first paint lies on the bare metal, of the second
+    over that, of the third over both) painted with paints - three (r, g, b) in linear light, None: not given, left
+    out - as an image for the screen"""
+    m = np.asarray(mask.convert('RGB'), np.float64) / 255
+    out = np.zeros(m.shape) + METAL
+    for k in range(3):
+        if paints[k] is not None:
+            out = out + m[..., k:k + 1] * (np.array(paints[k]) - out)
+    out = np.round(255 * out ** (1 / 2.2)).astype(np.uint8)
+    return Image.fromarray(out, 'RGB').convert('RGBA')
 
 
 def is_hologram(text):
-    """is the material made from the game's Projection_Hologram (what a monitor shows)?"""
+    """is the material made from one of the game's that show a picture (a monitor)?"""
     m = re.search(r"^Parent = \w+'([^']*)'", text, re.M)
-    return bool(m) and 'projection_hologram' in m.group(1).lower()
+    return bool(m) and any(k in m.group(1).lower() for k in DISPLAYS)
+
+
+def is_display(name):
+    """is it one of the game's own picture materials, used as it is?"""
+    return name.lower().startswith(DISPLAYS)
 
 
 def props_text(props, name):
@@ -102,6 +136,10 @@ def material(props, root, name, log=print):
             log('   texture not usable:', f, e)
             return None
     clr = load('basecolor')
+    if clr is None:
+        mask = load('rgbpaintmask')
+        if mask is not None:
+            clr = masked_paint(mask, [paint_light(text, w) for w in ('Primary', 'Secondary', 'Tertiary')])
     if clr is None:
         paint = paint_colour(text)
         if paint is not None:
@@ -144,9 +182,56 @@ def parts(P, I):
     return [np.array(ts) for ts in comps.values()]
 
 
-def screen(P, N, I, ts):
+def upright(a, b):
+    """points in a plane (a: to the right, b: up): the turn to the left, in radians within 45 degrees, that stands the
+    smallest rectangle around them upright (a monitor that hangs askew); 0 while that one is not 2 % smaller"""
+    best, turn = 0.98 * (a.max() - a.min()) * (b.max() - b.min()), 0.0
+    for q in QUARTERS:  # the smaller turns first
+        for t in (np.radians(q / 4), -np.radians(q / 4)):
+            x, y = a * np.cos(t) + b * np.sin(t), b * np.cos(t) - a * np.sin(t)
+            area = (x.max() - x.min()) * (y.max() - y.min())
+            if area < best:
+                best, turn = area, t
+    return turn
+
+
+def vertex_colours(g, buf, prim):
+    """the primitive's vertex colours as n x 3 numbers 0..255; None without any, or with nothing painted (all white)"""
+    i = prim['attributes'].get('COLOR_0')
+    if i is None:
+        return None
+    c = acc(g, buf, i)[:, :3].astype(np.float64)
+    if g['accessors'][i]['componentType'] == 5126:
+        c = c * 255
+    return None if c.min() >= 250 else c
+
+
+def painted(P, N, I, VC, base, share):
+    """the triangles in the colour base, shaded by their vertex colours VC (the mod makers' baked light; share: how
+    much of it, 0..1), one colour a triangle (the mean of its corners): -> (P, N, UV, I, image, colours). The file
+    has no vertex colours: the colours go into a small picture, a texel each, and the three corners of a triangle
+    point at the middle of its texel (corners shared by triangles of other colours are doubled)"""
+    T = I.reshape(len(I) // 3, 3)
+    col = np.round(np.array(base) * (1 - share + share * VC[T].mean(1) / 255.0)).astype(np.uint8)
+    pal, which = np.unique(col, axis=0, return_inverse=True)
+    which = which.ravel()
+    size = 4
+    while size * size < len(pal):
+        size *= 2
+    px = np.zeros((size * size, 4), np.uint8)
+    px[:, 3] = 255
+    px[:len(pal), :3] = pal
+    key = T.astype(np.int64) * len(pal) + which[:, None]
+    uniq, index = np.unique(key.ravel(), return_inverse=True)
+    v, k = uniq // len(pal), uniq % len(pal)
+    uv = np.stack([(k % size + 0.5) / size, (k // size + 0.5) / size], 1).astype(np.float32)
+    return P[v], N[v], uv, index.ravel().astype(np.uint32), Image.fromarray(px.reshape(size, size, 4), 'RGBA'), len(pal)
+
+
+def screen(P, N, I, ts, turn=True):
     """the triangles ts as a monitor: (P, N, UV, I, aspect, (width, height) in metres); UV runs 0..1 over its
-    own rectangle, u to the viewer's right, v down"""
+    own rectangle (turn: the smallest around it, see upright; else the one that stands upright in the world), u to
+    the viewer's right, v down"""
     T = I.reshape(len(I) // 3, 3)
     vi = np.unique(T[ts])
     n = N[vi].mean(0)
@@ -154,6 +239,8 @@ def screen(P, N, I, ts):
     up = np.array([0, 1.0, 0]) - n * n[1]  # the world's up within the monitor's plane
     up /= np.linalg.norm(up)
     right = np.cross(n, up)
+    t = upright(P[vi] @ right, P[vi] @ up) if turn else 0.0
+    right, up = right * np.cos(t) + up * np.sin(t), up * np.cos(t) - right * np.sin(t)
     a, b = P[vi] @ right, P[vi] @ up
     w, h = a.max() - a.min(), b.max() - b.min()
     uv = np.stack([(a - a.min()) / w, (b.max() - b) / h], 1)
@@ -173,16 +260,18 @@ def monitors(P, N, I):
     T = I.reshape(len(I) // 3, 3)
     found = []
     for ts in parts(P, I):
+        # what is a monitor, and which, is told by its rectangle upright in the world, as it always was: the
+        # monitors keep their numbers (the cockpits' .ini files name them)
         with np.errstate(all='ignore'):  # a part without width or height: its size says so
-            m = screen(P, N, I, ts)
+            m = screen(P, N, I, ts, False)
         if min(m[5]) >= SCREEN_MIN:
-            found.append((m[5][0] * m[5][1], float(m[0][:, 0].mean()), ts, m))
+            found.append((m[5][0] * m[5][1], float(m[0][:, 0].mean()), ts))
     found.sort(key=lambda f: -f[0])
     kept = sorted(found[:SCREEN_MAX], key=lambda f: f[1])
     used = np.zeros(len(T), bool)
     for f in kept:
         used[f[2]] = True
-    return [f[3] for f in kept], T[~used].ravel()
+    return [screen(P, N, I, f[2]) for f in kept], T[~used].ravel()
 
 
 def assign(places):
@@ -237,7 +326,7 @@ def is_canopy_glass(name):
     return 'glass_cockpittp' in n and 'opaque' not in n
 
 
-def build_groups(g, buf, props, root, log=print):
+def build_groups(g, buf, props, root, log=print, shade=False):
     """-> (groups, lo, hi, places); a group: (name, P, N, UV, I, colour image, emissive image or None, emissive
     strength - for a screen its width / height); places: the monitors' (x, z, area)"""
     groups, places = [], []
@@ -255,7 +344,8 @@ def build_groups(g, buf, props, root, log=print):
         P[:, 2] = -P[:, 2]  # glTF looks down -z; the mod's view space looks down +z
         N[:, 2] = -N[:, 2]
         lo, hi = np.minimum(lo, P.min(0)), np.maximum(hi, P.max(0))
-        if is_screen_material(name) or (not panels and is_hologram(props_text(props, name))):  # the monitors: one group each
+        text = props_text(props, name)
+        if is_screen_material(name) or (not panels and (is_hologram(text) or is_display(name))):  # the monitors: one group each
             found, I = monitors(P, N, I)
             for p, n, uv, i, asp, (w, h) in found:
                 c = p.mean(0)
@@ -265,6 +355,13 @@ def build_groups(g, buf, props, root, log=print):
             if not len(I):
                 continue
         clr, ems, strength = material(props, root, name, log)
+        vc = vertex_colours(g, buf, prim)
+        one = None if clr is None else clr.getcolors(1)
+        base = WHITE if clr is None else one and one[0][1][:3]
+        if shade and vc is not None and base:
+            # one colour all over, but painted vertices: the colour shaded by them (without a colour: they alone)
+            P, N, UV, I, clr, n = painted(P, N, I, vc, base, 1.0 if clr is None else VC_SHARE)
+            log('  %s: shaded by its vertices, %d colours' % (name, n))
         if clr is None:
             clr = flat(80, 80, 84)
         groups.append((name, P, N, UV, I, clr, ems, strength))
@@ -322,12 +419,14 @@ def read_mwc(path):
         return res
 
 
-def convert(gltf, root, out, tmax=TMAX, log=print):
+def convert(gltf, root, out, tmax=TMAX, log=print, shade=False):
+    """shade: a cockpit of a mod - its one-coloured parts take the shade of their vertex colours (in the game's own
+    cockpits those colours mean other things)"""
     with open(gltf) as f:
         g = json.load(f)
     with open(os.path.join(os.path.dirname(gltf), g['buffers'][0]['uri']), 'rb') as f:
         buf = f.read()
-    groups, lo, hi, places = build_groups(g, buf, find_props(root), root, log)
+    groups, lo, hi, places = build_groups(g, buf, find_props(root), root, log, shade)
     write_mwc(out, groups, tmax, log)
     ini = os.path.splitext(out)[0] + '.ini'
     if not os.path.exists(ini):  # yours once it is there

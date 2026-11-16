@@ -120,7 +120,9 @@ may name several cockpits, the best first (kodiak=kodiak,atlas): the first there
   Ctrl+Alt+9                   this cockpit's monitors off / on (off: all of the HUD floats)
   Ctrl+Alt+Shift+9             the chosen part leaves its monitor and floats
   A chosen part on a monitor:  Ctrl+Alt+Shift + arrows move what the monitor shows, PgUp / PgDn
-                               nearer / more, Ins / Del longer / shorter (for long weapon lists)
+                               nearer / more, Ins / Del longer / shorter (for long weapon lists),
+                               Home / End turn the picture by 5 degrees left / right (a monitor
+                               that hangs askew or is no rectangle; screen_<n>_turn in its .ini)
 
 The clan cockpits have monitors; in the others the HUD's parts float in the cockpit's windows.
 
@@ -308,7 +310,9 @@ wird das erste, für das es eine Datei gibt.
   Strg+Alt+Umschalt+9          der gewählte Teil verlässt seinen Monitor und schwebt
   Gewählter Teil auf Monitor:  Strg+Alt+Umschalt + Pfeile verschieben den gezeigten Ausschnitt,
                                Bild auf / ab näher / mehr, Einfg / Entf länger / kürzer (für lange
-                               Waffenlisten)
+                               Waffenlisten), Pos1 / Ende drehen das Bild um 5 Grad nach links /
+                               rechts (schief hängender oder nicht rechteckiger Monitor;
+                               screen_<n>_turn in seiner .ini)
 
 Die Clan-Cockpits haben Monitore; in den anderen schweben die Teile des HUD in den Cockpitfenstern.
 

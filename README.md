@@ -70,7 +70,7 @@ Ctrl+Alt keys below.
 | Ctrl+Alt+7 | all floating parts back to their automatic places (in the cockpit's windows; without a cockpit of our own: their row) |
 | Ctrl+Alt+9 | this cockpit's monitors off / on (off: all of the HUD on the glass) |
 | Ctrl+Alt+Shift+9 | the chosen part leaves its monitor and goes onto the glass |
-| Ctrl+Alt+Shift+1 … 6 | choose a part (it gets a yellow frame for some seconds); then Ctrl+Alt+Shift + arrows move it, PgUp / PgDn size it, Ins / Del put it farther / nearer, 0 hides it. A part on a monitor: arrows move what the monitor shows of the HUD, PgUp / PgDn nearer / more, Ins / Del longer / shorter |
+| Ctrl+Alt+Shift+1 … 6 | choose a part (it gets a yellow frame for some seconds); then Ctrl+Alt+Shift + arrows move it, PgUp / PgDn size it, Ins / Del put it farther / nearer, 0 hides it. A part on a monitor: arrows move what the monitor shows of the HUD, PgUp / PgDn nearer / more, Ins / Del longer / shorter, Home / End turn the picture left / right |
 | Ctrl+Alt+arrows, PgUp / PgDn | eye position in the cockpit mesh, its size (remembered per cockpit) |
 | Ctrl+Ins / Del | the cockpit's size (with Shift: the world's) |
 | Ctrl+arrows | the seat: up / down = forward / back, right / left = higher / lower |
@@ -98,8 +98,12 @@ cockpits belong to Piranha Games. You convert your own:
    start of a battle and shows it together with the cockpit's. Ctrl+Alt+F11 steps through the cockpits and
    remembers the choice for the mech you sit in (`mw4vr_mechs.ini`).
 
+A cockpit of a mod often has no pictures, only one paint a part: the converter takes that paint (and a paint mask's
+second and third), shades it with the mesh's vertex colours and takes the mod's hologram materials as monitors.
+
 The converter turns the larger faces of the material `Panels*` into monitors and writes a `<name>.ini` beside
-each `.mwc`: which part of the HUD each monitor shows (`screen_<n>`), the eye's place, the size. Change it as
+each `.mwc`: which part of the HUD each monitor shows (`screen_<n>`; `screen_<n>_turn`: its picture turned by so
+many degrees), the eye's place, the size. Change it as
 you like; it is not written again. The clan cockpits (about 35) have such monitors. What no monitor shows - in
 the other cockpits everything - is shown on the glass, fixed to the cockpit: the mod looks for the cockpit's windows
 as seen from the seat and puts each part into an open place near the cross-hair. A part you place yourself stays

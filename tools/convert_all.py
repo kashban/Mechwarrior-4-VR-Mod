@@ -26,7 +26,8 @@ def main(argv):
             continue
         said = []
         try:
-            cc.convert(path + '.gltf', own[0] if own and own[0] else root, target, tmax, log=lambda *a: said.append(' '.join(str(x) for x in a)))
+            mod = bool(own and own[0])  # a mod's cockpit: its own export root, and shaded by its vertex colours
+            cc.convert(path + '.gltf', own[0] if mod else root, target, tmax, log=lambda *a: said.append(' '.join(str(x) for x in a)), shade=mod)
         except Exception as e:  # one cockpit that cannot be read does not stop the others
             failed += 1
             if os.path.exists(target):

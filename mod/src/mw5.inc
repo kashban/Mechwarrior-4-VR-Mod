@@ -71,6 +71,7 @@ static UINT g_m5HudW, g_m5HudH;
 static int g_m5Screens;
 static float g_m5Rect[MW5_SCREENS][4]; // u0 v0 u1 v1 of the HUD image; u1 <= u0: dark
 static float g_m5Alt[MW5_SCREENS][6];  // a second part (u0 v0 u1 v1) and its probe point (u v); u1 <= u0: none
+static float g_m5Turn[MW5_SCREENS];    // degrees the monitor's picture is turned clockwise within the monitor
 static float g_m5ScreenGain = 1, g_m5RedBoost = 6;
 static int g_mw5ScreensWanted = 1;
 static bool g_mw5Own;       // this cockpit has a settings file of its own
@@ -90,9 +91,11 @@ cbuffer C : register(b13) {
     float4 lamp;          // xyz: towards the lamp (mesh space); w: the share of the depth range kept for the mesh alone
     float4 par;           // emissive, ambient, linear output, > 0: a monitor
     float4 scr;           // a monitor: the part of the HUD image, u0 v0 u1 v1
-    float4 scr2;          // xy: the monitor's uv (about its middle) -> the part's (about its middle); z: gain; w: dark red times this at most
+    float4 scr2;          // z: gain; w: dark red times this at most
     float4 alt;           // a second part, shown while the HUD image is not empty at the probe point (z <= x: none)
-    float4 alt2;          // xy: as scr2.xy, for the second part; zw: the probe point
+    float4 alt2;          // zw: the probe point
+    float4 rot;           // the monitor's uv (about its middle) -> the part's (about its middle): xy the row for u, zw for v
+    float4 rot2;          // as rot, for the second part
 };
 struct VSIn { float3 pos : POSITION; float3 nrm : NORMAL; float2 uv : TEXCOORD0; };
 struct VSOut { float4 pos : SV_Position; float3 nrm : NORMAL; float2 uv : TEXCOORD0; };
@@ -115,15 +118,15 @@ SamplerState sm : register(s0);
 float4 ps(VSOut i) : SV_Target {
     if (par.w > 0) { // a monitor: its part of the HUD image, whole, on black
         float4 r = scr;
-        float2 f = scr2.xy;
+        float4 f = rot;
         if (alt.z > alt.x) {
             float4 t = th.SampleLevel(sm, alt2.zw, 0);
             if (max(max(t.r, t.g), max(t.b, t.a)) > 0.02) {
                 r = alt;
-                f = alt2.xy;
+                f = rot2;
             }
         }
-        float2 q = (i.uv - 0.5) * f;
+        float2 q = float2(dot(i.uv - 0.5, f.xy), dot(i.uv - 0.5, f.zw));
         float3 h = 0;
         if (r.z > r.x && abs(q.x) < 0.5 && abs(q.y) < 0.5) h = th.SampleLevel(sm, lerp(r.xy, r.zw, q + 0.5), 0).rgb * scr2.z;
         // dark red (an enemy's weapon list: black letters on a translucent red bar, dim without the scene behind it): brighter
@@ -230,6 +233,10 @@ static void mw5ReadIni() {
         mw5CockpitStr(k, b, 96);
         float *a = g_m5Alt[i];
         if (swscanf(b, L"%f %f %f %f %f %f", a, a + 1, a + 2, a + 3, a + 4, a + 5) != 6) a[0] = a[1] = a[2] = a[3] = a[4] = a[5] = 0;
+        // screen_<n>_turn = degrees: the picture turned clockwise within the monitor (a monitor that hangs askew)
+        swprintf(k, 32, L"screen_%d_turn", i);
+        mw5CockpitStr(k, b, 96);
+        g_m5Turn[i] = mcTurnNorm((float)_wtof(b));
     }
     g_m5GlassOn = GetPrivateProfileIntW(L"vr", L"mw5_glass", 1, ini.c_str()) != 0;
     g_m5GlassDistDef = mw5CockpitF(L"glass_distance_m", 1.2f);
@@ -383,7 +390,7 @@ static bool mw5CreateStates() {
     HRESULT h3 = g_dev->CreateInputLayout(il, 3, vc->GetBufferPointer(), vc->GetBufferSize(), &g_m5IL);
     vc->Release();
     pc->Release();
-    D3D11_BUFFER_DESC bd = {176, D3D11_USAGE_DYNAMIC, D3D11_BIND_CONSTANT_BUFFER, D3D11_CPU_ACCESS_WRITE, 0, 0};
+    D3D11_BUFFER_DESC bd = {208, D3D11_USAGE_DYNAMIC, D3D11_BIND_CONSTANT_BUFFER, D3D11_CPU_ACCESS_WRITE, 0, 0};
     HRESULT h4 = ORIG(PFN_CreateBuffer, g_dev, VT_Dev_CreateBuffer)(g_dev, &bd, nullptr, &g_m5CB);
     D3D11_SAMPLER_DESC sd = {};
     sd.Filter = D3D11_FILTER_ANISOTROPIC, sd.MaxAnisotropy = 8;
@@ -591,7 +598,7 @@ static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw) {
     // mesh -> this eye's view: c = S (v - eye); p = R^T (c - t - raw (cockpit scale - world scale))
     const float *R = g_vrR[e], *T = g_vrT[e], *raw = g_vrRaw[e];
     float S = g_vr.cockpitScale * g_mw5Scale;
-    float cb[44] = {};
+    float cb[52] = {};
     float o[3];
     for (int i = 0; i < 3; ++i) o[i] = -S * g_mw5Eye[i] - T[i] - raw[i] * g_cockpitDelta;
     for (int i = 0; i < 3; ++i) {
@@ -651,12 +658,14 @@ static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw) {
                 float ar = have ? (r[2] - r[0]) * pw / ((r[3] - r[1]) * g_m5HudH) : 1;
                 cb[27] = 1;
                 cb[28] = r[0] * ku, cb[29] = r[1], cb[30] = (have ? r[2] : r[0]) * ku, cb[31] = r[3];
-                cb[32] = ar > g.aspect ? 1 : g.aspect / ar, cb[33] = ar > g.aspect ? ar / g.aspect : 1, cb[34] = g_m5ScreenGain, cb[35] = g_m5RedBoost;
+                cb[34] = g_m5ScreenGain, cb[35] = g_m5RedBoost;
+                mcTurnFit(g.aspect, ar, g_m5Turn[g.screen - 1], cb + 44);
                 const float *a = g_m5Alt[g.screen - 1];
                 bool haveA = have && a[2] > a[0] && a[3] > a[1];
                 float aa = haveA ? (a[2] - a[0]) * pw / ((a[3] - a[1]) * g_m5HudH) : 1;
                 cb[36] = a[0] * ku, cb[37] = a[1], cb[38] = (haveA ? a[2] : a[0]) * ku, cb[39] = a[3];
-                cb[40] = aa > g.aspect ? 1 : g.aspect / aa, cb[41] = aa > g.aspect ? aa / g.aspect : 1, cb[42] = a[4] * ku, cb[43] = a[5];
+                cb[42] = a[4] * ku, cb[43] = a[5];
+                mcTurnFit(g.aspect, aa, g_m5Turn[g.screen - 1], cb + 48);
                 sv[2] = have ? g_m5HudSrv : nullptr;
                 if (!put()) continue;
             }
@@ -1069,6 +1078,26 @@ static void mw5Assign(int part, bool shift) {
     Beep(1200, 40);
 }
 
+// Ctrl+Alt+Shift + Home / End: the picture of the chosen part's monitor is turned (step degrees, clockwise)
+static void mw5MonitorTurn(float step) {
+    int p = g_m5GlassLast, mon = p >= 0 && p < 5 ? mw5MonitorOf(p) : -1;
+    if (mon < 0) {
+        noteShow(p < 0 ? L"Choose a part first: Ctrl+Alt+Shift+1..5 (radar, target, damage, lance, weapons)" : L"That part is not on a monitor", 4);
+        Beep(300, 150);
+        return;
+    }
+    mw5HiTouch();
+    g_m5Turn[mon] = mcTurnNorm(g_m5Turn[mon] + step);
+    wchar_t key[32], b[32], note[200];
+    swprintf(key, 32, L"screen_%d_turn", mon);
+    swprintf(b, 32, L"%.0f", g_m5Turn[mon]);
+    mw5CockpitPutStr(key, g_m5Turn[mon] ? b : nullptr);
+    swprintf(note, 200, L"%ls on monitor %d: turned %+.0f degrees", g_m5PartName[p], mon, g_m5Turn[mon]);
+    noteShow(note, 3);
+    logf("mw5: cockpit '%ls': monitor %d turned %.0f degrees (saved)", g_mw5Name, mon, g_m5Turn[mon]);
+    Beep(1100, 30);
+}
+
 // Ctrl+Alt+Shift + arrows, PgUp / PgDn, Ins / Del (k: 0..7): the chosen part's place, size, distance
 static void mw5GlassAdjust(int k) {
     int p = g_m5GlassLast;
@@ -1176,6 +1205,15 @@ static void mw5OnPresent() {
             bool down = ctrl && alt && (GetAsyncKeyState('0' + k) & 0x8000);
             if (down && !wasN[k]) mw5Assign(k, shift);
             wasN[k] = down;
+        }
+    }
+    {
+        static bool wasT[2];
+        const int turn[2] = {VK_HOME, VK_END};
+        for (int k = 0; k < 2; ++k) {
+            bool down = ctrl && alt && shift && (GetAsyncKeyState(turn[k]) & 0x8000);
+            if (down && !wasT[k]) mw5MonitorTurn(k ? 5.0f : -5.0f);
+            wasT[k] = down;
         }
     }
     static bool was[8];

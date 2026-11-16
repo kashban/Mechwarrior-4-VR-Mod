@@ -44,7 +44,7 @@ def write_gltf(folder, prims, interleaved=False):
         blob += arr.tobytes()
         return len(accs) - 1
 
-    for name, P, N, UV, I in prims:
+    for name, P, N, UV, I, *C in prims:  # C: vertex colours, n x 4 (bytes or floats)
         mats.append({'name': name})
         if interleaved:  # positions and normals share a view with a stride
             both = np.hstack([P, N]).astype('<f4')
@@ -60,6 +60,9 @@ def write_gltf(folder, prims, interleaved=False):
         at = add(UV.astype('<f4'), 5126, 'VEC2')
         ai = add(I.astype('<u2'), 5123, 'SCALAR')
         gprims.append({'attributes': {'POSITION': ap, 'NORMAL': an, 'TEXCOORD_0': at}, 'indices': ai, 'material': len(mats) - 1})
+        if C:
+            floats = C[0].dtype.kind == 'f'
+            gprims[-1]['attributes']['COLOR_0'] = add(C[0].astype('<f4' if floats else 'u1'), 5126 if floats else 5121, 'VEC4')
     g = {'buffers': [{'uri': 'mesh.bin', 'byteLength': len(blob)}], 'bufferViews': views, 'accessors': accs, 'materials': mats,
          'meshes': [{'primitives': gprims}]}
     with open(os.path.join(folder, 'mesh.bin'), 'wb') as f:
@@ -675,6 +678,305 @@ class PlayerMade(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             names, said = self.cockpit(d, [('Monitor_MTI1',) + quad(0, 0, 0.3, 0.2, -1), ('Panels_MTI',) + quad(0.5, 0, 0.8, 0.2, -1)])
             self.assertEqual(names, ['Monitor_MTI1', 'SCREEN:0'])
+
+
+MASKED = PAINT.replace('}\n', '}\n', 1) + """
+        ParameterInfo = { Name=PaintColorSecondary }
+        ParameterValue = { R=0, G=0, B=1, A=1 }
+        ParameterInfo = { Name=RGBPaintMask }
+        ParameterValue = Texture2D'/Game/A/Mask_MSK.Mask_MSK'
+"""
+
+
+def pixels(im):
+    return [im.getpixel((x, y)) for y in range(im.size[1]) for x in range(im.size[0])]
+
+
+def tilted(deg, w=0.4, h=0.2, extra=()):
+    """a w x h monitor facing the viewer (the mod's space), turned deg to the left about its middle; extra: more
+    corners (x, y) within it -> P, N, I, {corner number: the uv it should get}"""
+    c, s = np.cos(np.radians(deg)), np.sin(np.radians(deg))
+    own = [(-w / 2, -h / 2), (w / 2, -h / 2), (w / 2, h / 2), (-w / 2, h / 2)] + list(extra)
+    # the viewer looks along +z: its right is +x, so a turn to the left for it takes x towards +y
+    P = np.array([[x * c - y * s, x * s + y * c, 1.0] for x, y in own], np.float32)
+    N = np.tile(np.array([0, 0, -1], np.float32), (len(P), 1))
+    want = {k: (x / w + 0.5, 0.5 - y / h) for k, (x, y) in enumerate(own)}
+    return P, N, np.array([0, 1, 2, 0, 2, 3], np.uint32), want
+
+
+class Askew(unittest.TestCase):
+    """a monitor that hangs askew shows its picture along its own edges"""
+
+    def test_upright_stays(self):
+        a, b = np.array([0, 1, 1, 0.0]), np.array([0, 0, 0.5, 0.5])
+        self.assertEqual(cc.upright(a, b), 0.0)
+
+    def test_turned_rectangle(self):
+        for deg in (30, -30, 0.25, -0.25, 44.75, -44.75, 10.5):
+            c, s = np.cos(np.radians(deg)), np.sin(np.radians(deg))
+            x, y = np.array([-2, 2, 2, -2.0]), np.array([-1, -1, 1, 1.0])
+            # (tiny turns: the upright rectangle around it is hardly larger - a long one shows it)
+            x = x * 40 if abs(deg) < 1 else x
+            a, b = x * c - y * s, x * s + y * c
+            self.assertAlmostEqual(np.degrees(cc.upright(a, b)), deg, places=6, msg=deg)
+
+    def test_45_degrees_goes_left(self):
+        a, b = np.array([1, 0, -1, 0.0]), np.array([0, 1, 0, -1.0])  # a square on its corner: both ways are as good
+        self.assertAlmostEqual(np.degrees(cc.upright(a, b)), 45, places=6)
+
+    def test_the_smaller_turn_of_two_as_good(self):
+        # a six-cornered shape fits its rectangle as well every 30 degrees
+        t = np.radians(np.arange(6) * 60)
+        self.assertEqual(cc.upright(np.cos(t), np.sin(t)), 0.0)
+        a, b = np.cos(t + np.radians(10)), np.sin(t + np.radians(10))
+        self.assertAlmostEqual(np.degrees(cc.upright(a, b)), 10, places=6)  # not -20
+        a, b = np.cos(t - np.radians(10)), np.sin(t - np.radians(10))
+        self.assertAlmostEqual(np.degrees(cc.upright(a, b)), -10, places=6)
+
+    def test_two_per_cent(self):
+        def turned(deg):  # a square, turned: the upright rectangle around it is (cos + sin)^2 as large
+            t = np.radians(deg + np.arange(4) * 90 + 45)
+            return np.cos(t), np.sin(t)
+        self.assertEqual(cc.upright(*turned(0.5)), 0.0)                      # 1.75 % larger: left as it is
+        self.assertAlmostEqual(np.degrees(cc.upright(*turned(0.75))), 0.75)  # 2.6 %
+        # just at the limit: a 1 x 1 square against an upright rectangle of 1 / 0.98
+        a, b = np.array([0, 1, 1, 0, 0.5]), np.array([0, 0, 1, 1, 0.5])
+        self.assertEqual(cc.upright(a, b), 0.0)
+
+    def test_upright_in_the_world_on_demand(self):
+        P, N, I, want = tilted(20)
+        p, n, uv, i, asp, size = cc.screen(P, N, I, np.array([0, 1]), False)
+        c, s = np.cos(np.radians(20)), np.sin(np.radians(20))
+        np.testing.assert_allclose(size, (0.4 * c + 0.2 * s, 0.4 * s + 0.2 * c), atol=1e-5)
+        p, n, uv, i, asp, size = cc.screen(P, N, I, np.array([0, 1]))
+        np.testing.assert_allclose(size, (0.4, 0.2), atol=1e-5)
+
+    def test_a_monitor_is_one_by_its_upright_rectangle(self):
+        # a strip of 30 x 5 cm, turned by 45 degrees: too narrow for a monitor, but its upright rectangle is not -
+        # it stays the monitor it always was, and shows its picture along its edges
+        P, N, I, want = tilted(45, 0.3, 0.05)
+        (p, n, uv, i, asp, size), = cc.monitors(P, N, I)[0]
+        np.testing.assert_allclose(size, (0.3, 0.05), atol=1e-5)
+        # the largest by those rectangles are kept: nine upright ones of 0.2 x 0.2 and a longer strip, turned
+        prims = [rect(x, 0.2, 0.2) for x in range(9)]
+        Ps, Ns, Is, _ = tilted(45, 0.4, 0.02)  # 0.008 m2, but 0.088 m2 upright: the largest
+        P9, N9, I9 = join(prims)
+        P = np.vstack([P9, Ps + np.array([20, 0, 0], np.float32)])
+        found, rest = cc.monitors(P, np.vstack([N9, Ns]), np.concatenate([I9, Is + len(P9)]).astype(np.uint32))
+        self.assertEqual(len(found), 8)
+        np.testing.assert_allclose(found[-1][5], (0.4, 0.02), atol=1e-5)  # the strip is among them, the last from the left
+
+    def test_screen_follows_its_edges(self):
+        for deg in (20, -20):
+            P, N, I, want = tilted(deg)
+            (p, n, uv, i, asp, size), = cc.screens(P, N, I)
+            self.assertAlmostEqual(asp, 2.0, places=4)
+            np.testing.assert_allclose(size, (0.4, 0.2), atol=1e-5)
+            for q, t in zip(p, uv):
+                k = int(np.argmin(np.abs(P - q).sum(1)))
+                np.testing.assert_allclose(t, want[k], atol=1e-4, err_msg=str(deg))
+
+
+class Shaded(unittest.TestCase):
+    """one-coloured parts take the shade of their vertex colours"""
+
+    def test_paint_light(self):
+        self.assertEqual(cc.paint_light(PAINT), (0.5, 1.0, 0.0))
+        self.assertEqual(cc.paint_light(MASKED, 'Secondary'), (0.0, 0.0, 1.0))
+        self.assertIsNone(cc.paint_light(MASKED, 'Tertiary'))
+        self.assertIsNone(cc.paint_light(PAINT, 'Secondary'))
+
+    def test_to_screen(self):
+        self.assertEqual(cc.to_screen((0, 1, 0.5)), (0, 255, 186))
+        self.assertEqual(cc.to_screen((0.2,)), (123,))  # 255 * 0.2 ** (1 / 2.2) = 122.7
+
+    def test_masked_paint(self):
+        mask = Image.new('RGB', (2, 2))
+        mask.putdata([(255, 0, 0), (0, 0, 0), (255, 255, 0), (255, 255, 255)])
+        metal = cc.to_screen(cc.METAL)
+        im = cc.masked_paint(mask, [(0.5, 1.0, 0.0), (0.0, 0.0, 1.0), None])
+        self.assertEqual(im.mode, 'RGBA')
+        self.assertEqual(pixels(im), [(186, 255, 0, 255), metal + (255,), (0, 0, 255, 255), (0, 0, 255, 255)])
+        im = cc.masked_paint(mask, [None, None, (1.0, 0.0, 0.0)])
+        self.assertEqual(pixels(im), [metal + (255,), metal + (255,), metal + (255,), (255, 0, 0, 255)])
+        half = Image.new('RGB', (1, 1), (0, 128, 0))  # half of the second paint over the metal
+        want = cc.to_screen(tuple(m + 128 / 255 * (p - m) for m, p in zip(cc.METAL, (1.0, 0.5, 0.0))))
+        self.assertEqual(cc.masked_paint(half, [(0, 0, 0), (1.0, 0.5, 0.0), None]).getpixel((0, 0)), want + (255,))
+        self.assertEqual(cc.masked_paint(Image.new('L', (1, 1), 255), [(1, 1, 1), (0, 0, 0), (0.5, 1, 0)]).getpixel((0, 0)), (186, 255, 0, 255))
+
+    def test_metal(self):
+        np.testing.assert_allclose(cc.METAL, [0.15, 0.15, 0.16])
+        self.assertEqual(cc.VC_SHARE, 0.5)
+        self.assertEqual(cc.WHITE, (255, 255, 255))
+        self.assertEqual(cc.QUARTERS, range(1, 181))
+
+    def test_material_with_a_paint_mask(self):
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, 'Game', 'A'))
+            Image.new('RGB', (8, 8), (0, 255, 0)).save(os.path.join(d, 'Game', 'A', 'Mask_MSK.png'))
+            put(os.path.join(d, 'Door_MTI.props.txt'), MASKED)
+            clr, ems, strength = cc.material(cc.find_props(d), d, 'Door_MTI')
+            self.assertEqual(clr.size, (8, 8))
+            self.assertEqual(clr.getpixel((3, 3)), (0, 0, 255, 255))  # the second paint
+            # a colour picture wins over the mask
+            Image.new('RGB', (4, 4), (10, 20, 30)).save(os.path.join(d, 'Game', 'A', 'Hull_CLR.png'))
+            put(os.path.join(d, 'Both_MTI.props.txt'), MASKED + "\nParameterInfo = { Name=BaseColor }\nParameterValue = Texture2D'/Game/A/Hull_CLR.Hull_CLR'")
+            self.assertEqual(cc.material(cc.find_props(d), d, 'Both_MTI')[0].getpixel((0, 0)), (10, 20, 30, 255))
+            # the mask's picture is missing: the first paint, as without a mask
+            os.remove(os.path.join(d, 'Game', 'A', 'Mask_MSK.png'))
+            clr, ems, strength = cc.material(cc.find_props(d), d, 'Door_MTI', log=lambda *a: None)
+            self.assertEqual(clr.getpixel((0, 0)), (186, 255, 0, 255))
+
+    def test_displays(self):
+        self.assertEqual(cc.DISPLAYS, ('projection_hologram', 'widget3d_', 'minimapgenerator'))
+        for parent in ('Widget3D_Paperdoll1_MTL', 'MiniMapGenerator1_MTL'):
+            self.assertTrue(cc.is_hologram(HOLOGRAM.replace('Projection_Hologram_MTL', parent)), parent)
+        self.assertFalse(cc.is_hologram(HOLOGRAM.replace('Projection_Hologram', 'Annihilator')))
+        self.assertTrue(cc.is_display('Widget3D_Paperdoll1_MTL'))
+        self.assertTrue(cc.is_display('MINIMAPGenerator1_MTL'))
+        self.assertTrue(cc.is_display('Projection_Hologram_MTL'))
+        self.assertFalse(cc.is_display('My_Widget3D_Paperdoll1_MTL'))
+        self.assertFalse(cc.is_display('Widget3D'))
+
+    def gltf(self, d, colours):
+        P, N, UV, I = quad(0, 0, 1, 1, -1)
+        with open(write_gltf(d, [('A', P, N, UV, I) + (() if colours is None else (colours,))])) as f:
+            g = json.load(f)
+        return g, get(os.path.join(d, 'mesh.bin')), g['meshes'][0]['primitives'][0]
+
+    def test_vertex_colours(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.assertIsNone(cc.vertex_colours(*self.gltf(d, None)))
+            c = np.array([[255, 255, 255, 0], [250, 255, 251, 255], [255, 252, 255, 9], [255, 255, 250, 255]], np.uint8)
+            self.assertIsNone(cc.vertex_colours(*self.gltf(d, c)))  # nothing painted: 250 and more is white
+            c[1, 0] = 249
+            got = cc.vertex_colours(*self.gltf(d, c))
+            self.assertEqual(got.dtype, np.float64)
+            np.testing.assert_array_equal(got, c[:, :3])
+            f = np.array([[1, 1, 1, 1], [0.2, 0.4, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1]], np.float32)  # as numbers 0..1
+            np.testing.assert_allclose(cc.vertex_colours(*self.gltf(d, f)), f[:, :3] * 255, atol=1e-4)
+            self.assertIsNone(cc.vertex_colours(*self.gltf(d, np.full((4, 4), 0.99, np.float32))))  # 252
+
+    def test_painted(self):
+        # four triangles around the middle of a square; the first two get one colour, the others one each
+        P = np.array([[0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1], [0.5, 0.5, 1]], np.float32)
+        N = np.arange(15, dtype=np.float32).reshape(5, 3)
+        I = np.array([0, 1, 4, 1, 2, 4, 2, 3, 4, 3, 0, 4], np.uint32)
+        VC = np.array([[30, 60, 90], [30, 60, 90], [30, 60, 90], [240, 240, 240], [30, 60, 90]], np.float64)
+        p, n, uv, i, im, colours = cc.painted(P, N, I, VC, (200, 100, 255), 1.0)
+        self.assertEqual(colours, 2)
+        self.assertEqual((im.mode, im.size), ('RGBA', (4, 4)))
+        self.assertEqual((uv.dtype, i.dtype), (np.float32, np.uint32))
+        self.assertEqual(len(i), 12)
+        self.assertEqual(len(p), 8)  # the corners 2 and 4 belong to triangles of both colours, 0 and 3 too... see below
+        px = pixels(im)
+        dark = (round(200 * 30 / 255), round(100 * 60 / 255), 90)
+        light = (round(200 * 100 / 255), round(100 * 120 / 255), round(255 * 140 / 255))  # the mean of 240 and twice 30, 60, 90
+        self.assertEqual(sorted(px[:2]), sorted([dark + (255,), light + (255,)]))
+        self.assertEqual(px[2:], [(0, 0, 0, 255)] * 14)
+        want = [dark, dark, light, light]
+        for t in range(4):
+            corners = i[3 * t:3 * t + 3]
+            np.testing.assert_array_equal(p[corners], P[I[3 * t:3 * t + 3]])  # the triangle is where it was
+            np.testing.assert_array_equal(n[corners], N[I[3 * t:3 * t + 3]])
+            for c in corners:  # every corner points at the middle of its colour's texel
+                x, y = uv[c] * 4 - 0.5
+                self.assertEqual((x, y), (round(float(x)), round(float(y))))
+                self.assertEqual(px[int(y) * 4 + int(x)][:3], want[t])
+
+    def test_painted_share(self):
+        P = np.zeros((3, 3), np.float32)
+        I = np.array([0, 1, 2], np.uint32)
+        VC = np.array([[0, 51, 255], [0, 51, 255], [0, 51, 255]], np.float64)
+        for share, want in ((1.0, (0, 20, 100)), (0.5, (50, 60, 100)), (0.0, (100, 100, 100)), (0.25, (75, 80, 100))):
+            im = cc.painted(P, P, I, VC, (100, 100, 100), share)[4]
+            self.assertEqual(im.getpixel((0, 0)), want + (255,), share)
+        self.assertEqual(cc.painted(P, P, I, VC, (10, 200, 30), 1.0)[4].getpixel((0, 0)), (0, 40, 30, 255))  # channel by channel
+
+    def test_painted_many_colours(self):
+        # 17 triangles, each of its own colour: a picture of 8 x 8, the 17th in its third row
+        P = np.zeros((51, 3), np.float32)
+        P[:, 0] = np.arange(51)
+        VC = np.repeat(np.arange(17) * 10, 3)[:, None] * np.ones((1, 3))
+        p, n, uv, i, im, colours = cc.painted(P, P, np.arange(51, dtype=np.uint32), VC, (255, 255, 255), 1.0)
+        self.assertEqual((colours, im.size, len(p)), (17, (8, 8), 51))
+        self.assertEqual(im.getpixel((0, 2)), (160, 160, 160, 255))
+        last = uv[i[48]]  # the triangle of the colour 160
+        np.testing.assert_allclose(last, [0.5 / 8, 2.5 / 8])
+        np.testing.assert_allclose(uv[i[21]], [7.5 / 8, 0.5 / 8])  # the eighth colour: the end of the first row
+        self.assertEqual(im.getpixel((7, 0)), (70, 70, 70, 255))
+        p, n, uv, i, im, colours = cc.painted(P[:48], P[:48], np.arange(48, dtype=np.uint32), VC[:48], (255, 255, 255), 1.0)
+        self.assertEqual((colours, im.size), (16, (4, 4)))  # sixteen just fit the smallest
+
+    def cockpit(self, d, prims, shade=True):
+        out = os.path.join(d, 'c.mwc')
+        said = []
+        groups = cc.convert(write_gltf(d, prims), d, out, log=lambda *a: said.append(' '.join(str(x) for x in a)), shade=shade)
+        return groups, said
+
+    def test_only_a_mods_cockpit_is_shaded(self):
+        with tempfile.TemporaryDirectory() as d:
+            put(os.path.join(d, 'Dash_LOD.props.txt'), PAINT)
+            c = np.array([[0, 0, 0, 255]] * 4, np.uint8)
+            prims = [('Dash_LOD',) + quad(0, 0, 1, 1, -1) + (c,)]
+            groups, said = self.cockpit(d, prims, shade=False)
+            self.assertEqual(groups[0][5].getpixel((0, 0)), (186, 255, 0, 255))
+            self.assertEqual(cc.convert(write_gltf(d, prims), d, os.path.join(d, 'd.mwc'), log=lambda *a: None)[0][5].getpixel((0, 0)), (186, 255, 0, 255))
+            g = json.loads(get(write_gltf(d, prims), 'r'))
+            groups = cc.build_groups(g, get(os.path.join(d, 'mesh.bin')), cc.find_props(d), d, log=lambda *a: None)[0]
+            self.assertEqual(groups[0][5].getpixel((0, 0)), (186, 255, 0, 255))
+
+    def test_a_painted_part_is_shaded_by_half(self):
+        with tempfile.TemporaryDirectory() as d:
+            put(os.path.join(d, 'Dash_LOD.props.txt'), PAINT)
+            c = np.array([[0, 0, 0, 255]] * 4, np.uint8)
+            groups, said = self.cockpit(d, [('Dash_LOD',) + quad(0, 0, 1, 1, -1) + (c,)])
+            self.assertEqual(groups[0][5].getpixel((0, 0)), (93, 128, 0, 255))  # half of 186, 255, 0
+            self.assertIn('  Dash_LOD: shaded by its vertices, 1 colours', said)
+            np.testing.assert_allclose(groups[0][3], np.full((4, 2), 0.125))  # all at the first texel's middle
+
+    def test_a_part_without_material_takes_its_vertex_colours(self):
+        with tempfile.TemporaryDirectory() as d:
+            c = np.array([[40, 80, 120, 255]] * 4, np.uint8)
+            groups, said = self.cockpit(d, [('dummy_material_0',) + quad(0, 0, 1, 1, -1) + (c,)])
+            self.assertEqual(groups[0][5].getpixel((0, 0)), (40, 80, 120, 255))
+
+    def test_white_vertices_change_nothing(self):
+        with tempfile.TemporaryDirectory() as d:
+            put(os.path.join(d, 'Dash_LOD.props.txt'), PAINT)
+            c = np.array([[255, 255, 255, 255]] * 4, np.uint8)
+            P, N, UV, I = quad(0, 0, 1, 1, -1)
+            groups, said = self.cockpit(d, [('Dash_LOD', P, N, UV, I, c), ('Other', P, N, UV, I, c), ('Bare', P, N, UV, I)])
+            self.assertEqual([g[5].getpixel((0, 0)) for g in groups], [(186, 255, 0, 255), (80, 80, 84, 255), (80, 80, 84, 255)])
+            np.testing.assert_array_equal(groups[0][3], UV)
+            self.assertFalse(any('shaded' in s for s in said))
+
+    def test_a_picture_is_not_shaded(self):
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, 'Game', 'A', 'B'))
+            im = Image.new('RGB', (8, 8), (10, 20, 30))
+            im.putpixel((5, 5), (200, 0, 0))  # a picture: more than one colour
+            im.save(os.path.join(d, 'Game', 'A', 'B', 'Hull_CLR.png'))
+            put(os.path.join(d, 'Hull_MTI.props.txt'), Props.TEXT)
+            c = np.array([[0, 0, 0, 255]] * 4, np.uint8)
+            P, N, UV, I = quad(0, 0, 1, 1, -1)
+            groups, said = self.cockpit(d, [('Hull_MTI', P, N, UV, I, c)])
+            self.assertEqual(groups[0][5].getpixel((0, 0)), (10, 20, 30, 255))
+            np.testing.assert_array_equal(groups[0][3], UV)
+            # of one colour all over it is shaded like a paint
+            Image.new('RGB', (8, 8), (10, 20, 30)).save(os.path.join(d, 'Game', 'A', 'B', 'Hull_CLR.png'))
+            groups, said = self.cockpit(d, [('Hull_MTI', P, N, UV, I, c)])
+            self.assertEqual(groups[0][5].getpixel((0, 0)), (5, 10, 15, 255))
+
+    def test_the_games_picture_materials_are_monitors(self):
+        with tempfile.TemporaryDirectory() as d:
+            put(os.path.join(d, 'Monitor_MTI.props.txt'), HOLOGRAM.replace('Projection_Hologram_MTL', 'Widget3D_Paperdoll1_MTL'))
+            groups, said = self.cockpit(d, [('Monitor_MTI',) + quad(0, 0, 0.3, 0.2, -1), ('MiniMapGenerator1_MTL',) + quad(1, 0, 1.3, 0.2, -1),
+                                            ('Dash',) + quad(2, 0, 3, 1, -1)])
+            self.assertEqual([g[0] for g in groups], ['SCREEN:0', 'SCREEN:1', 'Dash'])
+            # with the game's own monitor material in the cockpit they are none
+            groups, said = self.cockpit(d, [('MiniMapGenerator1_MTL',) + quad(1, 0, 1.3, 0.2, -1), ('Panels_MTI',) + quad(0.5, 0, 0.8, 0.2, -1)])
+            self.assertEqual([g[0] for g in groups], ['MiniMapGenerator1_MTL', 'SCREEN:0'])
 
 
 if __name__ == '__main__':

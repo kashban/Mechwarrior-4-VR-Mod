@@ -159,6 +159,27 @@ struct McHud {
 // the point u v lies in the rectangle r (not on its edge)
 static inline bool mcHolds(const float *r, float u, float v) { return r[0] < u && u < r[2] && r[1] < v && v < r[3]; }
 
+// degrees as -180 < d <= 180 (a whole turn is none; what is no number: 0)
+static inline float mcTurnNorm(float d) {
+    if (!(d > -1e6f && d < 1e6f)) return 0;
+    d = fmodf(d, 360.0f);
+    if (d > 180) d -= 360;
+    else if (d <= -180) d += 360;
+    return d;
+}
+
+// A monitor (width / height: mon) shows a part of the HUD image (width / height: part) whole, undistorted and as
+// large as it fits, turned deg clockwise. m[0..1], m[2..3]: the rows that take the monitor's uv about its middle
+// (u to the right, v down) to the part's about its middle (inside: both within -0.5..0.5)
+static inline void mcTurnFit(float mon, float part, float deg, float *m) {
+    const float c = cosf(deg * 0.01745329252f), s = sinf(deg * 0.01745329252f);
+    const float ac = fabsf(c), as = fabsf(s);
+    const float kw = mon / (part * ac + as), kh = 1 / (part * as + ac);
+    const float k = fminf(kw, kh); // the part's height in monitor heights
+    m[0] = mon * c / (part * k), m[1] = s / (part * k);
+    m[2] = -mon * s / k, m[3] = c / k;
+}
+
 // true and zr: the zoom window (the last window whose centre lies in the middle of the picture)
 static inline bool mcZoomWindow(const McHud &h, float *zr) {
     bool zoom = false;

@@ -45,6 +45,7 @@ static const HelpLine g_helpText[] = {
     {L"Ctrl+Alt+9", L"this cockpit's monitors off / on"},
     {L"Ctrl+Alt+Shift+9", L"the chosen part leaves its monitor and floats"},
     {L"      on a monitor", L"arrows move what it shows, PgUp / PgDn nearer / more, Ins / Del longer / shorter"},
+    {L"      on a monitor", L"Home / End turn the picture left / right (a monitor that hangs askew)"},
     {nullptr, L"Other"},
     {L"Ctrl+F12", L"a picture of both eyes into mw4vr_shots"},
     {L"Ctrl+F1", L"this page"},

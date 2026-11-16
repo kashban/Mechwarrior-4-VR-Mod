@@ -528,6 +528,56 @@ static void testHolds() {
     CHECK(!mcHolds(r, 0.1f, 0.5f) && !mcHolds(r, 0.7f, 0.5f) && !mcHolds(r, 0.4f, 0.2f) && !mcHolds(r, 0.4f, 0.95f));
 }
 
+static void testTurnNorm() {
+    g_test = "turn norm";
+    CHECK(mcTurnNorm(0) == 0 && mcTurnNorm(5) == 5 && mcTurnNorm(-5) == -5);
+    CHECK(mcTurnNorm(180) == 180 && mcTurnNorm(-180) == 180 && mcTurnNorm(185) == -175 && mcTurnNorm(-185) == 175);
+    CHECK(mcTurnNorm(360) == 0 && mcTurnNorm(725) == 5 && mcTurnNorm(-725) == -5 && mcTurnNorm(540) == 180);
+    CHECK(mcTurnNorm(179) == 179 && mcTurnNorm(-179) == -179 && mcTurnNorm(180.5f) == -179.5f && mcTurnNorm(-180.5f) == 179.5f);
+    CHECK(mcTurnNorm(999990) == mcTurnNorm(999990 - 360 * 2777) && mcTurnNorm(-999990) == -mcTurnNorm(999990));
+    CHECK(mcTurnNorm(1e6f) == 0 && mcTurnNorm(-1e6f) == 0 && mcTurnNorm(2e6f) == 0 && mcTurnNorm(-2e6f) == 0);
+    float nan = 0;
+    nan = (nan - nan) / nan;
+    CHECK(mcTurnNorm(nan) == 0);
+}
+
+static void testTurnFit() {
+    g_test = "turn fit";
+    float m[4];
+    const float e = 1e-5f;
+    mcTurnFit(2, 4, 0, m); // a part wider than the monitor: its width fills, bars above and below
+    CHECK(nearly(m[0], 1, e) && nearly(m[1], 0, e) && nearly(m[2], 0, e) && nearly(m[3], 2, e));
+    mcTurnFit(2, 0.5f, 0, m); // narrower: its height fills
+    CHECK(nearly(m[0], 4, e) && nearly(m[1], 0, e) && nearly(m[2], 0, e) && nearly(m[3], 1, e));
+    mcTurnFit(2, 0.5f, 90, m); // a tall part on a wide monitor, a quarter turn clockwise: it fills the monitor;
+    CHECK(nearly(m[0], 0, e) && nearly(m[1], 1, e) && nearly(m[2], -1, e) && nearly(m[3], 0, e)); // the monitor's top is the part's right
+    mcTurnFit(2, 0.5f, -90, m);
+    CHECK(nearly(m[0], 0, e) && nearly(m[1], -1, e) && nearly(m[2], 1, e) && nearly(m[3], 0, e));
+    mcTurnFit(2, 4, 180, m); // upside down
+    CHECK(nearly(m[0], -1, e) && nearly(m[1], 0, e) && nearly(m[2], 0, e) && nearly(m[3], -2, e));
+    mcTurnFit(3, 0.5f, 90, m); // a quarter turn, the monitor wider than the part is tall: the monitor's height limits
+    CHECK(nearly(m[0], 0, e) && nearly(m[1], 1, e) && nearly(m[2], -1.5f, e) && nearly(m[3], 0, e));
+    mcTurnFit(1, 0.5f, 90, m); // and narrower: its width does
+    CHECK(nearly(m[0], 0, e) && nearly(m[1], 2, e) && nearly(m[2], -1, e) && nearly(m[3], 0, e));
+    // turned 30 degrees: the part's corners lie within the monitor, one pair of them on its edge
+    for (int t = 0; t < 2; ++t) {
+        const float mon = t ? 0.8f : 2.0f, part = 1.5f, deg = t ? -30.0f : 30.0f;
+        mcTurnFit(mon, part, deg, m);
+        float det = m[0] * m[3] - m[1] * m[2], far = 0;
+        for (int k = 0; k < 4; ++k) {
+            float qx = k & 1 ? 0.5f : -0.5f, qy = k & 2 ? 0.5f : -0.5f; // a corner of the part -> the monitor's uv
+            float u = (m[3] * qx - m[1] * qy) / det, v = (-m[2] * qx + m[0] * qy) / det;
+            CHECK(fabsf(u) <= 0.5f + e && fabsf(v) <= 0.5f + e);
+            far = fmaxf(far, fmaxf(fabsf(u), fabsf(v)));
+        }
+        CHECK(nearly(far, 0.5f, e));
+        // undistorted: the monitor's right and down (in metres: mon, 1) are as long in the part (in metres: part, 1) and square
+        float rx = m[0] / mon * part, ry = m[2] / mon, dx = m[1] * part, dy = m[3];
+        CHECK(nearly(rx * rx + ry * ry, dx * dx + dy * dy, 1e-4f) && nearly(rx * dx + ry * dy, 0, 1e-4f));
+        CHECK(t ? (m[1] < 0 && m[2] > 0) : (m[1] > 0 && m[2] < 0)); // clockwise for positive degrees
+    }
+}
+
 static void testHudGlass() {
     g_test = "hud glass";
     McHud h = hud();
@@ -860,7 +910,7 @@ static void testGridFit() {
 }
 
 int main() {
-    testHolds(), testHudGlass(), testGlassPose(), testGlassScale(), testGlassAim();
+    testHolds(), testTurnNorm(), testTurnFit(), testHudGlass(), testGlassPose(), testGlassScale(), testGlassAim();
     testGridMark(), testGridPlace(), testGridTri(), testGridCells(), testGridFree(), testGridRim(), testGridFit();
     testMul34(), testViewAxis();
     testFrustum(), testFrustumSameView(), testFrustumTangent(), testFrustumNear(), testFrustumLayout();
