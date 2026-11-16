@@ -129,7 +129,7 @@ THANKS AND LICENCE
 MW4Engine DX11 (mw4hook.dll) is the work of its author; MW4VR only builds on it. MechWarrior is a
 trademark of Microsoft; the game and MekPak belong to their owners. Trees: Poly Haven (CC0).
 MW4VR: Copyright (c) 2026 Kashban, PolyForm Noncommercial License 1.0.0 (see LICENSE) - free for any
-noncommercial use.
+noncommercial use. Source and new versions: https://github.com/kashban/Mechwarrior-4-VR-Mod
 
 
 
@@ -266,4 +266,4 @@ DANK UND LIZENZ
 MW4Engine DX11 (mw4hook.dll) ist das Werk seines Autors; MW4VR baut nur darauf auf. MechWarrior ist
 eine Marke von Microsoft; Spiel und MekPak gehören ihren Eigentümern. Bäume: Poly Haven (CC0).
 MW4VR: Copyright (c) 2026 Kashban, PolyForm Noncommercial License 1.0.0 (siehe LICENSE) - frei für
-jede nichtkommerzielle Nutzung.
+jede nichtkommerzielle Nutzung. Quelltext und neue Versionen: https://github.com/kashban/Mechwarrior-4-VR-Mod

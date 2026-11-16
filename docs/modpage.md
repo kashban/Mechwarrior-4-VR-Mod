@@ -48,5 +48,5 @@ game's folder, start with `mw4vr_start.cmd`.
 
 ## Source, licence
 
-Source: <the GitHub address>. PolyForm Noncommercial 1.0.0: free for any noncommercial use, with the
+Source: https://github.com/kashban/Mechwarrior-4-VR-Mod. PolyForm Noncommercial 1.0.0: free for any noncommercial use, with the
 licence and copyright notice kept. MW4Engine DX11 is the work of its author; this mod only builds on it.
