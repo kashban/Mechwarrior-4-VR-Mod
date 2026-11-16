@@ -10,6 +10,7 @@
 
 static volatile bool g_helpOn;
 static bool g_helpPause = true, g_helpClock = true;
+static int g_helpSize = 60; // [vr] help_size: the page's size, per cent of the far middle of the HUD's picture
 static std::vector<uint32_t> g_helpBits; // BGRA, top row first
 static UINT g_helpW, g_helpH;
 
@@ -18,7 +19,7 @@ struct HelpLine {
     const wchar_t *what;
 };
 static const HelpLine g_helpText[] = {
-    {nullptr, L"MW4VR keys   -   Ctrl+F1 closes this page, the game waits"},
+    {nullptr, L"MW4VR keys   -   Ctrl+F1 or Esc closes this page, the game waits"},
     {nullptr, L"View and seat"},
     {L"Ctrl+Home", L"recentre the view"},
     {L"Ctrl+Up / Down", L"seat forward / back"},
@@ -64,15 +65,34 @@ static void helpBuild(UINT w, UINT h) {
         return;
     }
     int line = (int)h / (HELP_LINES + 2), size = line * 3 / 4;
-    HFONT font = CreateFontW(-size, 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, 0, 0, ANTIALIASED_QUALITY, 0, L"Segoe UI");
-    HFONT bold = CreateFontW(-size, 0, 0, 0, FW_BOLD, 0, 0, 0, DEFAULT_CHARSET, 0, 0, ANTIALIASED_QUALITY, 0, L"Segoe UI");
-    HGDIOBJ oldBm = SelectObject(dc, bm), oldFont = SelectObject(dc, font ? font : GetStockObject(DEFAULT_GUI_FONT));
+    int left = (int)w / 28, mid = (int)w * 34 / 100, y = line;
+    HGDIOBJ oldBm = SelectObject(dc, bm), oldFont = GetCurrentObject(dc, OBJ_FONT);
+    HFONT font = nullptr, bold = nullptr;
+    for (int tries = 0; tries < 6; ++tries) { // the font so small that no line is cut off
+        font = CreateFontW(-size, 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, 0, 0, ANTIALIASED_QUALITY, 0, L"Segoe UI");
+        bold = CreateFontW(-size, 0, 0, 0, FW_BOLD, 0, 0, 0, DEFAULT_CHARSET, 0, 0, ANTIALIASED_QUALITY, 0, L"Segoe UI");
+        if (!font || !bold) break;
+        float over = 1;
+        for (int i = 0; i < HELP_LINES; ++i) {
+            const HelpLine &t = g_helpText[i];
+            SIZE s;
+            SelectObject(dc, t.key ? font : bold);
+            if (GetTextExtentPoint32W(dc, t.what, (int)wcslen(t.what), &s))
+                over = max(over, (float)s.cx / (float)((int)w - left - (t.key ? mid : left)));
+            if (t.key && GetTextExtentPoint32W(dc, t.key, (int)wcslen(t.key), &s)) over = max(over, (float)s.cx / (float)(mid - left - left / 2 - 6));
+        }
+        if (over <= 1 || size < 9) break;
+        SelectObject(dc, oldFont);
+        DeleteObject(font), DeleteObject(bold);
+        font = bold = nullptr;
+        size = max(8, (int)(size / over) - 1);
+    }
+    SelectObject(dc, font ? font : GetStockObject(DEFAULT_GUI_FONT));
     RECT all = {0, 0, (LONG)w, (LONG)h};
     HBRUSH back = CreateSolidBrush(RGB(10, 18, 10));
     FillRect(dc, &all, back);
     DeleteObject(back);
     SetBkMode(dc, TRANSPARENT);
-    int left = (int)w / 28, mid = (int)w * 34 / 100, y = line;
     for (int i = 0; i < HELP_LINES; ++i, y += line) {
         const HelpLine &t = g_helpText[i];
         if (!t.key) {
@@ -106,7 +126,8 @@ static void helpBuild(UINT w, UINT h) {
 // into the HUD layer's picture tex (w x h used of it), while the page is up: its far middle
 static void helpDraw(ID3D11DeviceContext *ctx, ID3D11Texture2D *tex, UINT w, UINT h, float L, float R, float T, float B) {
     if (!g_helpOn || !ctx || !tex || w < 400 || h < 400) return;
-    UINT bw = (UINT)((R - L) * w * 0.96f) & ~1u, bh = (UINT)((B - T) * h * 0.94f) & ~1u;
+    float part = g_helpSize / 100.0f; // of the far middle's width and height
+    UINT bw = (UINT)((R - L) * w * part) & ~1u, bh = (UINT)((B - T) * h * part) & ~1u;
     if (bw < 300 || bh < 300) return;
     if (bw != g_helpW || bh != g_helpH) helpBuild(bw, bh);
     if (!g_helpW) return;
@@ -178,6 +199,7 @@ static void helpClocks() {
     std::wstring ini = g_dir + L"mw4vr.ini";
     g_helpPause = GetPrivateProfileIntW(L"vr", L"help_pause", 1, ini.c_str()) != 0;
     g_helpClock = g_helpPause && GetPrivateProfileIntW(L"vr", L"help_clock", 1, ini.c_str()) != 0;
+    g_helpSize = min(96, max(30, (int)GetPrivateProfileIntW(L"vr", L"help_size", 60, ini.c_str())));
     if (!g_helpClock) return;
     HMODULE k32 = GetModuleHandleW(L"kernel32.dll"), mm = GetModuleHandleW(L"winmm.dll");
     g_helpQpc = k32 ? (HelpPFN_Qpc)GetProcAddress(k32, "QueryPerformanceCounter") : nullptr;
@@ -188,10 +210,35 @@ static void helpClocks() {
          game, hook, game ? "" : " (none found in the game: it will see the page's time as one long frame)");
 }
 
-// Ctrl+F1, once a frame: the page on / off (on only in a battle, where it can be seen)
+// What was typed while the game waited is thrown away, so the game does not act on it afterwards (Esc: its own
+// pause menu): the key-down messages in the window's queue, and the keyboard's buffer in DirectInput (through
+// our dinput.dll, if it is the one loaded). The releases stay, so no key the game knew as held stays held -
+// only in DirectInput's buffer they go too: a key held before the page and let go while it was up counts as
+// held until it is pressed again.
+static void helpForgetKeys() {
+    MSG m, ups[64];
+    int n = 0, dropped = 0;
+    for (int i = 0; i < 4096 && PeekMessageW(&m, nullptr, WM_KEYFIRST, WM_KEYLAST, PM_REMOVE); ++i) {
+        if ((m.message == WM_KEYUP || m.message == WM_SYSKEYUP) && n < 64) ups[n++] = m;
+        else ++dropped;
+    }
+    for (int i = 0; i < n; ++i) PostMessageW(ups[i].hwnd, ups[i].message, ups[i].wParam, ups[i].lParam);
+    int di = -2;
+    HMODULE d = GetModuleHandleW(L"dinput.dll");
+    typedef int(WINAPI * Fn)(void);
+    Fn fn = d ? (Fn)GetProcAddress(d, "MW4VR_FlushKeys") : nullptr;
+    if (fn) di = fn();
+    logf("help: keys typed meanwhile forgotten: %d window messages, DirectInput %s (%d)", dropped,
+         di == -2 ? "not ours - nothing done" : di < 0 ? "has no buffer to empty" : "events", di);
+}
+
+// Ctrl+F1, once a frame: the page on / off (on only in a battle, where it can be seen); Esc closes it too
 static void helpKey(bool battle) {
-    static bool was;
+    static bool was, wasEsc;
     bool down = (GetAsyncKeyState(VK_CONTROL) & 0x8000) && !(GetAsyncKeyState(VK_MENU) & 0x8000) && (GetAsyncKeyState(VK_F1) & 0x8000);
+    bool esc = (GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0;
+    if (esc && !wasEsc && g_helpOn) g_helpOn = false, Beep(400, 40);
+    wasEsc = esc;
     if (down && !was) {
         if (g_helpOn) g_helpOn = false;
         else if (battle) g_helpOn = true;

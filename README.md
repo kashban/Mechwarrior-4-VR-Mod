@@ -61,7 +61,7 @@ Ctrl+Alt keys below.
 
 | Key | |
 |---|---|
-| Ctrl+F1 | the keys as a page in the headset; the game waits until it is closed |
+| Ctrl+F1 | the keys as a page in the headset; the game waits until it is closed (Ctrl+F1 again or Esc) |
 | Ctrl+Home | recentre |
 | Ctrl+F11 | own cockpit mesh on / off |
 | Ctrl+Alt+F11 (with Shift: back) | the next cockpit mesh; remembered for the mech you sit in |

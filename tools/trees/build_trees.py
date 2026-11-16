@@ -431,9 +431,17 @@ DRY = [('desert01_color_grass02', 1), ('desert01_color_grass03', 1), ('desert01_
 WARM = [(m, 1) for m in GRASS if m.startswith('trop01') or m.startswith('eaton03')]
 
 
-def kind_text(name, model, density, size, patch, seed, wind, conifer=False, grass=1.0, where='green', distance=1500, sink=(-0.4, -0.15)):
-    t = ['[%s]' % name, 'enabled = 1', 'model = clutter\\mw4vr\\%s.obj' % model, 'density = %g' % density, 'size = %g %g' % size, 'rotate = 0 360',
-         'sink = %g %g' % sink, 'jitter = 1', 'align = up', 'slope = 22 35', 'above_water = 0.5', 'distance = 0 %d' % distance, 'grow = 0 0.1',
+# Half the densities the kinds below name: a wood of cards fills the picture many times over, and in a headset
+# (two large pictures a frame) that cost three quarters of the frame rate. Trees (not the low bushes) are not drawn
+# nearer than NEAR metres either: nothing stops a mech walking into one, and its crown would stand in the cockpit.
+THIN, NEAR = 0.5, 14
+
+
+def kind_text(name, model, density, size, patch, seed, wind, conifer=False, grass=1.0, where='green', distance=1000, sink=(-0.4, -0.15)):
+    tree = distance >= 1000
+    t = ['[%s]' % name, 'enabled = 1', 'model = clutter\\mw4vr\\%s.obj' % model, 'density = %g' % (density * THIN), 'size = %g %g' % size, 'rotate = 0 360',
+         'sink = %g %g' % sink, 'jitter = 1', 'align = up', 'slope = 22 35', 'above_water = 0.5', 'distance = %d %d' % (NEAR if tree else 0, distance),
+         'grow = %s 0.1' % ('0.01' if tree else '0'),
          'fade = dither', 'bands = auto', 'patch = %g %g' % patch, 'seed = %d' % seed, 'wind = %g %g' % wind, 'ground_tint = 0 1']
     if where == 'green':
         for m in GRASS:

@@ -3,3 +3,4 @@ EXPORTS
     DirectInputCreateEx = _MW4VR_DirectInputCreateEx@20
     DirectInputCreateA = _MW4VR_DirectInputCreateA@16
     DirectInputCreateW = _MW4VR_DirectInputCreateW@16
+    MW4VR_FlushKeys = _MW4VR_FlushKeys@0

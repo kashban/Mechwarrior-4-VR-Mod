@@ -99,6 +99,8 @@ mw5_screen_red_boost=6
 ; help_clock=1: the time it was up is taken off the clocks the game reads (0: the game sees one long frame)
 help_pause=1
 help_clock=1
+; help_size: the page's size, per cent (30..96) of the middle of the view
+help_size=60
 
 ; --- for finding faults ---
 ; mw4hook_any_build=1: use the parts that reach into mw4hook.dll although it is not the build this was made for

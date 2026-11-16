@@ -62,6 +62,26 @@ static BOOL CALLBACK each(const DIDEVICEINSTANCEA *d, void *p) {
     return DIENUM_STOP;
 }
 
+// The keyboard the game made, kept (with a reference of ours, so it stays valid) for MW4VR_FlushKeys.
+static IDirectInputDeviceA *g_keys;
+static void keep(REFGUID g, void *dev) {
+    if (!dev || g != GUID_SysKeyboard) return;
+    IDirectInputDeviceA *d = (IDirectInputDeviceA *)dev; // every version's table begins with this one's
+    d->AddRef();
+    if (g_keys) g_keys->Release();
+    g_keys = d;
+    say("the game's keyboard device is known");
+}
+
+// d3d11.dll (MW4VR) calls this when its keys' page closes: what was typed while the game waited is thrown
+// away, so the game does not act on it afterwards. -> how many key events, -1 none thrown away
+extern "C" int WINAPI MW4VR_FlushKeys(void) {
+    if (!g_keys) return -1;
+    DWORD n = INFINITE;
+    HRESULT hr = g_keys->GetDeviceData(sizeof(DIDEVICEOBJECTDATA), 0, &n, 0);
+    return SUCCEEDED(hr) ? (int)n : -1; // (a keyboard read without a buffer: nothing to throw away)
+}
+
 struct Input : IDirectInput7A {
     IDirectInput7A *r;
     LONG refs;
@@ -86,7 +106,11 @@ struct Input : IDirectInput7A {
         }
         return n;
     }
-    STDMETHOD(CreateDevice)(REFGUID g, IDirectInputDeviceA **dev, IUnknown *outer) override { return r->CreateDevice(g, dev, outer); }
+    STDMETHOD(CreateDevice)(REFGUID g, IDirectInputDeviceA **dev, IUnknown *outer) override {
+        HRESULT hr = r->CreateDevice(g, dev, outer);
+        if (SUCCEEDED(hr) && dev && !outer) keep(g, *dev);
+        return hr;
+    }
     STDMETHOD(EnumDevices)(DWORD type, LPDIENUMDEVICESCALLBACKA cb, void *ref, DWORD flags) override {
         say("the game lists devices: type %lu, flags %08lx", type, flags);
         if (!cb) return DIERR_INVALIDPARAM;
@@ -104,7 +128,12 @@ struct Input : IDirectInput7A {
     STDMETHOD(RunControlPanel)(HWND w, DWORD flags) override { return r->RunControlPanel(w, flags); }
     STDMETHOD(Initialize)(HINSTANCE inst, DWORD version) override { return r->Initialize(inst, version); }
     STDMETHOD(FindDevice)(REFGUID cls, LPCSTR name, GUID *instance) override { return r->FindDevice(cls, name, instance); }
-    STDMETHOD(CreateDeviceEx)(REFGUID g, REFIID iid, void **dev, IUnknown *outer) override { return r->CreateDeviceEx(g, iid, dev, outer); }
+    STDMETHOD(CreateDeviceEx)(REFGUID g, REFIID iid, void **dev, IUnknown *outer) override {
+        HRESULT hr = r->CreateDeviceEx(g, iid, dev, outer);
+        if (SUCCEEDED(hr) && dev && !outer && (iid == IID_IDirectInputDeviceA || iid == IID_IDirectInputDevice2A || iid == IID_IDirectInputDevice7A))
+            keep(g, *dev);
+        return hr;
+    }
 };
 
 extern "C" HRESULT WINAPI MW4VR_DirectInputCreateEx(HINSTANCE inst, DWORD version, REFIID iid, void **out, IUnknown *outer) {

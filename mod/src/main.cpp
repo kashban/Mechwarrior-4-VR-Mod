@@ -1306,12 +1306,15 @@ static void helpPause(IDXGISwapChain *sc, int eye) {
         PeekMessageW(&msg, nullptr, 0, 0, PM_NOREMOVE); // (the window stays "responding"; nothing is taken out)
         helpKey(true);
         if (!g_helpOn) break;
+        shotKeys(); // Ctrl+F12 takes a picture of the page too
         DWORD a = GetTickCount();
         vrOnPresent(sc, eye);
         if (GetTickCount() - a < 3) Sleep(8);                // no frame of the runtime's to wait for: not a busy loop
         if (GetTickCount() - t0 > 15 * 60 * 1000) g_helpOn = false; // a quarter of an hour: back to the game
     }
     g_helpOn = false;
+    for (int i = 0; i < 100 && (GetAsyncKeyState(VK_ESCAPE) & 0x8000); ++i) Sleep(10); // Esc let go: its release is not the game's either
+    helpForgetKeys();
     QueryPerformanceCounter(&q1);
     DWORD ms = GetTickCount() - t0;
     if (g_helpClock) g_helpOffQpc += q1.QuadPart - q0.QuadPart, g_helpOffMs += ms;
@@ -2787,7 +2790,7 @@ BOOL WINAPI DllMain(HINSTANCE h, DWORD reason, LPVOID) {
         if (g_dbg) g_shlog = _wfsopen((g_dir + L"mw4vr_shaders.txt").c_str(), L"w", _SH_DENYNO);
         wchar_t exe[MAX_PATH];
         GetModuleFileNameW(nullptr, exe, MAX_PATH);
-        logf("MW4VR v11.37 (debug level %d) loaded into %s", g_dbg, narrow(exe).c_str());
+        logf("MW4VR v11.38 (debug level %d) loaded into %s", g_dbg, narrow(exe).c_str());
         if (!loadReal()) logf("ERROR: the system d3d11.dll could not be loaded");
     }
     return TRUE;

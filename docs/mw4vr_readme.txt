@@ -60,6 +60,7 @@ mw4vr.log              written by the mod: what it did; send it along when you r
 KEYS (in a battle)
 ------------------
   Ctrl+F1                      all keys as a page in the headset; the game waits until you close it
+                               (Ctrl+F1 again or Esc; its size: help_size in mw4vr.ini)
 
 View and seat
   Ctrl+Home                    recentre the view
@@ -225,6 +226,7 @@ mw4vr.log              schreibt der Mod: was er getan hat; bei Fehlermeldungen m
 TASTEN (im Gefecht)       Strg = Ctrl, Pos1 = Home, Bild auf/ab = PgUp/PgDn, Einfg/Entf = Ins/Del
 ------------------
   Strg+F1                      alle Tasten als Seite im Headset (englisch); das Spiel wartet, bis du sie schließt
+                               (nochmals Strg+F1 oder Esc; ihre Größe: help_size in mw4vr.ini)
 
 Blick und Sitz
   Strg+Pos1                    Blick neu ausrichten
