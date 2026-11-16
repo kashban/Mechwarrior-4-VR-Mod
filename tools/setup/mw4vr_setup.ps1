@@ -35,11 +35,19 @@ function Test-Game([string]$Game) { return ($Game -and (Test-Path (Join-Path $Ga
 # copies a file; one that is there and differs is kept beside it as <name>.before_mw4vr (once)
 function Copy-Kept([string]$From, [string]$To) {
     if (Test-Path $To) {
-        if ((Get-FileHash $From).Hash -eq (Get-FileHash $To).Hash) { return }
+        if ((Get-FileHash $From).Hash -eq (Get-FileHash $To).Hash) { Clear-WebMark $To; return }
         $keep = "$To.before_mw4vr"
         if (-not (Test-Path $keep)) { Copy-Item $To $keep }
     }
     Copy-Item $From $To -Force
+    Clear-WebMark $To
+}
+
+# A package unpacked from a downloaded zip carries Windows' "from the internet" mark on every file, and a copy
+# takes it along: the start script then asks "publisher could not be verified" at every start. The files the
+# player has just had installed lose the mark.
+function Clear-WebMark([string]$File) {
+    try { Unblock-File -LiteralPath $File -ErrorAction Stop } catch { }
 }
 
 # 'v11.38' from a d3d11.dll of MW4VR's ('' = the file is not there or not MW4VR's)
