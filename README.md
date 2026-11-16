@@ -103,6 +103,18 @@ the other cockpits everything - is shown on the glass, fixed to the cockpit: the
 as seen from the seat and puts each part into an open place near the cross-hair. A part you place yourself stays
 there (`glass_<part>` in the same file: degrees right, degrees up, width in degrees, metres away).
 
+## Share your settings, report faults
+
+Every mech wants its seat, sizes and HUD places set once, and there are more than a hundred. What ships as the
+defaults is in `defaults/`: `mw4vr_mechs.ini` (each mech, with the game's own cockpit or a MechWarrior 5 one) and
+`mw4vr_cockpits/<cockpit>.ini` (each MechWarrior 5 cockpit's eye place, size, monitors and the parts on its
+glass). If you have set mechs or cockpits up well, please share your two kinds of `.ini` files - as an
+[issue](https://github.com/kashban/Mechwarrior-4-VR-Mod/issues) with the files attached or as a pull request
+against `defaults/`. Never the `.mwc` cockpit files: they are MechWarrior 5 content.
+
+Faults and feature requests go into the [issues](https://github.com/kashban/Mechwarrior-4-VR-Mod/issues) too;
+for a fault attach `mw4vr.log` and name the mech, the map and the headset.
+
 ## Build
 
 Visual Studio 2022 Build Tools (x86), then `mod\build.bat`. The results are `mod\build\d3d11.dll` and

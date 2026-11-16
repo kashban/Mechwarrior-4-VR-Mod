@@ -46,6 +46,13 @@ renderer mod and needs it.
 See README.md in the package: three settings in `mw4hook.ini`, copy the `game` folder's files into the
 game's folder, start with `mw4vr_start.cmd`.
 
+## Help wanted: share your cockpit settings
+
+Every mech wants its seat, sizes and HUD places set once - more than a hundred mechs, one author. If you have
+set some up well (with the game's own cockpits or MechWarrior 5 ones), please share `mw4vr_mechs.ini` and the
+`.ini` files in `mw4vr_cockpits` so the next version ships them for everyone. Only the `.ini` files, never the
+`.mwc` cockpits. Settings, faults and feature requests: https://github.com/kashban/Mechwarrior-4-VR-Mod/issues
+
 ## Source, licence
 
 Source: https://github.com/kashban/Mechwarrior-4-VR-Mod. PolyForm Noncommercial 1.0.0: free for any noncommercial use, with the

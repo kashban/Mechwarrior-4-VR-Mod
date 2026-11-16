@@ -135,6 +135,20 @@ Known limits: no motion controllers; menus and films are a screen in front of yo
 keys' side view the mech's own hull can cut into a MechWarrior 5 cockpit.
 
 
+SHARE YOUR SETTINGS, REPORT FAULTS
+----------------------------------
+Each mech wants its seat, sizes and HUD places set once - and there are more than a hundred mechs.
+If you have set some up well, please share them, so the next version ships them for everyone:
+  mw4vr_mechs.ini                  seat, sizes and the HUD's places for each mech (the game's own cockpits
+                                   and MechWarrior 5 ones)
+  mw4vr_cockpits\<cockpit>.ini     a MechWarrior 5 cockpit's eye place, size, monitors, parts on its glass
+Only these .ini files - never the .mwc cockpit files: those are MechWarrior 5 content.
+
+Send them, and report faults or ask for features, as an issue on GitHub:
+  https://github.com/kashban/Mechwarrior-4-VR-Mod/issues
+For a fault please attach mw4vr.log and say which mech, map and headset.
+
+
 THANKS AND LICENCE
 ------------------
 MW4Engine DX11 (mw4hook.dll) is the work of its author; MW4VR only builds on it. MechWarrior is a
@@ -281,6 +295,21 @@ Neuer Build von MW4Engine     Teile von MW4VR schalten sich ab, bis MW4VR angepa
 
 Bekannte Grenzen: keine Bewegungs-Controller; Menüs und Filme sind eine Leinwand vor dir; beim
 Seitenblick per Pfeiltasten kann der eigene Mech in ein MechWarrior-5-Cockpit ragen.
+
+
+EINSTELLUNGEN TEILEN, FEHLER MELDEN
+-----------------------------------
+Jeder Mech will Sitz, Größen und HUD-Plätze einmal eingestellt haben - und es gibt über hundert Mechs.
+Wenn du welche gut eingestellt hast, teile sie bitte, damit die nächste Version sie für alle mitbringt:
+  mw4vr_mechs.ini                  Sitz, Größen und HUD-Plätze je Mech (Spiel-Cockpits und
+                                   MechWarrior-5-Cockpits)
+  mw4vr_cockpits\<Cockpit>.ini     Augenplatz, Größe, Monitore und Glas-Anzeigen eines
+                                   MechWarrior-5-Cockpits
+Nur diese .ini-Dateien - niemals die .mwc-Cockpitdateien: die sind MechWarrior-5-Inhalt.
+
+Schicken, Fehler melden oder Funktionen wünschen: als Issue auf GitHub:
+  https://github.com/kashban/Mechwarrior-4-VR-Mod/issues
+Bei Fehlern bitte mw4vr.log anhängen und Mech, Karte und Headset nennen.
 
 
 DANK UND LIZENZ
