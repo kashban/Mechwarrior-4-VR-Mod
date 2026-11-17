@@ -1936,8 +1936,8 @@ template <int V> static void STDMETHODCALLTYPE HP_Draw(ID3D11DeviceContext *c, U
     if (eyeHidden(c)) return;
     if (smallCamBackdrop(c)) return;
     bool sw = eyeTlPre(c);
-    if (sw && mechMeasuring()) mechDraw(c, false, a, b, 0);
-    if (sw && g_mw5On) mw5Draw(c, (Mw5PFN_DrawIdx)g_tr[SL_DRAWIDX][V]);
+    int ck = sw && mechMeasuring() ? mechDraw(c, false, a, b, 0, g_camPassEye == 0) : 0;
+    if (sw && g_mw5On) mw5Draw(c, (Mw5PFN_DrawIdx)g_tr[SL_DRAWIDX][V], ck >= 10);
     bool hw = hudWidePre(c);
     ((PFN_U2)g_tr[SL_DRAW][V])(c, a, b);
     if (hw) hudWidePost(c);
@@ -1947,8 +1947,8 @@ template <int V> static void STDMETHODCALLTYPE HP_DrawIndexed(ID3D11DeviceContex
     onWork(c, "DrawIndexed", false);
     if (eyeHidden(c)) return;
     bool sw = eyeTlPre(c);
-    if (sw && mechMeasuring()) mechDraw(c, true, a, b, d);
-    if (sw && g_mw5On) mw5Draw(c, (Mw5PFN_DrawIdx)g_tr[SL_DRAWIDX][V]);
+    int ck = sw && mechMeasuring() ? mechDraw(c, true, a, b, d, g_camPassEye == 0) : 0;
+    if (sw && g_mw5On) mw5Draw(c, (Mw5PFN_DrawIdx)g_tr[SL_DRAWIDX][V], ck >= 10);
     bool hw = hudWidePre(c);
     ((PFN_U2I)g_tr[SL_DRAWIDX][V])(c, a, b, d);
     if (hw) hudWidePost(c);
@@ -2802,7 +2802,7 @@ BOOL WINAPI DllMain(HINSTANCE h, DWORD reason, LPVOID) {
         if (g_dbg) g_shlog = _wfsopen((g_dir + L"mw4vr_shaders.txt").c_str(), L"w", _SH_DENYNO);
         wchar_t exe[MAX_PATH];
         GetModuleFileNameW(nullptr, exe, MAX_PATH);
-        logf("MW4VR v11.56 (debug level %d) loaded into %s", g_dbg, narrow(exe).c_str());
+        logf("MW4VR v11.57 (debug level %d) loaded into %s", g_dbg, narrow(exe).c_str());
         if (!loadReal()) logf("ERROR: the system d3d11.dll could not be loaded");
     }
     return TRUE;

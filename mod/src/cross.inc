@@ -2,8 +2,8 @@
 // The cross-hair's part of the HUD picture, split by colour (vr.inc, vrCrossImage). The cross-hair with its
 // pitch scale and weapon groups is green, its range yellow; a target's mark is red or blue. The smaller cross-hair
 // is a layer of its own - with the whole part in it a target's mark became smaller too and left its target. So:
-// what is green or yellow (and the dark inside of the green boxes) goes into the cross-hair's image, everything
-// else stays in the HUD's image, where it was.
+// what is green goes into the cross-hair's image (with the range's yellow text and the dark inside of the green
+// boxes), what is red or blue stays in the HUD's image, where it was.
 // Two passes of one triangle over the part; the device context's state is put back. The calls that the mod hooks
 // go to the runtime's own functions, so the mod's book-keeping of the game's state stays as it is.
 // Included into main.cpp after the hooks of the context's methods.
@@ -25,14 +25,28 @@ float4 at(float2 uv) {
     t.GetDimensions(w, h);
     return t.Load(int3(uv * float2(w, h), 0));
 }
-bool ours(float4 c) {
-    bool green = c.g > 1.3 * c.r && c.g > 1.3 * c.b;
-    bool yellow = c.r > 0.35 && c.g > 0.35 && c.b < 0.5 * min(c.r, c.g);
+// A target's mark is a red (or blue) box, half transparent, and may lie over the green cross-hair: such a pixel is
+// a mix. So a pixel is not given to one side: its green goes to the cross-hair, its red and blue stay, each as
+// bright as it was (a layer shows colour times alpha). Whole pixels go to the cross-hair where they are yellow
+// in the part's upper band (the range's text; a mix of red and green is yellow too, but lower down) or dark and
+// opaque (the digits in the green boxes).
+bool whole(float4 c, float2 uv) {
+    bool yellow = uv.y < 0.28 && c.r > 0.35 && c.g > 0.35 && c.b < 0.5 * min(c.r, c.g);
     bool dark = max(c.r, max(c.g, c.b)) < 0.12 && c.a > 0.5;
-    return c.a > 0 && (green || yellow || dark);
+    return yellow || dark;
 }
-float4 ps_cross(V i) : SV_Target { float4 c = at(i.uv); return ours(c) ? c : float4(0, 0, 0, 0); }
-float4 ps_rest(V i) : SV_Target { float4 c = at(i.uv); return ours(c) ? float4(0, 0, 0, 0) : c; }
+float4 ps_cross(V i) : SV_Target {
+    float4 c = at(i.uv);
+    if (whole(c, i.uv)) return c;
+    float m = max(c.r, max(c.g, c.b));
+    return m > 0.001 ? float4(0, m, 0, c.a * c.g / m) : float4(0, 0, 0, 0);
+}
+float4 ps_rest(V i) : SV_Target {
+    float4 c = at(i.uv);
+    if (whole(c, i.uv)) return float4(0, 0, 0, 0);
+    float m = max(c.r, max(c.g, c.b)), rb = max(c.r, c.b);
+    return rb > 0.001 ? float4(c.r * m / rb, 0, c.b * m / rb, c.a * rb / m) : float4(0, 0, 0, 0);
+}
 )HLSL";
 
 static ID3D11VertexShader *g_crVS;

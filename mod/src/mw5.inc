@@ -575,9 +575,31 @@ static void mw5HudCopy(ID3D11DeviceContext *c, ID3D11Texture2D *hud) {
 }
 
 // at a CPU-path draw of the main camera's pass for an eye (our replacement shader is bound): once per pass
-static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw) {
+// gameCockpit: this draw is one of the game's own cockpit
+static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw, bool gameCockpit) {
     int e = g_camPassEye;
     if (e < 0 || e > 1 || !g_camInMain || !g_kTlOnly || mw5Waiting()) return;
+    // Where in the pass? Where the game draws its own cockpit: it puts that in the right place among its other
+    // draws. (At the pass's first CPU-path draw, as before, weapon effects drawn later lay over our cockpit's
+    // struts - seen in a video - and in some frames the game's lighting pass came after it and took it away.)
+    // The first CPU-path draw only while no cockpit of the game's was seen in the frame before.
+    {
+        static unsigned ckFrame[2] = {~0u, ~0u}, ordFrame[2] = {~0u, ~0u};
+        static int ord[2];
+        if (ordFrame[e] != g_frame) ordFrame[e] = g_frame, ord[e] = 0;
+        ++ord[e];
+        bool expected = ckFrame[e] != ~0u && g_frame - ckFrame[e] <= 2;
+        if (gameCockpit) {
+            static int told;
+            if (ckFrame[e] != g_frame && told < 6) {
+                ++told;
+                logf("mw5: frame %u, eye %d: the game's cockpit is CPU-path draw %d of the pass - ours is drawn there", g_frame, e, ord[e]);
+            }
+            ckFrame[e] = g_frame;
+        } else if (expected) {
+            return;
+        }
+    }
     static unsigned done[2] = {~0u, ~0u}, seen[2] = {~0u, ~0u};
     static void *usual[2]; // the target the eye's cockpit was drawn into last
     static int looks[2];

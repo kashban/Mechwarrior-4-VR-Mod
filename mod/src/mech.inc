@@ -345,9 +345,11 @@ static bool swvOnPresent() {
 }
 
 // the vertices are read from the buffers' own memory; nothing here has a destructor (SEH)
-static void mgRead(const uint8_t *vbase, UINT vbytes, UINT stride, UINT voff, INT baseV, const uint8_t *ibase, UINT ibytes,
-                   UINT ioff, bool idx32, UINT start, UINT count, float W, float H) {
+// collect: the left eye's pass (the sway, the cockpit's shape). Returns how many of the cockpit's triangles it read.
+static int mgRead(const uint8_t *vbase, UINT vbytes, UINT stride, UINT voff, INT baseV, const uint8_t *ibase, UINT ibytes,
+                  UINT ioff, bool idx32, UINT start, UINT count, float W, float H, bool collect) {
     const float *R = g_vrR[0], *T = g_vrT[0];
+    int found = 0;
     __try {
         for (UINT t = 0; t + 2 < count; t += 3) {
             MgVtx v[3];
@@ -402,6 +404,8 @@ static void mgRead(const uint8_t *vbase, UINT vbytes, UINT stride, UINT voff, IN
                 if (!(v[k].d > 0.02f)) ok = false;
             }
             if (!ok) continue;
+            ++found;
+            if (!collect) continue;
             g_swvAllN += 3;
             for (int k = 0; k < 3; ++k) // for the sway (above): not what the clipping made at the view's edges and its near plane
                 if (!edge[k] && g_swvCurN < SWV_MAX) memcpy(g_swvCur[g_swvCurN++], pos[k], sizeof pos[k]);
@@ -412,21 +416,23 @@ static void mgRead(const uint8_t *vbase, UINT vbytes, UINT stride, UINT voff, IN
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         ++g_mgBad;
     }
+    return found;
 }
 
 typedef HRESULT(STDMETHODCALLTYPE *MechPFN_Map)(ID3D11DeviceContext *, ID3D11Resource *, UINT, D3D11_MAP, UINT, D3D11_MAPPED_SUBRESOURCE *);
 typedef void(STDMETHODCALLTYPE *MechPFN_Unmap)(ID3D11DeviceContext *, ID3D11Resource *, UINT);
 
-// a CPU-path draw of the measured pass
-static void mechDraw(ID3D11DeviceContext *c, bool indexed, UINT count, UINT start, INT baseV) {
-    if (count < 3 || count > 200000 || !(g_P00 > 0) || !(g_P11 > 0)) return;
+// a CPU-path draw of an eye's pass of the main camera. Returns how many triangles of the game's cockpit it draws.
+static int mechDraw(ID3D11DeviceContext *c, bool indexed, UINT count, UINT start, INT baseV, bool collect) {
+    if (count < 3 || count > 200000 || !(g_P00 > 0) || !(g_P11 > 0)) return 0;
     D3D11_PRIMITIVE_TOPOLOGY topo = D3D11_PRIMITIVE_TOPOLOGY_UNDEFINED;
     c->IAGetPrimitiveTopology(&topo);
-    if (topo != D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST) return;
+    if (topo != D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST) return 0;
     D3D11_VIEWPORT vp = {};
     UINT nvp = 1;
     c->RSGetViewports(&nvp, &vp);
-    if (!nvp || vp.Width < 16 || vp.Height < 16) return;
+    if (!nvp || vp.Width < 16 || vp.Height < 16) return 0;
+    int found = 0;
     ID3D11Buffer *vb = nullptr, *ib = nullptr;
     UINT stride = 0, voff = 0, ioff = 0;
     DXGI_FORMAT ifmt = DXGI_FORMAT_UNKNOWN;
@@ -444,8 +450,8 @@ static void mechDraw(ID3D11DeviceContext *c, bool indexed, UINT count, UINT star
         bool mvOk = SUCCEEDED(ORIG(MechPFN_Map, c, VT_Ctx_Map)(c, vb, 0, D3D11_MAP_WRITE_NO_OVERWRITE, 0, &mv)) && mv.pData;
         bool miOk = !indexed || (SUCCEEDED(ORIG(MechPFN_Map, c, VT_Ctx_Map)(c, ib, 0, D3D11_MAP_WRITE_NO_OVERWRITE, 0, &mi)) && mi.pData);
         if (mvOk && miOk) {
-            mgRead((const uint8_t *)mv.pData, vd.ByteWidth, stride, voff, baseV, indexed ? (const uint8_t *)mi.pData : nullptr,
-                   id.ByteWidth, ioff, ifmt == DXGI_FORMAT_R32_UINT, start, count, vp.Width, vp.Height);
+            found = mgRead((const uint8_t *)mv.pData, vd.ByteWidth, stride, voff, baseV, indexed ? (const uint8_t *)mi.pData : nullptr,
+                           id.ByteWidth, ioff, ifmt == DXGI_FORMAT_R32_UINT, start, count, vp.Width, vp.Height, collect);
             ++g_mgDraws;
         }
         if (indexed && miOk && mi.pData) ORIG(MechPFN_Unmap, c, VT_Ctx_Unmap)(c, ib, 0);
@@ -453,10 +459,11 @@ static void mechDraw(ID3D11DeviceContext *c, bool indexed, UINT count, UINT star
     }
     if (vb) vb->Release();
     if (ib) ib->Release();
+    return found;
 }
 
 // (in every frame: the sway is measured from the cockpit's vertices, and they tell whether the camera sits in the mech)
-static inline bool mechMeasuring() { return g_camInMain && g_camPassEye == 0; }
+static inline bool mechMeasuring() { return g_camInMain && (g_camPassEye == 0 || g_camPassEye == 1); }
 
 // ---- once per frame (from vrOnPresent) -------------------------------------------------------
 
