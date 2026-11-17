@@ -13,9 +13,13 @@ typedef void(STDMETHODCALLTYPE *CrPFN_Draw)(ID3D11DeviceContext *, UINT, UINT);
 
 static const char g_crHlsl[] = R"HLSL(
 Texture2D t : register(t0);
-struct V { float4 p : SV_Position; float2 uv : TEXCOORD0; };
+struct V { float4 p : SV_Position; float2 uv : TEXCOORD0; float lin : TEXCOORD1; };
+// vertices 3..5 are the same triangle with lin = 1: the target's view is sRGB and will encode what is written,
+// so the picture's values (already encoded) are decoded first and arrive as they were
 V vs(uint id : SV_VertexID) {
     V o;
+    o.lin = id >= 3 ? 1.0 : 0.0;
+    id = id % 3;
     o.uv = float2((id << 1) & 2, id & 2);
     o.p = float4(o.uv * float2(2, -2) + float2(-1, 1), 0, 1);
     return o;
@@ -35,17 +39,29 @@ bool whole(float4 c, float2 uv) {
     bool dark = max(c.r, max(c.g, c.b)) < 0.12 && c.a > 0.5;
     return yellow || dark;
 }
+// white and grey (a menu of the game's over the middle, its texts): neither the cross-hair nor a mark - it stays
+// where it is, whole. Split, it fell apart into green and purple.
+bool grey(float4 c) {
+    float m = max(c.r, max(c.g, c.b));
+    return m > 0.2 && min(c.r, min(c.g, c.b)) > 0.55 * m;
+}
+float4 out4(float4 c, float lin) {
+    float3 d = lerp(pow(abs((c.rgb + 0.055) / 1.055), 2.4), c.rgb / 12.92, step(c.rgb, 0.04045));
+    return float4(lin > 0.5 ? d : c.rgb, c.a);
+}
 float4 ps_cross(V i) : SV_Target {
     float4 c = at(i.uv);
-    if (whole(c, i.uv)) return c;
+    if (grey(c)) return float4(0, 0, 0, 0);
+    if (whole(c, i.uv)) return out4(c, i.lin);
     float m = max(c.r, max(c.g, c.b));
-    return m > 0.001 ? float4(0, m, 0, c.a * c.g / m) : float4(0, 0, 0, 0);
+    return m > 0.001 ? out4(float4(0, m, 0, c.a * c.g / m), i.lin) : float4(0, 0, 0, 0);
 }
 float4 ps_rest(V i) : SV_Target {
     float4 c = at(i.uv);
+    if (grey(c)) return out4(c, i.lin);
     if (whole(c, i.uv)) return float4(0, 0, 0, 0);
     float m = max(c.r, max(c.g, c.b)), rb = max(c.r, c.b);
-    return rb > 0.001 ? float4(c.r * m / rb, 0, c.b * m / rb, c.a * rb / m) : float4(0, 0, 0, 0);
+    return rb > 0.001 ? out4(float4(c.r * m / rb, 0, c.b * m / rb, c.a * rb / m), i.lin) : float4(0, 0, 0, 0);
 }
 )HLSL";
 
@@ -88,33 +104,55 @@ static bool crCreate() {
            SUCCEEDED(g_dev->CreateRasterizerState(&rd, &g_crRaster));
 }
 
-// a view to draw into a layer's image (the runtime's textures may be typeless: the view names the format)
-static ID3D11RenderTargetView *crView(ID3D11Texture2D *tex, DXGI_FORMAT fmt) {
+// A view to draw into a layer's image. The layers' swap chains are sRGB, the HUD picture copied into them is not
+// (its values go in as they are). A typeless texture gets a view without sRGB, so the shader's values go in as
+// they are too; a texture that is sRGB itself can only have an sRGB view, which encodes what is written - then
+// *lin says that the shader has to decode first. (Without this the cross-hair's part came out brighter than the
+// rest of the HUD.)
+static ID3D11RenderTargetView *crView(ID3D11Texture2D *tex, bool *lin) {
     struct Kept {
         ID3D11Texture2D *tex;
         ID3D11RenderTargetView *view;
+        bool lin;
     };
     static Kept kept[16];
     static int n;
     for (int i = 0; i < n; ++i)
-        if (kept[i].tex == tex) return kept[i].view;
+        if (kept[i].tex == tex) {
+            *lin = kept[i].lin;
+            return kept[i].view;
+        }
+    D3D11_TEXTURE2D_DESC td;
+    tex->GetDesc(&td);
+    DXGI_FORMAT f = td.Format;
+    bool l = false;
+    switch (td.Format) {
+    case DXGI_FORMAT_B8G8R8A8_TYPELESS: f = DXGI_FORMAT_B8G8R8A8_UNORM; break;
+    case DXGI_FORMAT_R8G8B8A8_TYPELESS: f = DXGI_FORMAT_R8G8B8A8_UNORM; break;
+    case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB:
+    case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB: l = true; break;
+    default: break;
+    }
     D3D11_RENDER_TARGET_VIEW_DESC d = {};
-    d.Format = fmt, d.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+    d.Format = f, d.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
     ID3D11RenderTargetView *v = nullptr;
     if (FAILED(g_dev->CreateRenderTargetView(tex, &d, &v))) v = nullptr;
-    if (n < 16) kept[n++] = {tex, v}; // (a layer has a few images, for the whole session; a failure is remembered too)
+    static int told;
+    if (told++ < 2) logf("hud: a layer's image is format %d - drawn into as format %d%s%s", (int)td.Format, (int)f, l ? ", decoded first" : "", v ? "" : " (no view)");
+    if (n < 16) kept[n++] = {tex, v, l}; // (a layer has a few images, for the whole session; a failure is remembered too)
+    *lin = l;
     return v;
 }
 
 // The runtime's own Draw: the mod's hook sits in its code, and looks at the game's shaders the mod remembers.
-static void crDraw3(ID3D11DeviceContext *c) {
+static void crDraw3(ID3D11DeviceContext *c, UINT first) {
     void *fn = (*(void ***)c)[13]; // ID3D11DeviceContext::Draw
     for (int v = 0; v < HP_VARS; ++v)
         if (g_hpAddr[SL_DRAW][v] == fn && g_tr[SL_DRAW][v]) {
-            ((CrPFN_Draw)g_tr[SL_DRAW][v])(c, 3, 0);
+            ((CrPFN_Draw)g_tr[SL_DRAW][v])(c, 3, first);
             return;
         }
-    ((CrPFN_Draw)fn)(c, 3, 0); // not one the mod hooked
+    ((CrPFN_Draw)fn)(c, 3, first); // not one the mod hooked
 }
 
 // part: the cross-hair's part of the HUD picture (w x h), readable by a shader. crossTex: the cross-hair's image
@@ -127,7 +165,8 @@ static bool crossSplit(ID3D11DeviceContext *c, ID3D11ShaderResourceView *part, I
                             : "hud: no shaders to tell the cross-hair from a target's mark - a mark in its part becomes smaller with it");
     }
     if (g_crState != 1) return false;
-    ID3D11RenderTargetView *vCross = crView(crossTex, fmt), *vHud = crView(hudTex, fmt);
+    bool lin[2] = {};
+    ID3D11RenderTargetView *vCross = crView(crossTex, &lin[0]), *vHud = crView(hudTex, &lin[1]);
     if (!vCross || !vHud) {
         static bool told;
         if (!told) logf("hud: no view to draw into the layers' images (format %d) - a mark in the cross-hair's part becomes smaller with it", (int)fmt);
@@ -182,7 +221,7 @@ static bool crossSplit(ID3D11DeviceContext *c, ID3D11ShaderResourceView *part, I
         ORIG(PFN_OMSet, c, VT_Ctx_OMSetRenderTargets)(c, 1, &rt, nullptr);
         ORIG(CrPFN_Viewports, c, VT_Ctx_RSSetViewports)(c, 1, &vp);
         ORIG(PFN_SetShader, c, VT_Ctx_PSSetShader)(c, g_crPS[pass], nullptr, 0);
-        crDraw3(c);
+        crDraw3(c, lin[pass] ? 3 : 0);
     }
 
     // back
