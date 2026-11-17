@@ -778,18 +778,10 @@ static void auditOnPresent() {
     g_auditFrames = 0;
 }
 
-static volatile LONG g_workNo; // counts the game's draws (mw5.inc: how many came after our cockpit)
-static volatile LONG g_rtSwitchNo; // counts the game's changes to another first render target
-static void *g_rtLast;
-static inline void rtSwitch(UINT n, ID3D11RenderTargetView *const *rtv) {
-    void *first = n && rtv ? (void *)rtv[0] : nullptr;
-    if (first != g_rtLast) g_rtLast = first, InterlockedIncrement(&g_rtSwitchNo);
-}
 static void onWork(void *ctx, const char *kind, bool compute) {
     if (ctxOf(ctx)->foreign) return;
     CtxState *s = ctxOf(ctx);
     extern volatile bool g_srcCamActive;
-    if (!compute) InterlockedIncrement(&g_workNo);
     if (!compute && g_in3D && g_eyeMode && !g_srcCamActive) auditDraw(s);
     if (!compute && g_in3D && s->st[ST_VS].sh) {
         uint64_t h = s->st[ST_VS].sh->hash;
@@ -2079,7 +2071,6 @@ static void STDMETHODCALLTYPE H_OMSetRenderTargets(ID3D11DeviceContext *c, UINT 
                                                    ID3D11RenderTargetView *const *rtv,
                                                    ID3D11DepthStencilView *dsv) {
     if (g_cap) setRTs(ctxOf(c), n, rtv, dsv);
-    rtSwitch(n, rtv);
     if (n >= 1 && n <= 8 && rtv && hudSwap(rtv[0]) != rtv[0]) { // inside the HUD pass: our layer texture
         ID3D11RenderTargetView *v[8];
         memcpy(v, rtv, n * sizeof *v);
@@ -2099,7 +2090,6 @@ static void STDMETHODCALLTYPE H_OMSetRenderTargetsAndUAVs(ID3D11DeviceContext *c
                                                           ID3D11UnorderedAccessView *const *uav,
                                                           const UINT *ic) {
     if (g_cap && n != D3D11_KEEP_RENDER_TARGETS_AND_DEPTH_STENCIL) setRTs(ctxOf(c), n, rtv, dsv);
-    if (n != D3D11_KEEP_RENDER_TARGETS_AND_DEPTH_STENCIL) rtSwitch(n, rtv);
     // which buffers stand behind the clutter's g_ctView (u75) and g_ctWind (u76): logged once each
     static int seen75, seen76;
     if (uav && un != D3D11_KEEP_UNORDERED_ACCESS_VIEWS)

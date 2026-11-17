@@ -26,9 +26,7 @@ static unsigned g_tlEpoch;                 // changes with every K: the CPU-path
 static float g_vrFov[2][4];                // per eye tangents left (<0), right, up, down (<0) to render with
 static volatile bool g_vrFovOk;
 static volatile bool g_vrPoseOk[2];
-// the frame an eye's picture last got our cockpit in, and why not in this one (mw5.inc; read at Present)
-static unsigned g_m5DrawnFrame[2] = {~0u, ~0u};
-static int g_m5Why[2];static volatile bool g_vrTracking;         // [vr] tracking=1 and poses arriving
+static volatile bool g_vrTracking;         // [vr] tracking=1 and poses arriving
 static volatile int g_kEye = -1;           // eye of this frame's transform: 0 left, 1 right
 
 volatile bool g_srcCamActive; // head pose applied at the game's camera, calibrated and running

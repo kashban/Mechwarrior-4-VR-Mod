@@ -580,9 +580,9 @@ static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw, bool gameCockpi
     int e = g_camPassEye;
     if (e < 0 || e > 1 || !g_camInMain || !g_kTlOnly || mw5Waiting()) return;
     // Where in the pass? Where the game draws its own cockpit: it puts that in the right place among its other
-    // draws. (At the pass's first CPU-path draw, as before, weapon effects drawn later lay over our cockpit's
-    // struts - seen in a video - and in some frames the game's lighting pass came after it and took it away.)
-    // The first CPU-path draw only while no cockpit of the game's was seen in the frame before.
+    // draws, and a CPU-path draw that comes earlier in some frames is not taken for it. (It is the pass's first
+    // CPU-path draw as a rule - the log of a test.) The first CPU-path draw only while no cockpit of the game's
+    // was seen in the frames before.
     {
         static unsigned ckFrame[2] = {~0u, ~0u}, ordFrame[2] = {~0u, ~0u};
         static int ord[2];
@@ -600,86 +600,17 @@ static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw, bool gameCockpi
             return;
         }
     }
-    static unsigned done[2] = {~0u, ~0u}, seen[2] = {~0u, ~0u};
-    static void *usual[2]; // the target the eye's cockpit was drawn into last
-    static int looks[2];
-    // Seen in a video of the headset: every few seconds a frame without the cockpit, though it was drawn. In such a
-    // frame a CPU-path draw comes early in the pass; the game then draws elsewhere (some 62 draws were counted)
-    // and comes back to the eye's picture with the cockpit gone. So: when the game changed its render target after
-    // our cockpit, or more than 40 of its draws came after it, and another CPU-path draw of the pass comes by, the
-    // cockpit is drawn once more. (Tried and wrong: only after 150 draws - the flashes were back.)
-    static LONG at[2], atRt[2];
-    static bool again[2];
-    bool redo = false;
-    if (done[e] == g_frame) {
-        if (again[e] || (g_rtSwitchNo == atRt[e] && g_workNo - at[e] <= 40)) return;
-        redo = true;
-    }
-    if (!redo && seen[e] != g_frame) {
-        if (done[e] != seen[e]) usual[e] = nullptr; // not drawn at all in the frame before: any target again
-        seen[e] = g_frame, looks[e] = 0;
-    }
+    static unsigned done[2] = {~0u, ~0u};
+    if (done[e] == g_frame) return;
     { // a small camera (the target's view) drawn inside the main camera's pass: not there
         D3D11_VIEWPORT vp[1] = {};
         UINT nvp = 1;
         c->RSGetViewports(&nvp, vp);
-        if (nvp && g_eyeTexW && vp[0].Width < 0.9f * g_eyeTexW) {
-            g_m5Why[e] = 1;
-            return;
-        }
-    }
-    { // Now and then the pass's first such draw goes somewhere else than into the eye's picture (seen: the cockpit
-      // missing in one eye for a frame): the cockpit waits for the target it was drawn into before, with a depth
-      // buffer - for the first 200 draws of the pass, then it takes what there is
-        ID3D11RenderTargetView *rt = nullptr;
-        ID3D11DepthStencilView *dv = nullptr;
-        c->OMGetRenderTargets(1, &rt, &dv);
-        void *rtp = rt;
-        bool depth = dv != nullptr;
-        if (rt) rt->Release();
-        if (dv) dv->Release();
-        bool other = !rtp || !depth || (usual[e] && rtp != usual[e]);
-        if (redo) {
-            if (other) return; // not the eye's picture: a later draw may be
-            again[e] = true;
-            static int told;
-            if (told++ < 40)
-                logf("mw5: frame %u, eye %d: %ld of the game's draws and %ld changes of its render target came after the cockpit - drawn once more",
-                     g_frame, e, (long)(g_workNo - at[e]), (long)(g_rtSwitchNo - atRt[e]));
-        } else if (other && ++looks[e] <= 200) {
-            static int told;
-            if (looks[e] == 1 && told < 40) {
-                ++told;
-                logf("mw5: frame %u, eye %d: the pass's first cockpit draw has another target (%p, depth %d; usual %p) - waiting for the usual one",
-                     g_frame, e, rtp, (int)depth, usual[e]);
-            }
-            g_m5Why[e] = 2;
-            return;
-        }
-        // The usual target is the one the cockpit was drawn into without waiting. One taken after the wait is the
-        // usual one only when it was taken three frames running (the game draws into another from now on): a
-        // single such frame must not make the next one wait for the wrong target.
-        static void *cand[2];
-        static int candN[2];
-        if (looks[e] > 200) {
-            static int told;
-            if (told++ < 10) logf("mw5: frame %u, eye %d: the usual target did not come - drawn into %p (depth %d)", g_frame, e, rtp, (int)depth);
-            candN[e] = rtp == cand[e] ? candN[e] + 1 : 1;
-            cand[e] = rtp;
-            if (candN[e] >= 3) usual[e] = rtp, candN[e] = 0;
-        } else {
-            usual[e] = rtp;
-            candN[e] = 0;
-        }
+        if (nvp && g_eyeTexW && vp[0].Width < 0.9f * g_eyeTexW) return;
     }
     done[e] = g_frame;
-    if (!redo) at[e] = g_workNo, atRt[e] = g_rtSwitchNo, again[e] = false;
     if (g_mw5State == 0 && g_mw5Name[0]) mw5Load();
-    if (g_mw5State != 1 || !g_vrPoseOk[e] || g_P00 <= 0 || g_P11 <= 0 || g_near <= 0) {
-        g_m5Why[e] = 3;
-        return;
-    }
-    g_m5DrawnFrame[e] = g_frame;
+    if (g_mw5State != 1 || !g_vrPoseOk[e] || g_P00 <= 0 || g_P11 <= 0 || g_near <= 0) return;
 
     // what is bound now
     ID3D11InputLayout *oIL = nullptr;
@@ -1350,20 +1281,6 @@ static void mw5GlassAdjust(int k) {
 static void mw5OnPresent() {
     if (!g_mw5IniRead) mw5ReadIni();
     mw5ForMech();
-    // An eye's picture of this frame without the cockpit, while the one before had it: a flash. Say why.
-    for (int e = 0; e < 2; ++e) {
-        bool drawnEye = g_camBothFrame == g_frame || (g_camEyeFrame == g_frame && g_camEye == e);
-        static int told;
-        if (mw5Active() && drawnEye && !g_menuMode && g_m5DrawnFrame[e] != g_frame && g_m5DrawnFrame[e] != ~0u && g_frame - g_m5DrawnFrame[e] <= 3 &&
-            told < 60) {
-            ++told;
-            static const char *why[4] = {"no draw of the main camera's pass came by", "only small cameras' draws came by",
-                                         "the usual target did not come", "no head pose or no projection"};
-            logf("mw5: frame %u, eye %d: this picture has no cockpit - %s (pose %d, P00 %.3f, near %.3f)", g_frame, e, why[g_m5Why[e] & 3],
-                 (int)g_vrPoseOk[e], g_P00, g_near);
-        }
-        g_m5Why[e] = 0;
-    }
     bool ctrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0, alt = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
     bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
     {
