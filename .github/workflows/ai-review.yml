@@ -1,0 +1,65 @@
+name: AI review
+
+# A local model on the developer's PC (llama.cpp behind llama-swap) reviews a pull request's diff and writes its
+# findings as one comment on it (tools/ci/ai-review.mjs, docs/PIPELINE.md). Advisory: the job never fails - with
+# the PC off or the GPU busy the comment says that the review was skipped.
+#
+# It needs a self-hosted runner with the label ai-review that reaches the model server, and is off until the
+# repository variable AI_REVIEW is 'on' (without a runner the job would wait in the queue for a day).
+#
+# pull_request_target, not pull_request: the workflow and the script are then the base branch's, never the pull
+# request's, and nothing of the pull request is run on the runner - its files are only read (git diff, the changed
+# files' text). Pull requests from forks are left out altogether.
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  ai-review:
+    name: AI review (local model, advisory)
+    if: >-
+      vars.AI_REVIEW == 'on' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: [self-hosted, ai-review]
+    timeout-minutes: 20 # the first-token wait plus a whole review on a slower fallback
+    permissions:
+      contents: read
+      pull-requests: write # the comment
+    steps:
+      - name: The script, from the base branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: base
+          persist-credentials: false
+      # Read only, never run: no step below starts anything from this folder.
+      - name: The pull request's files
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: pr
+          fetch-depth: 0 # the merge base with the target branch, for the diff
+          persist-credentials: false
+      - name: Review the diff and comment on the pull request
+        working-directory: pr
+        env:
+          AI_API: ${{ vars.AI_API || 'openai' }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY }} # llama-swap's key
+          OLLAMA_URL: ${{ vars.AI_URL }} # the model server, as the runner reaches it; not in the source
+          OLLAMA_MODEL: ${{ vars.AI_MODEL || 'qwen3.8-27b-mtp-capped' }}
+          # A second server for when the first does not answer; without AI_FALLBACK_URL there is none.
+          FALLBACK_URL: ${{ vars.AI_FALLBACK_URL }}
+          FALLBACK_MODEL: ${{ vars.AI_FALLBACK_MODEL }}
+          FALLBACK_API_KEY: ${{ secrets.AI_API_KEY_LAPTOP }}
+          BASE_REF: ${{ github.base_ref }} # via env, not inlined: branch names are user input
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node ../base/tools/ci/ai-review.mjs

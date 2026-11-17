@@ -1,11 +1,12 @@
 # The pipeline
 
-Four workflows on GitHub Actions (`.github/workflows`). What a workflow checks, a developer can run by hand too.
+Five workflows on GitHub Actions (`.github/workflows`). What a workflow checks, a developer can run by hand too.
 
 | Workflow | When | What it does |
 |---|---|---|
 | **CI** (`ci.yml`) | every push to `main`, every pull request | builds the DLLs, runs all tests, holds the coverage gate, puts the package together, runs the guards and the SAST scan |
 | **Mutation tests** (`mutation.yml`) | every night after a day with commits; pull requests that touch `core.h`, the converter or their tests; by hand | plants errors into `core.h` and the converter and fails when a test does not notice one |
+| **AI review** (`ai-review.yml`) | pull requests from the repository itself, once switched on | a local model reads the diff and writes its findings as a comment; advisory, never fails |
 | **Release** (`release.yml`) | a tag `v<version>` | checks the tag against the version the mod logs, builds, tests, packages with the trees, makes the pre-release |
 | **Publish** (`publish.yml`) | by hand, for a version tested in the headset | makes the pre-release the latest release and sends the package to Nexus Mods |
 
@@ -24,11 +25,42 @@ Four workflows on GitHub Actions (`.github/workflows`). What a workflow checks, 
 | No secrets in the code or its history (gitleaks) | CI | `gitleaks git --redact .` |
 | No known vulnerabilities in the converter's libraries (pip-audit) | CI | `pip-audit -r requirements.txt` |
 | SAST (Semgrep: Python, the workflows) | CI | `semgrep scan --error --config p/python --config p/security-audit --config p/github-actions tools tests docs .github` |
+| The AI review's script works (mock model server, mock GitHub) | CI | `node --test tools/ci/ai-review.test.mjs` |
 | The tag is the version the mod logs | Release | - |
 | Newer actions and libraries arrive as pull requests (Dependabot) | weekly | - |
 
 Not a gate, and why: the game itself cannot run in a pipeline (it needs the game, a headset and a player), so
 "tested in the headset" stays a person's word - it is what the Publish workflow waits for.
+
+## AI review
+
+A model on the developer's PC (llama.cpp's `llama-server` behind llama-swap) reviews a pull request: the script
+`tools/ci/ai-review.mjs` sends it `docs/ai-review-guide.md`, the changed files that are small enough and the diff
+of `mod/src`, `tools` and `tests`, and writes the answer as one comment that every push replaces. It is advice,
+not a gate: with the PC off or the GPU busy the comment says that the review was skipped, and the job passes.
+The script and its tests come from the MiljanaMovingIn project's pipeline.
+
+A finding can be judged in a comment that starts with `<!-- ai-review-verdicts -->` (real, minor or false, with a
+reason); the next review of the same pull request gets it and does not report a finding judged false again. When
+the review keeps getting something wrong about the project, add a line to the guide.
+
+By hand, without a pull request (prints the review, posts nothing):
+`AI_API=openai OLLAMA_URL=<server> AI_API_KEY=<key> OLLAMA_MODEL=<model> node tools/ci/ai-review.mjs` on a branch.
+
+To switch it on:
+
+1. A self-hosted runner with the label `ai-review` on a machine that reaches the model server, with `git` and
+   `node` (20 or newer). Repository settings, Actions, Runners.
+2. Repository variables: `AI_URL` (the model server as the runner reaches it, `http://<address>:<port>`),
+   `AI_REVIEW` = `on`; if not the defaults: `AI_MODEL`, `AI_API`; for a second server `AI_FALLBACK_URL`,
+   `AI_FALLBACK_MODEL`.
+3. Repository secrets: `AI_API_KEY` (llama-swap's key), for the second server `AI_API_KEY_LAPTOP`.
+
+A self-hosted runner runs what a workflow tells it, on a machine at home. That is why this workflow starts on
+`pull_request_target`: the workflow and the script are the ones on `main`, a pull request cannot change them, and
+its files are only read. Pull requests from forks get no review. Before the repository becomes public, set
+Settings, Actions, General, "Require approval for all external contributors" all the same: another workflow
+changed in a fork's pull request could name the runner.
 
 ## Releasing
 

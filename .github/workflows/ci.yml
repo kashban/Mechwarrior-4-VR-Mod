@@ -63,6 +63,8 @@ jobs:
           fetch-depth: 0 # the whole history: the guard and gitleaks read all of it
       - name: Nothing of MechWarrior 5, no private data - now and in history
         run: python3 tools/ci/guard.py --history
+      - name: Tests of the AI review's script (mock model server, mock GitHub)
+        run: node --test tools/ci/ai-review.test.mjs
       - name: Install gitleaks (pinned, checksum-verified)
         env:
           GITLEAKS_VERSION: 8.30.1
