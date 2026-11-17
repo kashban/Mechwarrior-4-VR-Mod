@@ -653,6 +653,8 @@ static void fadeProbe(ID3D11DeviceContext *ctx, ID3D11Texture2D *hud) {
 // up and the cross-hair costs one of the runtime's 16 layers, not four. (Made smaller inside the HUD's image it
 // cost none, but its range and texts could not be read: a layer keeps every pixel.)
 // Not while a small camera's window (the zoom window) lies in that part. true: the image is filled, the part emptied.
+static bool crossSplit(ID3D11DeviceContext *c, ID3D11ShaderResourceView *part, ID3D11Texture2D *crossTex, ID3D11Texture2D *hudTex, UINT x0, UINT y0,
+                       UINT w, UINT h, DXGI_FORMAT fmt); // cross.inc
 static XrSwapchain g_crossSc = XR_NULL_HANDLE;
 static std::vector<XrSwapchainImageD3D11KHR> g_crossImg;
 static UINT g_crossW, g_crossH, g_crossX, g_crossY;
@@ -667,7 +669,8 @@ static bool vrCrossImage(ID3D11DeviceContext *ctx, ID3D11Texture2D *dst, ID3D11T
             const HudCamRect &r = g_hudCams[i];
             if ((UINT)r.x < x1 && (UINT)(r.x + r.w) > x0 && (UINT)r.y < y1 && (UINT)(r.y + r.h) > y0) return false;
         }
-    static ID3D11Texture2D *empty;
+    static ID3D11Texture2D *empty, *partTex; // partTex: the part, readable by a shader (cross.inc)
+    static ID3D11ShaderResourceView *partSrv;
     static DXGI_FORMAT fmt;
     static bool failed;
     D3D11_TEXTURE2D_DESC sd, dd;
@@ -678,7 +681,9 @@ static bool vrCrossImage(ID3D11DeviceContext *ctx, ID3D11Texture2D *dst, ID3D11T
     if (g_crossSc == XR_NULL_HANDLE || w != g_crossW || h != g_crossH || fmt != sd.Format) {
         if (failed && w == g_crossW && h == g_crossH && fmt == sd.Format) return false;
         if (empty) empty->Release();
-        empty = nullptr;
+        if (partSrv) partSrv->Release();
+        if (partTex) partTex->Release();
+        empty = nullptr, partSrv = nullptr, partTex = nullptr;
         if (g_crossSc != XR_NULL_HANDLE && g_vr.DestroySwapchain) g_vr.DestroySwapchain(g_crossSc);
         g_crossSc = XR_NULL_HANDLE;
         g_crossW = w, g_crossH = h, fmt = sd.Format;
@@ -700,6 +705,9 @@ static bool vrCrossImage(ID3D11DeviceContext *ctx, ID3D11Texture2D *dst, ID3D11T
             d.Width = w, d.Height = h, d.MipLevels = 1, d.ArraySize = 1, d.Format = fmt, d.SampleDesc.Count = 1;
             d.BindFlags = D3D11_BIND_SHADER_RESOURCE;
             ok = SUCCEEDED(g_dev->CreateTexture2D(&d, &init, &empty));
+            // (without these two the whole part goes into the cross-hair's image, a target's mark with it)
+            if (ok && SUCCEEDED(g_dev->CreateTexture2D(&d, nullptr, &partTex)) && partTex && FAILED(g_dev->CreateShaderResourceView(partTex, nullptr, &partSrv)))
+                partSrv = nullptr;
         }
         failed = !ok;
         if (failed) {
@@ -717,10 +725,17 @@ static bool vrCrossImage(ID3D11DeviceContext *ctx, ID3D11Texture2D *dst, ID3D11T
     wi.timeout = XR_INFINITE_DURATION;
     g_vr.WaitSwapchainImage(g_crossSc, &wi);
     D3D11_BOX part = {x0, y0, 0, x1, y1, 1};
-    ctx->CopySubresourceRegion(g_crossImg[idx].texture, 0, 0, 0, 0, src, 0, &part);
+    bool split = false;
+    if (partSrv) { // by colour: the cross-hair into its image, a target's mark stays in the HUD's
+        ctx->CopySubresourceRegion(partTex, 0, 0, 0, 0, src, 0, &part);
+        split = crossSplit(ctx, partSrv, g_crossImg[idx].texture, dst, x0, y0, w, h, (DXGI_FORMAT)g_vr.hudFormat);
+    }
+    if (!split) {
+        ctx->CopySubresourceRegion(g_crossImg[idx].texture, 0, 0, 0, 0, src, 0, &part);
+        ctx->CopySubresourceRegion(dst, 0, x0, y0, 0, empty, 0, nullptr);
+    }
     XrSwapchainImageReleaseInfo ri = {XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
     g_vr.ReleaseSwapchainImage(g_crossSc, &ri);
-    ctx->CopySubresourceRegion(dst, 0, x0, y0, 0, empty, 0, nullptr);
     g_crossX = x0, g_crossY = y0;
     return true;
 }

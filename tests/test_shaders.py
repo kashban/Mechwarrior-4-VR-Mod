@@ -44,12 +44,13 @@ class Sources(unittest.TestCase):
         self.assertEqual(hlsl_in('eye_tl_vs.h').strip(), read('eye_tl_vs.hlsl').strip())
 
     def test_every_compile_call_is_known(self):
-        self.assertEqual(sorted(compile_calls()), [('g_eyeTlHlsl', 'main', 'vs_5_0'), ('g_m5Hlsl', 'ps', 'ps_5_0'), ('g_m5Hlsl', 'vs', 'vs_5_0')])
+        self.assertEqual(sorted(compile_calls()), [('g_crHlsl', 'ps_cross', 'ps_5_0'), ('g_crHlsl', 'ps_rest', 'ps_5_0'), ('g_crHlsl', 'vs', 'vs_5_0'),
+                                                 ('g_eyeTlHlsl', 'main', 'vs_5_0'), ('g_m5Hlsl', 'ps', 'ps_5_0'), ('g_m5Hlsl', 'vs', 'vs_5_0')])
 
 
 @unittest.skipUnless(FXC and os.path.exists(FXC), 'no fxc.exe (Windows SDK)')
 class Compile(unittest.TestCase):
-    TEXTS = {'g_eyeTlHlsl': 'eye_tl_vs.h', 'g_m5Hlsl': 'mw5.inc'}
+    TEXTS = {'g_eyeTlHlsl': 'eye_tl_vs.h', 'g_m5Hlsl': 'mw5.inc', 'g_crHlsl': 'cross.inc'}
 
     def test_all(self):
         for var, entry, target in compile_calls():
