@@ -77,7 +77,7 @@ static inline unsigned mcWideWidth(unsigned w, float k) { return k > 1.001f ? ((
 
 enum { MC_RECTS = 32, MC_SPANS = 8, MC_CAMS = 4 };
 enum { MC_NEAR = 0, MC_FAR = 1, MC_NEAR_OPAQUE = 2, MC_FAR_OPAQUE = 3, MC_FAR_UP = 4, MC_FADE = 5, MC_FAR_SMALL = 6 };
-enum { MC_SHOWN = 15 }; // as many parts the runtime shows beside the world's layer
+enum { MC_SHOWN = 15 }; // as many parts every runtime shows beside the world's layer (a runtime may show more: mcHudRects' shown)
 // a part on the cockpit's glass: MC_GLASS + its number; a camera's window in it, opaque: MC_GLASS_OPAQUE + its number
 enum { MC_GLASSES = 8, MC_GLASS = 8, MC_GLASS_OPAQUE = 16 };
 struct McRects {
@@ -262,9 +262,9 @@ static inline void mcHudRectsWith(const McHud &h, McRects &q, bool shrink) {
 }
 
 // (the cross-hair's own part costs up to four more: left as it is where the runtime would not show them all)
-static inline void mcHudRects(const McHud &h, McRects &q) {
+static inline void mcHudRects(const McHud &h, McRects &q, int shown = MC_SHOWN) {
     mcHudRectsWith(h, q, true);
-    if (q.n > MC_SHOWN) mcHudRectsWith(h, q, false);
+    if (q.n > shown) mcHudRectsWith(h, q, false);
 }
 
 // ---- where a part on the glass lies (vr.inc, mw5.inc) ----

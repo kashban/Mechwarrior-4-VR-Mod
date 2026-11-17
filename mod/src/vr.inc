@@ -80,6 +80,8 @@ struct VrState {
     // functions
     PFN_xrCreateInstance CreateInstance;
     PFN_xrGetSystem GetSystem;
+    PFN_xrGetSystemProperties GetSystemProperties;
+    uint32_t maxLayers = 16; // what every runtime shows at least
     PFN_xrCreateSession CreateSession;
     PFN_xrCreateReferenceSpace CreateReferenceSpace;
     PFN_xrEnumerateSwapchainFormats EnumerateSwapchainFormats;
@@ -341,6 +343,12 @@ static bool vrInit(IDXGISwapChain *swap) {
     sgi.formFactor = XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY;
     if (!vrCheck(g_vr.GetSystem(g_vr.instance, &sgi, &g_vr.system), "xrGetSystem (is the headset connected?)"))
         return false;
+    { // how many layers the runtime shows: the HUD's parts are layers, and the smaller cross-hair costs four
+        XrSystemProperties sp = {XR_TYPE_SYSTEM_PROPERTIES};
+        if (vrGet(g_vr.GetSystemProperties, "xrGetSystemProperties") && XR_SUCCEEDED(g_vr.GetSystemProperties(g_vr.instance, g_vr.system, &sp)))
+            g_vr.maxLayers = min(max(sp.graphicsProperties.maxLayerCount, 16u), (uint32_t)MC_RECTS + 1);
+        logf("vr: the runtime shows %u layers at most; %u in use at most", sp.graphicsProperties.maxLayerCount, g_vr.maxLayers);
+    }
     XrGraphicsRequirementsD3D11KHR req = {XR_TYPE_GRAPHICS_REQUIREMENTS_D3D11_KHR};
     if (!vrCheck(g_vr.GetD3D11GraphicsRequirementsKHR(g_vr.instance, g_vr.system, &req),
                  "xrGetD3D11GraphicsRequirementsKHR"))
@@ -1012,7 +1020,7 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
         hd.twistDv = g_vr.twistDv;
         if (g_vr.crossScale < 0.995f) memcpy(hd.cross, g_vr.cross, sizeof hd.cross);
         static McRects hq_;
-        mcHudRects(hd, hq_);
+        mcHudRects(hd, hq_, (int)g_vr.maxLayers - 1);
         float (*rc)[5] = hq_.rc;
         int nr = hq_.n;
         if (g_vr.crossScale < 0.995f) { // is the cross-hair shown smaller? (not with the zoom window, not with too many parts)
@@ -1041,9 +1049,9 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
             bool isFar = rc[i][4] == 1 || rc[i][4] >= 3, opaque = rc[i][4] == 2 || rc[i][4] == 3;
 
             if (rc[i][4] != 5 && (u1 - u0 < 0.005f || v1 - v0 < 0.005f)) continue;
-            if (nl >= 16) { // what every runtime shows at least; with more, xrEndFrame fails and the picture stands still
+            if (nl >= g_vr.maxLayers) { // with more, xrEndFrame fails and the picture stands still
                 static bool told;
-                if (!told) logf("vr: more than 16 layers - %d parts of the HUD left out", nr - i);
+                if (!told) logf("vr: more than %u layers - %d parts of the HUD left out", g_vr.maxLayers, nr - i);
                 told = true;
                 break;
             }

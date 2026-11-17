@@ -577,8 +577,18 @@ static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw) {
     static unsigned done[2] = {~0u, ~0u}, seen[2] = {~0u, ~0u};
     static void *usual[2]; // the target the eye's cockpit was drawn into last
     static int looks[2];
-    if (done[e] == g_frame) return;
-    if (seen[e] != g_frame) {
+    // Seen in a video of the headset: every few seconds a frame without the cockpit, though it was drawn. In such a
+    // frame a CPU-path draw comes early in the pass, and what the game draws after it (it clears, or draws the
+    // world over it) takes the cockpit away. So: when many of the game's draws came after ours and another
+    // CPU-path draw of the pass comes by, the cockpit is drawn once more.
+    static LONG at[2];
+    static bool again[2];
+    bool redo = false;
+    if (done[e] == g_frame) {
+        if (again[e] || g_workNo - at[e] <= 60) return;
+        redo = true;
+    }
+    if (!redo && seen[e] != g_frame) {
         if (done[e] != seen[e]) usual[e] = nullptr; // not drawn at all in the frame before: any target again
         seen[e] = g_frame, looks[e] = 0;
     }
@@ -602,7 +612,12 @@ static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw) {
         if (rt) rt->Release();
         if (dv) dv->Release();
         bool other = !rtp || !depth || (usual[e] && rtp != usual[e]);
-        if (other && ++looks[e] <= 200) {
+        if (redo) {
+            if (other) return; // not the eye's picture: a later draw may be
+            again[e] = true;
+            static int told;
+            if (told++ < 40) logf("mw5: frame %u, eye %d: %ld of the game's draws came after the cockpit - drawn once more", g_frame, e, (long)(g_workNo - at[e]));
+        } else if (other && ++looks[e] <= 200) {
             static int told;
             if (looks[e] == 1 && told < 40) {
                 ++told;
@@ -629,6 +644,7 @@ static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw) {
         }
     }
     done[e] = g_frame;
+    if (!redo) at[e] = g_workNo, again[e] = false;
     if (g_mw5State == 0 && g_mw5Name[0]) mw5Load();
     if (g_mw5State != 1 || !g_vrPoseOk[e] || g_P00 <= 0 || g_P11 <= 0 || g_near <= 0) {
         g_m5Why[e] = 3;

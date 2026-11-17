@@ -424,6 +424,12 @@ static void testHudCross() {
     for (int i = 0; i < q.n; ++i) CHECK(q.rc[i][4] != MC_FAR_SMALL);
     mcHudRectsWith(h, w, true);
     CHECK(w.n == 17);
+    mcHudRects(h, q, 17); // a runtime that shows that many: the cross-hair is its own part
+    small = 0;
+    for (int i = 0; i < q.n; ++i) small += q.rc[i][4] == MC_FAR_SMALL;
+    CHECK(q.n == 17 && small == 1);
+    mcHudRects(h, q, 16);
+    CHECK(q.n == 14);
     h.nGlass = 7; // one too many
     mcHudRects(h, q);
     CHECK(q.n == 13);

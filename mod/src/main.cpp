@@ -778,10 +778,12 @@ static void auditOnPresent() {
     g_auditFrames = 0;
 }
 
+static volatile LONG g_workNo; // counts the game's draws (mw5.inc: how many came after our cockpit)
 static void onWork(void *ctx, const char *kind, bool compute) {
     if (ctxOf(ctx)->foreign) return;
     CtxState *s = ctxOf(ctx);
     extern volatile bool g_srcCamActive;
+    if (!compute) InterlockedIncrement(&g_workNo);
     if (!compute && g_in3D && g_eyeMode && !g_srcCamActive) auditDraw(s);
     if (!compute && g_in3D && s->st[ST_VS].sh) {
         uint64_t h = s->st[ST_VS].sh->hash;
@@ -2790,7 +2792,7 @@ BOOL WINAPI DllMain(HINSTANCE h, DWORD reason, LPVOID) {
         if (g_dbg) g_shlog = _wfsopen((g_dir + L"mw4vr_shaders.txt").c_str(), L"w", _SH_DENYNO);
         wchar_t exe[MAX_PATH];
         GetModuleFileNameW(nullptr, exe, MAX_PATH);
-        logf("MW4VR v11.50 (debug level %d) loaded into %s", g_dbg, narrow(exe).c_str());
+        logf("MW4VR v11.51 (debug level %d) loaded into %s", g_dbg, narrow(exe).c_str());
         if (!loadReal()) logf("ERROR: the system d3d11.dll could not be loaded");
     }
     return TRUE;
