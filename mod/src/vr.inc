@@ -56,7 +56,7 @@ struct VrState {
     float twist[4] = {0.42f, 0.585f, 0.58f, 0.665f}, twistDv = -0.045f;
     float seatFwd = 0, seatUp = 0; // the eyes moved forward / up in the cockpit, game metres
     float zoomWinScale = 0.45f;    // the zoom window's size against the game's picture (smaller = weaker zoom, less in the way)
-    float cross[4] = {0.39f, 0.415f, 0.61f, 0.585f}, crossScale = 0.5f; // the cross-hair's part of the HUD image, and its size
+    float cross[4] = {0.39f, 0.415f, 0.61f, 0.585f}, crossScale = 0.25f; // the cross-hair's part of the HUD image, and its size
     float zoomWinMargin = 0.02f;   // the HUD cut away around the zoom window (the game's frame of it), part of the picture
     float zoomScale = 0.9f;        // zoomed: the image shown at this share of the full view (smaller = weaker zoom)
     float baseP00 = 0, baseP11 = 0; // the game's projection at its widest (not zoomed): what the layers span
@@ -262,9 +262,9 @@ static void vrReadIni() {
     // the cross-hair with its range, pitch scale and weapon groups: a part about the picture's middle, shown smaller
     GetPrivateProfileStringW(L"vr", L"hud_cross_rect", L"0.39 0.415 0.61 0.585", b, 64, p.c_str());
     if (swscanf(b, L"%f %f %f %f", g_vr.cross, g_vr.cross + 1, g_vr.cross + 2, g_vr.cross + 3) != 4) g_vr.cross[0] = g_vr.cross[2] = 0;
-    GetPrivateProfileStringW(L"vr", L"hud_cross_scale", L"0.5", b, 64, p.c_str());
+    GetPrivateProfileStringW(L"vr", L"hud_cross_scale", L"0.25", b, 64, p.c_str());
     g_vr.crossScale = (float)_wtof(b);
-    if (!(g_vr.crossScale >= 0.2f && g_vr.crossScale <= 1.0f)) g_vr.crossScale = 0.5f;
+    if (!(g_vr.crossScale >= 0.1f && g_vr.crossScale <= 1.0f)) g_vr.crossScale = 0.25f;
     GetPrivateProfileStringW(L"vr", L"hud_twist_rect", L"0.42 0.585 0.58 0.665", b, 64, p.c_str());
     if (swscanf(b, L"%f %f %f %f", g_vr.twist, g_vr.twist + 1, g_vr.twist + 2, g_vr.twist + 3) != 4) g_vr.twist[0] = g_vr.twist[2] = 0;
     GetPrivateProfileStringW(L"vr", L"hud_twist_shift", L"-0.045", b, 64, p.c_str());
@@ -509,11 +509,25 @@ static void vrLocate(XrTime when) {
     XrViewState vs = {XR_TYPE_VIEW_STATE};
     XrView views[2] = {{XR_TYPE_VIEW}, {XR_TYPE_VIEW}};
     uint32_t n = 0;
-    if (XR_FAILED(g_vr.LocateViews(g_vr.session, &li, &vs, 2, &n, views)) || n != 2 ||
-        !(vs.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT)) {
-        g_vrPoseOk[0] = g_vrPoseOk[1] = false;
+    static int missed;
+    XrResult lr = g_vr.LocateViews(g_vr.session, &li, &vs, 2, &n, views);
+    if (XR_FAILED(lr) || n != 2 || !(vs.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT)) {
+        // No pose for the coming frame. Without one that frame is drawn with the game's own camera and without
+        // our cockpit - one such frame is a flash. For up to half a second the last pose stays in use.
+        static int told;
+        if (++missed == 1 && told < 60) {
+            ++told;
+            logf("vr: frame %u: no head pose for the next frame (result %d, %u views, flags %x) - the last one stays", g_frame, (int)lr, n,
+                 (unsigned)vs.viewStateFlags);
+        }
+        if (missed > 45) g_vrPoseOk[0] = g_vrPoseOk[1] = false;
         return;
     }
+    if (missed > 1) {
+        static int told;
+        if (told++ < 20) logf("vr: frame %u: the head pose is back after %d frames without", g_frame, missed);
+    }
+    missed = 0;
     if (!g_vr.haveRef || g_vr.recenter) {
         // the head between the eyes, looking where the left eye looks
         g_vr.ref.orientation = views[0].pose.orientation;
@@ -900,6 +914,10 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
                 for (int i = 0; i < 3; ++i)
                     for (int j = 0; j < 3; ++j) Dx[i * 3 + j] = sg[i] * Dv[i * 3 + j] * sg[j];
                 XrQuaternionf dq = qfromm(Dx);
+                if (dq.w < 0.999f && dq.w > -0.999f) { // more than 5 degrees in one frame: worth a line
+                    static int told;
+                    if (told++ < 30) logf("vr: frame %u: eye %d's older picture turned by %.1f degrees with the mech", g_frame, e, 2 * acosf(fminf(fabsf(dq.w), 1.0f)) * 57.29578f);
+                }
                 if (dq.w > 0.94f || dq.w < -0.94f) { // less than 40 degrees: a turn, not a cut
                     XrQuaternionf rq = g_vr.ref.orientation;
                     XrQuaternionf wq = qmul(qmul(rq, dq), qconj(rq));
@@ -997,6 +1015,18 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
         mcHudRects(hd, hq_);
         float (*rc)[5] = hq_.rc;
         int nr = hq_.n;
+        if (g_vr.crossScale < 0.995f) { // is the cross-hair shown smaller? (not with the zoom window, not with too many parts)
+            int smallNow = 0;
+            for (int i = 0; i < nr; ++i) smallNow |= rc[i][4] == MC_FAR_SMALL;
+            static int was = -1, told;
+            if (smallNow != was && told < 12) {
+                ++told;
+                logf(smallNow ? "hud: frame %u: the cross-hair at %.2f of its size (%d parts of the HUD)"
+                              : "hud: frame %u: the cross-hair at full size, not %.2f (%d parts of the HUD without it; the zoom window open, or no layer left)",
+                     g_frame, g_vr.crossScale, nr);
+            }
+            was = smallNow;
+        }
         // a battle's first pictures (the answer comes a frame late, and the first frame can last long): no HUD yet
         if (g_fadeStage && (g_fadeKnownFrame == ~0u || g_frame - g_fadeKnownFrame > 4)) nr = 0;
         else if (g_fadeA > 0) { // the game's fade sheet: over the whole view, the HUD not
@@ -1079,6 +1109,20 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
                 q.size = {40 * D, 40 * D};
             }
             layers[nl++] = (const XrCompositionLayerBaseHeader *)&q;
+        }
+    }
+    { // A set of layers that lasts a few frames only is a flash: say so (layers: their number, +100 with the world's)
+        int sig = (int)nl + (proj.viewCount ? 100 : 0);
+        static int cur = -1, before = -1, told;
+        static unsigned since;
+        if (sig != cur) {
+            if (sig == before && g_frame - since <= 5 && battle && told < 60) {
+                ++told;
+                logf("vr: frames %u-%u: layers %d instead of %d (tracking %d, both eyes' pictures %d %d, poses %d %d, HUD drawn %u frames ago, fade %d %.2f)",
+                     since, g_frame - 1, cur, sig, (int)track, (int)g_vr.have[0], (int)g_vr.have[1], (int)g_vr.layerOk[0], (int)g_vr.layerOk[1],
+                     g_frame - g_hudDrawnFrame, (int)(g_fadeStage != nullptr), g_fadeA);
+            }
+            before = cur, cur = sig, since = g_frame;
         }
     }
     XrFrameEndInfo ei = {XR_TYPE_FRAME_END_INFO};
