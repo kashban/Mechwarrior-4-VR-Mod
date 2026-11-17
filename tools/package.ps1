@@ -11,6 +11,7 @@ $name = "MW4VR-v$($m.Groups[1].Value)"
 
 Push-Location (Join-Path $root 'mod')
 try {
+    New-Item -ItemType Directory build -Force | Out-Null # (a fresh checkout has none; the build's output is written there)
     cmd /c '.\build.bat > build\package_build.txt 2>&1'
     if ($LASTEXITCODE -ne 0) { throw 'the build failed - see mod\build\package_build.txt' }
 } finally { Pop-Location }
