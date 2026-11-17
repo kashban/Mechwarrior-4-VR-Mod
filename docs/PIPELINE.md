@@ -15,7 +15,7 @@ Four workflows on GitHub Actions (`.github/workflows`). What a workflow checks, 
 |---|---|---|
 | The mod builds (x86, MSVC) | CI, Release | `mod\build.bat` |
 | Tests of `core.h` | CI, Release | `tests\core_test.bat` |
-| Tests of the converter, the guard, the hook's ABI | CI, Release | `python -W error -m unittest discover -s tests` |
+| Tests of the converter and the guard (the tests of the hook's ABI need the game's files: on a developer's machine only, with `MW4_DIR` set) | CI, Release | `python -W error -m unittest discover -s tests` |
 | The shaders compile (`fxc`; in the pipeline the tests may not be skipped) | CI, Release | the same |
 | Line coverage of the converter and the guard, 95 % | CI | `python -m coverage run -m unittest discover -s tests`, then `python -m coverage report --include=tools/cockpit_convert.py,tools/ci/guard.py --fail-under=95` |
 | Mutation score 100 % (`tests/mutation_floor.json`; the floors only rise) | Mutation tests | `python tests/mutate.py` |

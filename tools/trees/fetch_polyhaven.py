@@ -7,6 +7,9 @@ AGENT = {'User-Agent': 'tree-card-builder'}
 
 
 def get(url):
+    if not url.startswith('https://'):  # (urllib would also open file: and the like)
+        raise SystemExit('refused address ' + url)
+    # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected - https alone, see above
     return urllib.request.urlopen(urllib.request.Request(url, headers=AGENT))
 
 
