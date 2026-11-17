@@ -51,10 +51,13 @@ To switch it on:
 
 1. A self-hosted runner with the label `ai-review` on a machine that reaches the model server, with `git` and
    `node` (20 or newer). Repository settings, Actions, Runners.
-2. Repository variables: `AI_URL` (the model server as the runner reaches it, `http://<address>:<port>`),
-   `AI_REVIEW` = `on`; if not the defaults: `AI_MODEL`, `AI_API`; for a second server `AI_FALLBACK_URL`,
-   `AI_FALLBACK_MODEL`.
-3. Repository secrets: `AI_API_KEY` (llama-swap's key), for the second server `AI_API_KEY_LAPTOP`.
+2. Repository secrets: `AI_URL` (the model server as the runner reaches it, `http://<address>:<port>`; a secret
+   because it is a home network's address), `AI_API_KEY` (llama-swap's key); for a second server
+   `AI_FALLBACK_URL` and `AI_API_KEY_LAPTOP`.
+3. Repository variables: `AI_REVIEW` = `on`; if not the defaults: `AI_MODEL`, `AI_API`, `AI_FALLBACK_MODEL`.
+
+The runner here: `actions-runner` unpacked on the developer's PC, registered with `config.cmd --labels ai-review`,
+started at logon by a scheduled task (`run.cmd`), not as a service - it needs no administrator rights.
 
 A self-hosted runner runs what a workflow tells it, on a machine at home. That is why this workflow starts on
 `pull_request_target`: the workflow and the script are the ones on `main`, a pull request cannot change them, and

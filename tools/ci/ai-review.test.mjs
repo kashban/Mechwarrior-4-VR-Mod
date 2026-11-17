@@ -190,6 +190,7 @@ test('unreachable Ollama posts a visible skip notice and exits 0', async () => {
   assert.match(out, /::warning::AI review skipped/);
   assert.equal(github.comments.length, 1);
   assert.match(github.comments[0].body, /AI review skipped.*not reachable/);
+  assert.doesNotMatch(github.comments[0].body, /127\.0\.0\.1/, "never shows the server's address");
 });
 
 test('busy GPU (no first token) skips fast, unloads, keeps the previous review', async () => {

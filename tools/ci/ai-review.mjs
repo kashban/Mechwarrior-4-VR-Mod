@@ -312,9 +312,11 @@ export async function assertReachable(server = SERVERS[0]) {
     res = null;
   }
   if (res?.status === 401) {
-    throw unavailable(new SkipReview(`${label(server)} at ${server.url} rejected the key (secret ${server.keySecret})`));
+    throw unavailable(new SkipReview(`${label(server)} rejected the key (secret ${server.keySecret})`));
   }
-  if (!res?.ok) throw unavailable(new SkipReview(`${label(server)} not reachable at ${server.url} (${server.name} off?)`));
+  // Without the server's address: the reason goes into a comment on the pull request, and the address is a home
+  // network's.
+  if (!res?.ok) throw unavailable(new SkipReview(`${label(server)} not reachable (${server.name} off?)`));
 }
 
 async function unloadModel(server, model) {
