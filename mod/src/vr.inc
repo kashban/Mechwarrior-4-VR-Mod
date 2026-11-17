@@ -43,6 +43,7 @@ struct VrState {
     XrSwapchain sc[2] = {XR_NULL_HANDLE, XR_NULL_HANDLE};
     std::vector<XrSwapchainImageD3D11KHR> img[2];
     XrSwapchain hudSc = XR_NULL_HANDLE;   // the HUD layer's image
+    int64_t hudFormat = 0;
     std::vector<XrSwapchainImageD3D11KHR> hudImg;
     bool hudHave = false, hudLayer = true;
     float hudNear = 1.5f, hudTop = 0.12f, hudBottom = 0.77f; // the edge strips' distance; where they end / begin
@@ -81,6 +82,7 @@ struct VrState {
     PFN_xrCreateInstance CreateInstance;
     PFN_xrGetSystem GetSystem;
     PFN_xrGetSystemProperties GetSystemProperties;
+    PFN_xrDestroySwapchain DestroySwapchain;
     uint32_t maxLayers = 16; // what every runtime shows at least
     PFN_xrCreateSession CreateSession;
     PFN_xrCreateReferenceSpace CreateReferenceSpace;
@@ -343,6 +345,7 @@ static bool vrInit(IDXGISwapChain *swap) {
     sgi.formFactor = XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY;
     if (!vrCheck(g_vr.GetSystem(g_vr.instance, &sgi, &g_vr.system), "xrGetSystem (is the headset connected?)"))
         return false;
+    vrGet(g_vr.DestroySwapchain, "xrDestroySwapchain");
     { // how many layers the runtime shows: the HUD's parts are layers, and the smaller cross-hair costs four
         XrSystemProperties sp = {XR_TYPE_SYSTEM_PROPERTIES};
         if (vrGet(g_vr.GetSystemProperties, "xrGetSystemProperties") && XR_SUCCEEDED(g_vr.GetSystemProperties(g_vr.instance, g_vr.system, &sp)))
@@ -408,6 +411,7 @@ static bool vrInit(IDXGISwapChain *swap) {
         ci.usageFlags = XR_SWAPCHAIN_USAGE_TRANSFER_DST_BIT | XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT;
         ci.format = fmt;
         ci.sampleCount = 1;
+        g_vr.hudFormat = fmt;
         ci.width = hudWideW(g_vr.w); // wider than the eyes' pictures: the HUD beyond the picture's right edge (hud.inc)
         ci.height = g_vr.h;
         ci.faceCount = 1;
@@ -644,61 +648,81 @@ static void fadeProbe(ID3D11DeviceContext *ctx, ID3D11Texture2D *hud) {
     }
 }
 
-// The cross-hair smaller: its part of the HUD picture is made smaller inside the layer's image, about its own
-// middle. (As a layer of its own it cost four of the 16 layers the runtime shows, and fell away with a full HUD.)
-// The part is copied into a small texture with mip levels, the levels are made (each halves it), the part in the
-// image is emptied and the level wanted is copied into its middle. So the size is a half, a quarter or an eighth.
-// Not while a small camera's window (the zoom window) lies in that part.
-static void vrCrossSmaller(ID3D11DeviceContext *ctx, ID3D11Texture2D *dst, ID3D11Texture2D *src, UINT dstW, UINT dstH) {
-    int level = g_vr.crossScale > 0.7f ? 0 : g_vr.crossScale > 0.35f ? 1 : g_vr.crossScale > 0.18f ? 2 : 3;
+// The cross-hair smaller: its part of the HUD picture gets a small image and a layer of its own, shown at
+// hud_cross_scale of its size, and is emptied in the HUD's image - so the far middle around it needs no cutting
+// up and the cross-hair costs one of the runtime's 16 layers, not four. (Made smaller inside the HUD's image it
+// cost none, but its range and texts could not be read: a layer keeps every pixel.)
+// Not while a small camera's window (the zoom window) lies in that part. true: the image is filled, the part emptied.
+static XrSwapchain g_crossSc = XR_NULL_HANDLE;
+static std::vector<XrSwapchainImageD3D11KHR> g_crossImg;
+static UINT g_crossW, g_crossH, g_crossX, g_crossY;
+static bool g_crossShown; // the HUD's image shown now has the part emptied
+static bool vrCrossImage(ID3D11DeviceContext *ctx, ID3D11Texture2D *dst, ID3D11Texture2D *src, UINT dstW, UINT dstH) {
     const float *cr = g_vr.cross;
-    if (!level || !g_hudW || !g_hudH || !(cr[2] > cr[0] && cr[3] > cr[1])) return;
+    if (g_vr.crossScale > 0.995f || !g_hudW || !g_hudH || !(cr[2] > cr[0] && cr[3] > cr[1])) return false;
     UINT x0 = (UINT)(cr[0] * g_hudW), y0 = (UINT)(cr[1] * g_hudH), x1 = (UINT)(cr[2] * g_hudW), y1 = (UINT)(cr[3] * g_hudH);
-    if (x1 > dstW || y1 > dstH || x1 < x0 + 16 || y1 < y0 + 16) return;
+    if (x1 > dstW || y1 > dstH || x1 < x0 + 16 || y1 < y0 + 16) return false;
     if (g_hudCamFrame == g_frame)
         for (int i = 0; i < g_hudCamN; ++i) {
             const HudCamRect &r = g_hudCams[i];
-            if ((UINT)r.x < x1 && (UINT)(r.x + r.w) > x0 && (UINT)r.y < y1 && (UINT)(r.y + r.h) > y0) return;
+            if ((UINT)r.x < x1 && (UINT)(r.x + r.w) > x0 && (UINT)r.y < y1 && (UINT)(r.y + r.h) > y0) return false;
         }
-    static ID3D11Texture2D *mips, *empty;
-    static ID3D11ShaderResourceView *srv;
-    static UINT w, h;
+    static ID3D11Texture2D *empty;
     static DXGI_FORMAT fmt;
     static bool failed;
-    D3D11_TEXTURE2D_DESC sd;
+    D3D11_TEXTURE2D_DESC sd, dd;
     src->GetDesc(&sd);
-    if (sd.SampleDesc.Count != 1) return;
-    if (!mips || w != x1 - x0 || h != y1 - y0 || fmt != sd.Format) {
-        if (failed && w == x1 - x0 && h == y1 - y0 && fmt == sd.Format) return;
-        if (srv) srv->Release();
-        if (mips) mips->Release();
+    dst->GetDesc(&dd);
+    if (sd.SampleDesc.Count != 1) return false;
+    UINT w = x1 - x0, h = y1 - y0;
+    if (g_crossSc == XR_NULL_HANDLE || w != g_crossW || h != g_crossH || fmt != sd.Format) {
+        if (failed && w == g_crossW && h == g_crossH && fmt == sd.Format) return false;
         if (empty) empty->Release();
-        srv = nullptr, mips = nullptr, empty = nullptr;
-        w = x1 - x0, h = y1 - y0, fmt = sd.Format;
-        D3D11_TEXTURE2D_DESC d = {};
-        d.Width = w, d.Height = h, d.MipLevels = 4, d.ArraySize = 1, d.Format = fmt, d.SampleDesc.Count = 1;
-        d.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE, d.MiscFlags = D3D11_RESOURCE_MISC_GENERATE_MIPS;
-        HRESULT hr = g_dev->CreateTexture2D(&d, nullptr, &mips);
-        if (SUCCEEDED(hr)) hr = g_dev->CreateShaderResourceView(mips, nullptr, &srv);
-        if (SUCCEEDED(hr)) {
+        empty = nullptr;
+        if (g_crossSc != XR_NULL_HANDLE && g_vr.DestroySwapchain) g_vr.DestroySwapchain(g_crossSc);
+        g_crossSc = XR_NULL_HANDLE;
+        g_crossW = w, g_crossH = h, fmt = sd.Format;
+        XrSwapchainCreateInfo ci = {XR_TYPE_SWAPCHAIN_CREATE_INFO};
+        ci.usageFlags = XR_SWAPCHAIN_USAGE_TRANSFER_DST_BIT | XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT;
+        ci.format = g_vr.hudFormat; // as the HUD layer's
+        ci.sampleCount = 1, ci.width = w, ci.height = h, ci.faceCount = 1, ci.arraySize = 1, ci.mipCount = 1;
+        bool ok = XR_SUCCEEDED(g_vr.CreateSwapchain(g_vr.session, &ci, &g_crossSc));
+        uint32_t ni = 0;
+        if (ok) ok = XR_SUCCEEDED(g_vr.EnumerateSwapchainImages(g_crossSc, 0, &ni, nullptr)) && ni > 0;
+        if (ok) {
+            g_crossImg.assign(ni, {XR_TYPE_SWAPCHAIN_IMAGE_D3D11_KHR});
+            ok = XR_SUCCEEDED(g_vr.EnumerateSwapchainImages(g_crossSc, ni, &ni, (XrSwapchainImageBaseHeader *)g_crossImg.data()));
+        }
+        if (ok) {
             std::vector<uint8_t> zero((size_t)w * h * 4);
             D3D11_SUBRESOURCE_DATA init = {zero.data(), w * 4, 0};
-            d.MipLevels = 1, d.BindFlags = D3D11_BIND_SHADER_RESOURCE, d.MiscFlags = 0;
-            hr = g_dev->CreateTexture2D(&d, &init, &empty);
+            D3D11_TEXTURE2D_DESC d = {};
+            d.Width = w, d.Height = h, d.MipLevels = 1, d.ArraySize = 1, d.Format = fmt, d.SampleDesc.Count = 1;
+            d.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+            ok = SUCCEEDED(g_dev->CreateTexture2D(&d, &init, &empty));
         }
-        failed = FAILED(hr);
+        failed = !ok;
         if (failed) {
-            logf("hud: the cross-hair stays at full size - no texture for the smaller one (%ux%u, format %d, 0x%08lX)", w, h, (int)fmt, (unsigned long)hr);
-            return;
+            if (g_crossSc != XR_NULL_HANDLE && g_vr.DestroySwapchain) g_vr.DestroySwapchain(g_crossSc);
+            g_crossSc = XR_NULL_HANDLE;
+            logf("hud: the cross-hair stays at full size - no image for its own layer (%ux%u, format %d)", w, h, (int)fmt);
+            return false;
         }
-        logf("hud: the cross-hair at 1/%d of its size, inside the HUD's image (its part %ux%u, format %d)", 1 << level, w, h, (int)fmt);
+        logf("hud: the cross-hair at %.2f of its size, as a layer of its own (its part %ux%u, format %d)", g_vr.crossScale, w, h, (int)fmt);
     }
+    uint32_t idx = 0;
+    XrSwapchainImageAcquireInfo ai = {XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO};
+    if (XR_FAILED(g_vr.AcquireSwapchainImage(g_crossSc, &ai, &idx))) return false;
+    XrSwapchainImageWaitInfo wi = {XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO};
+    wi.timeout = XR_INFINITE_DURATION;
+    g_vr.WaitSwapchainImage(g_crossSc, &wi);
     D3D11_BOX part = {x0, y0, 0, x1, y1, 1};
-    ctx->CopySubresourceRegion(mips, 0, 0, 0, 0, src, 0, &part);
-    ctx->GenerateMips(srv);
+    ctx->CopySubresourceRegion(g_crossImg[idx].texture, 0, 0, 0, 0, src, 0, &part);
+    XrSwapchainImageReleaseInfo ri = {XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
+    g_vr.ReleaseSwapchainImage(g_crossSc, &ri);
     ctx->CopySubresourceRegion(dst, 0, x0, y0, 0, empty, 0, nullptr);
-    UINT lw = max(1u, w >> level), lh = max(1u, h >> level);
-    ctx->CopySubresourceRegion(dst, 0, x0 + (w - lw) / 2, y0 + (h - lh) / 2, 0, mips, (UINT)level, nullptr);
+    g_crossX = x0, g_crossY = y0;
+    return true;
 }
 
 static void vrOnPresent(IDXGISwapChain *swap, int eye) {
@@ -923,7 +947,7 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
             g_vr.WaitSwapchainImage(g_vr.hudSc, &wi);
             D3D11_BOX hb = {0, 0, 0, min(g_hudTexW, hudWideW(g_vr.w)), min(g_hudH, g_vr.h), 1};
             ctx->CopySubresourceRegion(g_vr.hudImg[idx].texture, 0, 0, 0, 0, g_hudTex, 0, &hb);
-            vrCrossSmaller(ctx, g_vr.hudImg[idx].texture, g_hudTex, hb.right, hb.bottom);
+            g_crossShown = vrCrossImage(ctx, g_vr.hudImg[idx].texture, g_hudTex, hb.right, hb.bottom);
             noteDraw(ctx, g_vr.hudImg[idx].texture, min(g_hudW, g_vr.w), hb.bottom); // a note of ours (note.inc)
             helpDraw(ctx, g_vr.hudImg[idx].texture, min(g_hudW, g_vr.w), hb.bottom, g_vr.hudLeft, g_vr.hudRight, g_vr.hudTop, g_vr.hudBottom);
             XrSwapchainImageReleaseInfo ri = {XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
@@ -1089,12 +1113,13 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
             rc[0][3] = g_fadePts[g_fadePt][1] + dv, rc[0][4] = 5;
             nr = 1;
         }
+        bool crossNow = g_crossShown && g_crossSc != XR_NULL_HANDLE && nr > 0 && !(g_fadeA > 0);
         for (int i = 0; i < nr; ++i) {
             float u0 = rc[i][0], v0 = rc[i][1], u1 = rc[i][2], v1 = rc[i][3];
             bool isFar = rc[i][4] == 1 || rc[i][4] >= 3, opaque = rc[i][4] == 2 || rc[i][4] == 3;
 
             if (rc[i][4] != 5 && (u1 - u0 < 0.005f || v1 - v0 < 0.005f)) continue;
-            if (nl >= g_vr.maxLayers) { // with more, xrEndFrame fails and the picture stands still
+            if (nl >= g_vr.maxLayers - (crossNow ? 1u : 0u)) { // with more, xrEndFrame fails and the picture stands still (one is kept for the cross-hair)
                 static bool told;
                 if (!told) logf("vr: more than %u layers - %d parts of the HUD left out", g_vr.maxLayers, nr - i);
                 told = true;
@@ -1162,6 +1187,23 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
                 q.size = {40 * D, 40 * D};
             }
             layers[nl++] = (const XrCompositionLayerBaseHeader *)&q;
+        }
+        static XrCompositionLayerQuad cq;
+        if (crossNow && nl < g_vr.maxLayers) { // the cross-hair: where its part lies in the far middle, smaller about its own middle
+            cq = {XR_TYPE_COMPOSITION_LAYER_QUAD};
+            float u0 = (float)g_crossX / g_vr.w, v0 = (float)g_crossY / g_vr.h, u1 = (float)(g_crossX + g_crossW) / g_vr.w,
+                  v1 = (float)(g_crossY + g_crossH) / g_vr.h;
+            float W = 2 * far_ / p0, H = 2 * far_ / p1;
+            XrVector3f wpos = qrot(g_vr.ref.orientation, XrVector3f{0.5f * W * ((u0 + u1) - 1), 0.5f * H * (1 - (v0 + v1)), -far_});
+            cq.layerFlags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
+            cq.space = g_vr.space;
+            cq.eyeVisibility = XR_EYE_VISIBILITY_BOTH;
+            cq.subImage.swapchain = g_crossSc;
+            cq.subImage.imageRect.extent = {(int32_t)g_crossW, (int32_t)g_crossH};
+            cq.pose.orientation = g_vr.ref.orientation;
+            cq.pose.position = {g_vr.ref.position.x + wpos.x, g_vr.ref.position.y + wpos.y, g_vr.ref.position.z + wpos.z};
+            cq.size = {W * (u1 - u0) * g_vr.crossScale, H * (v1 - v0) * g_vr.crossScale};
+            layers[nl++] = (const XrCompositionLayerBaseHeader *)&cq;
         }
     }
     { // A set of layers that lasts a few frames only is a flash: say so (layers: their number, +100 with the world's)

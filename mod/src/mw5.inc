@@ -176,7 +176,10 @@ float4 ps(VSOut i) : SV_Target {
 }
 )HLSL";
 
-static inline bool mw5Active() { return g_mw5On && g_mw5State == 1; }
+// Not while the mech is not known yet or the game draws no cockpit (a mission's intro, seen from outside): the
+// cockpit chosen for all mechs showed then, for some seconds, before the mech's own came.
+static inline bool mw5Waiting() { return g_mechOn && g_doubleDraw && (g_mechSearching || !g_mechSeated); }
+static inline bool mw5Active() { return g_mw5On && g_mw5State == 1 && !mw5Waiting(); }
 
 // Without a cockpit of our own ([vr] hud_parts=1): the same parts of the HUD as panes before the pilot, in a row
 // below the view ahead ([vr] hud_part_<name> = degrees right, up, width, metres away), moved with the same keys.
@@ -573,19 +576,20 @@ static void mw5HudCopy(ID3D11DeviceContext *c, ID3D11Texture2D *hud) {
 // at a CPU-path draw of the main camera's pass for an eye (our replacement shader is bound): once per pass
 static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw) {
     int e = g_camPassEye;
-    if (e < 0 || e > 1 || !g_camInMain || !g_kTlOnly) return;
+    if (e < 0 || e > 1 || !g_camInMain || !g_kTlOnly || mw5Waiting()) return;
     static unsigned done[2] = {~0u, ~0u}, seen[2] = {~0u, ~0u};
     static void *usual[2]; // the target the eye's cockpit was drawn into last
     static int looks[2];
     // Seen in a video of the headset: every few seconds a frame without the cockpit, though it was drawn. In such a
-    // frame a CPU-path draw comes early in the pass, and what the game draws after it (it clears, or draws the
-    // world over it) takes the cockpit away. So: when many of the game's draws came after ours and another
-    // CPU-path draw of the pass comes by, the cockpit is drawn once more.
-    static LONG at[2];
+    // frame a CPU-path draw comes early in the pass; the game then draws elsewhere (some 62 draws were counted)
+    // and comes back to the eye's picture with the cockpit gone. So: when the game changed its render target after
+    // our cockpit, or more than 40 of its draws came after it, and another CPU-path draw of the pass comes by, the
+    // cockpit is drawn once more. (Tried and wrong: only after 150 draws - the flashes were back.)
+    static LONG at[2], atRt[2];
     static bool again[2];
     bool redo = false;
     if (done[e] == g_frame) {
-        if (again[e] || g_workNo - at[e] <= 150) return; // (some 60 come after it in every frame of some scenes)
+        if (again[e] || (g_rtSwitchNo == atRt[e] && g_workNo - at[e] <= 40)) return;
         redo = true;
     }
     if (!redo && seen[e] != g_frame) {
@@ -616,7 +620,9 @@ static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw) {
             if (other) return; // not the eye's picture: a later draw may be
             again[e] = true;
             static int told;
-            if (told++ < 40) logf("mw5: frame %u, eye %d: %ld of the game's draws came after the cockpit - drawn once more", g_frame, e, (long)(g_workNo - at[e]));
+            if (told++ < 40)
+                logf("mw5: frame %u, eye %d: %ld of the game's draws and %ld changes of its render target came after the cockpit - drawn once more",
+                     g_frame, e, (long)(g_workNo - at[e]), (long)(g_rtSwitchNo - atRt[e]));
         } else if (other && ++looks[e] <= 200) {
             static int told;
             if (looks[e] == 1 && told < 40) {
@@ -644,7 +650,7 @@ static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw) {
         }
     }
     done[e] = g_frame;
-    if (!redo) at[e] = g_workNo, again[e] = false;
+    if (!redo) at[e] = g_workNo, atRt[e] = g_rtSwitchNo, again[e] = false;
     if (g_mw5State == 0 && g_mw5Name[0]) mw5Load();
     if (g_mw5State != 1 || !g_vrPoseOk[e] || g_P00 <= 0 || g_P11 <= 0 || g_near <= 0) {
         g_m5Why[e] = 3;

@@ -21,6 +21,8 @@ static int g_mgTris, g_mgBad, g_mgDraws;
 static float g_mgSamples[MG_SAMPLES][MG_N];
 static int g_mgSampleN;
 static bool g_mechSearching;              // samples are being collected
+static bool g_mechSeated;                 // the game draws its cockpit: the camera sits in the mech (not a mission's intro)
+static unsigned g_mechBattleFrame;        // the battle's first frame
 static unsigned g_mechNextFrame;          // the next frame to measure
 static unsigned g_mechLastCamFrame = ~0u;
 
@@ -430,6 +432,8 @@ static void mechOnPresent(bool inBattle, bool zoomed) {
     // a battle begins (the camera was not drawn for a while): which cockpit is it?
     if (inBattle && (g_mechLastCamFrame == ~0u || g_frame - g_mechLastCamFrame > 30)) {
         g_mechSearching = true;
+        g_mechSeated = false;
+        g_mechBattleFrame = g_frame;
         g_mgSampleN = 0;
         g_mechNextFrame = g_frame + 60; // (the cockpit known so far stays in use until this one is recognised)
     }
@@ -446,12 +450,21 @@ static void mechOnPresent(bool inBattle, bool zoomed) {
                 g_mechSearching = false;
                 g_mgSampleN = 0;
                 g_mechCur = i;
+                g_mechNextFrame = g_frame + 2; // (is the camera in the cockpit? - looked at now)
                 mechReload(i);
                 logf("mech: profile %d '%s' by the mech's name, at once (%s)", i + 1, narrow(g_mechs[i].name).c_str(),
                      g_mechs[i].tuned ? "set by hand" : "fitted from the others");
                 break;
             }
         }
+    }
+    if (measured && g_mgTris >= 30 && !g_mechSeated) {
+        g_mechSeated = true;
+        logf("mech: frame %u - the game draws its cockpit (%d triangles): the camera sits in the mech", g_frame, g_mgTris);
+    }
+    if (inBattle && !g_mechSeated && !g_mechSearching && g_frame - g_mechBattleFrame > 2700) { // never seen for half a minute: not held back for ever
+        g_mechSeated = true;
+        logf("mech: frame %u - no cockpit of the game's seen in this battle; ours is shown all the same", g_frame);
     }
     if (measured && g_mechSearching) {
         static int logs;
@@ -465,12 +478,12 @@ static void mechOnPresent(bool inBattle, bool zoomed) {
         if (g_mgTris >= 30 && g_mgSampleN < MG_SAMPLES) memcpy(g_mgSamples[g_mgSampleN++], g_mgFrame, sizeof g_mgFrame);
         if (g_mgSampleN >= MG_SAMPLES) mechIdentify();
     }
-    if (g_mechSearching && inBattle && !zoomed && g_doubleDraw && g_frame >= g_mechNextFrame) {
+    if ((g_mechSearching || !g_mechSeated) && inBattle && !zoomed && g_doubleDraw && g_frame >= g_mechNextFrame) {
         memset(g_mgFrame, 0, sizeof g_mgFrame);
         g_mgTris = g_mgBad = g_mgDraws = 0;
         g_mechMeasure = true; // the coming frame
         // outside the cockpit nothing is found: then only now and then
-        g_mechNextFrame = g_frame + (g_mgSampleN ? 12 : 45);
+        g_mechNextFrame = g_frame + (!g_mechSearching ? 10 : g_mgSampleN ? 12 : 45);
     }
 }
 

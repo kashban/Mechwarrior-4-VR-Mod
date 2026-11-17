@@ -71,9 +71,8 @@ hud_sway_gain=1.0
 hud_twist_rect=0.42 0.585 0.58 0.665
 hud_twist_shift=-0.045
 ; the cross-hair with its range, pitch scale and weapon groups: that part of the HUD picture (u0 v0 u1 v1, about the
-; picture's middle) is shown at hud_cross_scale of its size: a half, a quarter or an eighth (the nearest of 1, 0.5,
-; 0.25, 0.125 is taken; 1 = as the game draws it). A target mark inside that part shrinks with it. Not while the zoom
-; window is open.
+; picture's middle) is shown at hud_cross_scale of its size (0.1..1; 1 = as the game draws it), as a layer of its
+; own. A target mark inside that part shrinks with it. Not while the zoom window is open.
 hud_cross_rect=0.39 0.415 0.61 0.585
 hud_cross_scale=0.25
 ; zoomed in: the zoom window's size against the game's picture, and the zoomed picture's share of the full view

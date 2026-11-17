@@ -206,15 +206,17 @@ static void swayOnPresent() {
             if (!ok[l] || g_swNodes[l].st.n < 150) continue;
             ripe = true;
             float v = g_swNodes[l].st.var, d = len3(tv[l][0], tv[l][1], tv[l][2]);
-            // not the mech's root (the camera turns against it with the torso), nothing outside the cockpit
-            if (g_swNodes[l].e == g_swRoot || d > 4.0f) continue;
+            // not the mech's root (the camera turns against it with the torso). The element's own origin may lie far
+            // from the seat (seen: 7.9 m, the only one that moved - a joint the cockpit hangs on), so all that are
+            // watched count (within 8 m of the camera); the nearest that moves is taken
+            if (g_swNodes[l].e == g_swRoot || d > 9.0f) continue;
             if (v > 2.5e-7f && v < 0.09f && d < bd) bd = d, best = l;
         }
         static int dumps;
         static unsigned none;
         if (ripe && best < 0 && ++none % 900 == 450 && dumps < 3) { // none fits for a while: the candidates, for the log
             ++dumps;
-            logf("sway: %d elements watched near the camera, none moves like a cockpit (0.5 mm .. 30 cm, within 4 m):", g_swNodeN);
+            logf("sway: %d elements watched near the camera, none moves like a cockpit (0.5 mm .. 30 cm):", g_swNodeN);
             for (int l = 0; l < g_swNodeN && l < 40; ++l)
                 if (ok[l])
                     logf("sway:   element %p - right %.2f up %.2f forward %.2f m, moving %.1f mm (rms)%s", g_swNodes[l].e, tv[l][0],

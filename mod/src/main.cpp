@@ -779,6 +779,12 @@ static void auditOnPresent() {
 }
 
 static volatile LONG g_workNo; // counts the game's draws (mw5.inc: how many came after our cockpit)
+static volatile LONG g_rtSwitchNo; // counts the game's changes to another first render target
+static void *g_rtLast;
+static inline void rtSwitch(UINT n, ID3D11RenderTargetView *const *rtv) {
+    void *first = n && rtv ? (void *)rtv[0] : nullptr;
+    if (first != g_rtLast) g_rtLast = first, InterlockedIncrement(&g_rtSwitchNo);
+}
 static void onWork(void *ctx, const char *kind, bool compute) {
     if (ctxOf(ctx)->foreign) return;
     CtxState *s = ctxOf(ctx);
@@ -2073,6 +2079,7 @@ static void STDMETHODCALLTYPE H_OMSetRenderTargets(ID3D11DeviceContext *c, UINT 
                                                    ID3D11RenderTargetView *const *rtv,
                                                    ID3D11DepthStencilView *dsv) {
     if (g_cap) setRTs(ctxOf(c), n, rtv, dsv);
+    rtSwitch(n, rtv);
     if (n >= 1 && n <= 8 && rtv && hudSwap(rtv[0]) != rtv[0]) { // inside the HUD pass: our layer texture
         ID3D11RenderTargetView *v[8];
         memcpy(v, rtv, n * sizeof *v);
@@ -2092,6 +2099,7 @@ static void STDMETHODCALLTYPE H_OMSetRenderTargetsAndUAVs(ID3D11DeviceContext *c
                                                           ID3D11UnorderedAccessView *const *uav,
                                                           const UINT *ic) {
     if (g_cap && n != D3D11_KEEP_RENDER_TARGETS_AND_DEPTH_STENCIL) setRTs(ctxOf(c), n, rtv, dsv);
+    if (n != D3D11_KEEP_RENDER_TARGETS_AND_DEPTH_STENCIL) rtSwitch(n, rtv);
     // which buffers stand behind the clutter's g_ctView (u75) and g_ctWind (u76): logged once each
     static int seen75, seen76;
     if (uav && un != D3D11_KEEP_UNORDERED_ACCESS_VIEWS)
@@ -2792,7 +2800,7 @@ BOOL WINAPI DllMain(HINSTANCE h, DWORD reason, LPVOID) {
         if (g_dbg) g_shlog = _wfsopen((g_dir + L"mw4vr_shaders.txt").c_str(), L"w", _SH_DENYNO);
         wchar_t exe[MAX_PATH];
         GetModuleFileNameW(nullptr, exe, MAX_PATH);
-        logf("MW4VR v11.52 (debug level %d) loaded into %s", g_dbg, narrow(exe).c_str());
+        logf("MW4VR v11.53 (debug level %d) loaded into %s", g_dbg, narrow(exe).c_str());
         if (!loadReal()) logf("ERROR: the system d3d11.dll could not be loaded");
     }
     return TRUE;
