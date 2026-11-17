@@ -25,7 +25,6 @@ enum { CAM_ANC = 5 };
 static float g_camAnc[CAM_ANC][12];           // the camera element's ancestors' local -> world matrices, this frame
 static uint8_t *g_camAncPtr[CAM_ANC];
 static int g_camAncN;
-static void swayOnCamera();
 static unsigned g_camAncFrame = ~0u;
 
 static bool camIsMain(uint8_t *cam) {
@@ -317,10 +316,6 @@ static void camPreEye(uint8_t *cam, int eyeOv) {
         g_camAncFrame = g_frame;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         g_camAncN = 0;
-    }
-    __try {
-        swayOnCamera();
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
     }
     if (memcmp(m, base, sizeof base)) memcpy(m, base, sizeof base); // our last move undone first
     bool act = g_srcCam && g_camCal && g_vrTracking && g_eyeMode && !g_menuMode;

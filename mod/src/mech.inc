@@ -243,14 +243,13 @@ static void mgTriangle(const MgVtx &a, const MgVtx &b, const MgVtx &c) {
 // before (the nearest one); the small rigid movement between the two frames (a shift d and a turn w:
 // q = p + d + w x (p - pc), least squares) is added up, and the sum leaks away in about a second and a half - so
 // it is the movement against the cockpit's average pose.
-// (sway.inc looks for the cockpit's element in the scene graph instead; for some mechs it finds none that moves.)
 enum { SWV_MAX = 1500 };
 static float g_swvCur[SWV_MAX][3], g_swvPrev[SWV_MAX][3];
 static float g_swvPairP[SWV_MAX][3], g_swvPairQ[SWV_MAX][3];
 static int g_swvCurN, g_swvPrevN, g_swvAllN; // AllN: with the vertices at the view's edges (is there a cockpit at all?)
 static float g_swvTh[3], g_swvTau[3]; // the sum: p' = p + tau + th x p
 
-// false: the game drew no cockpit in this frame (or the sway is switched off) - sway.inc's way may still find one
+// false: the game drew no cockpit in this frame
 static bool swvOnPresent() {
     int n = g_swvCurN;
     bool seated = g_swvAllN >= 90;
@@ -326,21 +325,26 @@ static bool swvOnPresent() {
                  g_swvCurN, pairsLast, matched, most * 1000);
             matched = 0, most = 0;
         }
-    } else {
+    }
+    // no cockpit of the game's (an outside view), or only every other frame (the eyes drawn in turns): the sway
+    // stays for three frames, then it is none
+    static unsigned last = ~0u;
+    if (seated) last = g_frame;
+    bool lately = last != ~0u && g_frame - last <= 3;
+    if (!lately) {
         memset(g_swvTh, 0, sizeof g_swvTh);
         memset(g_swvTau, 0, sizeof g_swvTau);
     }
     memcpy(g_swvPrev, g_swvCur, (size_t)g_swvCurN * sizeof g_swvCur[0]);
     g_swvPrevN = g_swvCurN;
     g_swvCurN = 0;
+    g_swayValid = lately && g_swayOn;
     if (!seated || !g_swayOn) return seated;
     const float *th = g_swvTh;
     float R[9] = {1, -th[2], th[1], th[2], 1, -th[0], -th[1], th[0], 1};
     swayOrtho(R);
     memcpy(g_swayR, R, sizeof R);
     memcpy(g_swayT, g_swvTau, sizeof g_swvTau);
-    g_swayValid = true;
-    g_swvFrame = g_frame;
     return true;
 }
 

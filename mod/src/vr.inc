@@ -1041,7 +1041,6 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
         float T = g_vr.hudTop, B = g_vr.hudBottom, L = g_vr.hudLeft, R = g_vr.hudRight;
         float far_ = g_vr.hudDistance > 0.1f ? g_vr.hudDistance : 200.0f;
         // the cockpit's sway for the near frame: view space (z forward, game metres) -> the runtime's (z back, metres)
-        swayOnPresent();
         XrQuaternionf swq = {0, 0, 0, 1};
         XrVector3f swt = {0, 0, 0};
         if (g_swayValid) {
