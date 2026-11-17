@@ -39,7 +39,9 @@ jobs:
         with:
           path: base
           persist-credentials: false
-      # Read only, never run: no step below starts anything from this folder.
+      # Read only, never run: the one step below starts the base branch's script, which uses Node's own modules
+      # only and reads this folder with git diff and as text. Fork pull requests never get here (the job's if).
+      # nosemgrep: yaml.github-actions.security.pull-request-target-code-checkout.pull-request-target-code-checkout
       - name: The pull request's files
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
