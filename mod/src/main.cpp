@@ -235,7 +235,6 @@ static bool isCamPos(const std::string &n) {
 static std::mutex g_shMx;
 static std::unordered_map<void *, ShaderInfo *> g_shaders;
 static std::unordered_map<void *, UINT> g_cbSize;
-static std::unordered_map<void *, UINT> g_dynSize; // small dynamic non-constant buffers
 static unsigned g_shaderCount;
 
 typedef HRESULT(WINAPI *PFN_D3DReflect)(LPCVOID, SIZE_T, REFIID, void **);
@@ -379,19 +378,6 @@ static ShaderInfo *lookupShader(void *s) {
     std::lock_guard<std::mutex> lk(g_shMx);
     auto it = g_shaders.find(s);
     return it == g_shaders.end() ? nullptr : it->second;
-}
-
-static std::unordered_map<void *, UINT> g_bufSize; // small non-constant, non-vertex/index buffers
-static UINT bufSize(void *b) {
-    std::lock_guard<std::mutex> lk(g_shMx);
-    auto it = g_bufSize.find(b);
-    return it == g_bufSize.end() ? 0 : it->second;
-}
-
-static UINT dynSize(void *b) {
-    std::lock_guard<std::mutex> lk(g_shMx);
-    auto it = g_dynSize.find(b);
-    return it == g_dynSize.end() ? 0 : it->second;
 }
 
 static UINT cbSize(void *b) {
@@ -578,53 +564,14 @@ static void dumpCamera(CtxState *s, int st) {
     }
 }
 
-static std::mutex g_cpMx;
-static std::unordered_map<void *, std::vector<UINT>> g_camPosBufs;
 static float g_right[3];
-static volatile bool g_haveRight, g_applyCamPos = true, g_scanOn = true;
-static volatile LONG g_statCamPos;
-
-static void registerCamPos(CtxState *s, int st) {
-    ShaderInfo *sh = s->st[st].sh;
-    if (!sh || sh->camPos.empty()) return;
-    for (size_t i = 0; i < sh->camPos.size(); ++i) {
-        UINT slot = sh->camPos[i].first, off = sh->camPos[i].second;
-        if (slot >= CB_SLOTS) continue;
-        void *buf = s->st[st].cb[slot];
-        if (!buf) continue;
-        off += s->st[st].cbOff[slot];
-        thread_local std::unordered_set<uint64_t> known;
-        uint64_t k = ((uint64_t)(uintptr_t)buf << 16) ^ off;
-        if (!known.insert(k).second) continue;
-        std::lock_guard<std::mutex> lk(g_cpMx);
-        auto &v = g_camPosBufs[buf];
-        bool have = false;
-        for (UINT o : v) have |= o == off;
-        if (!have) {
-            v.push_back(off);
-            logf("eye: camera position %s (cb b%u, byte %u) in buffer %p", sh->camPosNames[i].c_str(), slot, off, buf);
-        }
-    }
-}
-
-static bool camPosOffsets(void *buf, std::vector<UINT> &out) {
-    std::lock_guard<std::mutex> lk(g_cpMx);
-    auto it = g_camPosBufs.find(buf);
-    if (it == g_camPosBufs.end()) return false;
-    out = it->second;
-    return true;
-}
+static volatile bool g_haveRight;
 
 static volatile LONG g_statTlSwaps;
 static std::mutex g_hideMx;
 static std::vector<uint64_t> g_vsFrame, g_vsList; // vertex shaders drawn in "3D": this frame, last frame
 static volatile uint64_t g_hideHash;
 static volatile int g_eyeMode; // 0 off, 1 right eye, 2 left eye, 3 alternating every frame
-static thread_local unsigned t_patches; // data changes made by the eye patches on this thread
-static std::mutex g_patchedMx;
-static std::unordered_map<void *, unsigned> g_patchedAt; // buffer -> frame of its last eye patch
-static std::unordered_map<void *, int> g_lastWrite;      // buffer -> 1..5 map type, 10 update whole, 11 update box
-static void markPatched(void *buf);
 static volatile bool g_vrActive;
 static volatile bool g_vrInitRunning; // devices created now belong to the VR runtime
 static void mouseInstall();
@@ -657,144 +604,15 @@ static volatile float g_hudPx;         // HUD shift per eye in back-buffer pixel
 static volatile bool g_in3D; // inside the top-level "3D" label: the world, not HUD or menus
 static volatile bool g_in3DSeen; // a "3D" label was seen (a battle is running)
 
-struct AuditEntry {
-    unsigned draws = 0, uncovered = 0;
-    std::unordered_map<std::string, unsigned> where; // label path -> uncovered draws
-};
-static std::mutex g_auditMx;
-static std::unordered_map<uint64_t, AuditEntry> g_audit;
-static DWORD g_auditT0;
-static unsigned g_auditFrames;
-
-static void markPatched(void *buf) {
-    std::lock_guard<std::mutex> lk(g_patchedMx);
-    g_patchedAt[buf] = g_frame;
-}
-static bool recentlyPatched(void *buf) {
-    if (!buf) return false;
-    std::lock_guard<std::mutex> lk(g_patchedMx);
-    auto it = g_patchedAt.find(buf);
-    return it != g_patchedAt.end() && g_frame - it->second <= 2;
-}
-
-// a draw in "3D" with an eye active whose vertex shader reads nothing the eye patches touched
-static void auditDraw(CtxState *s) {
-    ShaderInfo *sh = s->st[ST_VS].sh;
-    if (!sh) return;
-    bool covered = sh->hash == HK_VS_TL; // the CPU path runs the replacement shader
-    std::string detail;
-    bool camCb = false;
-    if (!covered) {
-        bool all = true;
-        for (auto &cb : sh->cbs) {
-            bool clipMat = false; // a 4x4 world/object -> clip matrix (not a position or jitter)
-            for (int vi : cb.camVars) {
-                std::string l = cb.vars[vi].name;
-                for (auto &ch : l) ch = (char)tolower((unsigned char)ch);
-                if (cb.vars[vi].rows == 4 && cb.vars[vi].cols == 4 && l.find("toclip") != std::string::npos &&
-                    l.find("prev") == std::string::npos) clipMat = true;
-            }
-            if (!clipMat || cb.slot >= CB_SLOTS) continue;
-            camCb = true;
-            void *b = s->st[ST_VS].cb[cb.slot];
-            bool ok = recentlyPatched(b);
-            if (!ok) {
-                all = false;
-                char t[160];
-                int lw = -1;
-                {
-                    std::lock_guard<std::mutex> lk(g_patchedMx);
-                    auto it = g_lastWrite.find(b);
-                    if (it != g_lastWrite.end()) lw = it->second;
-                }
-                D3D11_BUFFER_DESC bd = {};
-                if (b) ((ID3D11Buffer *)b)->GetDesc(&bd);
-                snprintf(t, sizeof t, " %s(b%u): buffer %u B usage %d, bound at +%u, last write %s", cb.name.c_str(),
-                         cb.slot, bd.ByteWidth, (int)bd.Usage, s->st[ST_VS].cbOff[cb.slot],
-                         lw < 0 ? "never seen" : lw == 10 ? "update" : lw == 11 ? "update box" :
-                         lw == 4 ? "map discard" : lw == 5 ? "map no-overwrite" : "map other");
-                detail += t;
-            }
-        }
-        if (camCb) covered = all;
-        for (size_t i = 0; i < sh->srvSlots.size() && !covered && !camCb; ++i)
-            if (sh->srvSlots[i] < 64) covered = recentlyPatched(s->st[ST_VS].srvBuf[sh->srvSlots[i]]);
-    }
-    std::lock_guard<std::mutex> lk(g_auditMx);
-    AuditEntry &e = g_audit[sh->hash];
-    ++e.draws;
-    if (covered) return;
-    ++e.uncovered;
-    std::string path;
-    for (size_t i = 1; i < s->labels.size() && i < 4; ++i) {
-        if (!path.empty()) path += " > ";
-        path += s->labels[i];
-    }
-    if (!detail.empty()) path += "  |" + detail;
-    ++e.where[path];
-}
-
-static void auditOnPresent() {
-    if (!g_eyeMode || !g_dbg) {
-        g_auditT0 = 0;
-        return;
-    }
-    DWORD now = GetTickCount();
-    if (!g_auditT0) g_auditT0 = now;
-    ++g_auditFrames;
-    if (now - g_auditT0 < 10000) return;
-    // every 10 s with an eye active: the report, rewritten
-    std::vector<std::pair<uint64_t, AuditEntry>> rows;
-    {
-        std::lock_guard<std::mutex> lk(g_auditMx);
-        for (auto &kv : g_audit) rows.push_back(kv);
-        g_audit.clear();
-    }
-    std::sort(rows.begin(), rows.end(), [](auto &a, auto &b) { return a.second.uncovered > b.second.uncovered; });
-    FILE *f = _wfsopen((g_dir + L"mw4vr_audit.txt").c_str(), L"w", _SH_DENYNO);
-    if (f) {
-        fprintf(f, "MW4VR audit over %u frames: vertex shaders drawn in \"3D\" and how many of their draws read nothing the eye patches moved\n\n", g_auditFrames);
-        for (auto &r : rows) {
-            ShaderInfo *sh = nullptr;
-            {
-                std::lock_guard<std::mutex> lk(g_shMx);
-                for (auto &kv : g_shaders)
-                    if (kv.second->hash == r.first && kv.second->stage == 'V') sh = kv.second;
-            }
-            fprintf(f, "%s VS %016llx  draws %u, uncovered %u\n", r.second.uncovered ? "GAP" : "ok ",
-                    (unsigned long long)r.first, r.second.draws, r.second.uncovered);
-            if (sh) {
-                std::string cbs;
-                for (auto &cb : sh->cbs) cbs += " " + cb.name + "(b" + std::to_string(cb.slot) + ")";
-                fprintf(f, "    cbuffers:%s\n    resources:%s\n", cbs.empty() ? " -" : cbs.c_str(),
-                        sh->res.empty() ? " -" : sh->res.c_str());
-            }
-            for (auto &w : r.second.where) fprintf(f, "    %5u x  %s\n", w.second, w.first.c_str());
-        }
-        fclose(f);
-    }
-    logf("audit: mw4vr_audit.txt written (%u frames, %u vertex shaders)", g_auditFrames, (unsigned)rows.size());
-    g_auditT0 = now;
-    g_auditFrames = 0;
-}
-
 static void onWork(void *ctx, const char *kind, bool compute) {
     if (ctxOf(ctx)->foreign) return;
     CtxState *s = ctxOf(ctx);
-    extern volatile bool g_srcCamActive;
-    if (!compute && g_in3D && g_eyeMode && !g_srcCamActive) auditDraw(s);
     if (!compute && g_in3D && s->st[ST_VS].sh) {
         uint64_t h = s->st[ST_VS].sh->hash;
         std::lock_guard<std::mutex> lk(g_hideMx);
         bool have = false;
         for (uint64_t x : g_vsFrame) have |= x == h;
         if (!have) g_vsFrame.push_back(h);
-    }
-    if (compute) {
-        registerCamPos(s, ST_CS);
-    } else {
-        registerCamPos(s, ST_VS);
-        registerCamPos(s, ST_PS);
     }
     if (compute) InterlockedIncrement(&g_statDisp);
     else if (s->deferred) InterlockedIncrement(&g_statDrawsDef);
@@ -836,35 +654,18 @@ static void snapshot(void *res, const void *src, UINT dstOff, UINT bytes) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// eye offset experiment: shift the camera sideways by moving the forward (world/mesh -> clip)
-// matrices in clip space. For a camera moved by e along its own x axis, clip.x' = clip.x - P00*e
-// for every point (a constant added to the x row's translation), so one float per matrix changes.
-// Inverse matrices (lighting reconstruction) stay as they are - slightly wrong light, fine for a test.
+// the renderer's constant buffer 'View' (928 bytes) holds g_vWorldToClip at byte 480: the projection's scales and
+// near plane and the camera's axes are read from it (eyeLearnLayout), and the camera hook is calibrated with it.
+// (Until v11.58 the eye could also be moved without the camera hook, by changing every camera matrix the renderer
+// writes into its buffers - the first way this mod worked. It went with the fallback for other builds of mw4hook.)
 
-enum { EK_NONE, EK_MLR, EK_VIEW, EK_CARDS, EK_REFLECT, EK_SCAN, EK_FOG, EK_WATER, EK_CLUSTERS, EK_N };
-static const char *g_ekName[EK_N] = {"-", "Mlr", "View", "Cards", "Reflect", "scan", "Fog", "Water", "Clusters"};
-static volatile LONG g_statKindMaps[EK_N], g_statKindPatched[EK_N];
-static volatile LONG g_mlrPath[4]; // Mlr updates: map discard, map other, update whole, update box
-static float g_eyeOffsetM = 1.0f;     // metres from the centre (exaggerated by default to be visible)
-static bool g_eyeApply[EK_N] = {false, true, true, true, false, true, true, true, true};
-static volatile bool g_eyeInverse = true; // also correct the clip->world matrices
+enum { EK_NONE, EK_VIEW };
 static int g_xIdx = -1;               // float index of the clip.x translation term (12 column-major, 3 row-major)
 static float g_P00, g_P11;            // projection scales, from g_vWorldToClip
 static int g_layoutLogs;
 #include "head.inc"
 
-static int eyeKind(UINT sz) {
-    switch (sz) {
-    case 496: return EK_MLR;     // cb 'Mlr': g_mlrToClip@0, g_mlrPrevToClip@432
-    case 928: return EK_VIEW;    // cb 'View': g_vWorldToClip@480, g_vSsgiPrevClip@864
-    case 2144: return EK_CARDS;  // cb 'Cards': g_cardToClip@0
-    case 416: return EK_REFLECT; // cb 'Reflect': g_rToClip@0
-    case 272: return EK_FOG;     // cb 'Fog': g_fClipToWorld@176
-    case 2016: return EK_WATER;  // cb 'Water': g_wClipToWorld@160
-    case 336: return EK_CLUSTERS; // cb 'Clusters': g_clView@0 (3x4), g_clToWorld@48 (3x4), g_clWorldToMlr@224
-    }
-    return EK_NONE;
-}
+static int eyeKind(UINT sz) { return sz == 928 ? EK_VIEW : EK_NONE; }
 
 static float len3(float a, float b, float c) { return sqrtf(a * a + b * b + c * c); }
 
@@ -915,207 +716,8 @@ static void eyeLearnLayout(const float *m) {
 }
 
 // data holds the buffer bytes [base, base + sz) - a whole buffer (base 0) or the box of a partial update
-static void eyePatch(int kind, uint8_t *data, UINT sz, UINT base = 0) {
+static void eyeLayoutFrom(int kind, const uint8_t *data, UINT sz, UINT base = 0) {
     if (kind == EK_VIEW && base <= 480 && base + sz >= 480 + 64) eyeLearnLayout((const float *)(data + 480 - base));
-    if (!kReadyWorld() || !g_eyeApply[kind]) return;
-    // forward (world/mesh -> clip) matrices
-    static const int fwd[EK_N][2] = {{-1, -1}, {0, 432}, {480, 864}, {0, -1}, {0, -1}, {-1, -1}, {-1, -1}, {-1, -1}, {-1, -1}};
-    for (int i = 0; i < 2; ++i) {
-        int off = fwd[kind][i];
-        if (off < 0 || (UINT)off < base || off + 64 > base + sz) continue;
-        kFwd((float *)(data + off - base));
-        ++t_patches;
-    }
-    // inverse (clip -> world) matrices used to rebuild positions from depth (lighting, shadows, fog, water)
-    static const int inv[EK_N] = {-1, -1, 0, -1, -1, -1, 176, 160, -1};
-    int io = inv[kind];
-    if (g_eyeInverse && io >= 0 && (UINT)io >= base && io + 64 <= base + sz) kInv((float *)(data + io - base));
-    // the light clusters (and the effects drawn with them): V = g_clView (3x4 world -> view, rows may be
-    // scaled: V = S Vu), W = g_clToWorld (3x4, V^-1), C = g_clWorldToMlr (4x4 world -> cluster projection).
-    // The new view Vu' = Hv Vu: V' = (S Hv S^-1) V, W' = W (S Hv^-1 S^-1), C' = C W (S Hv S^-1) V
-    if (kind == EK_CLUSTERS && base == 0 && sz >= 288) {
-        float *v = (float *)data, *w = (float *)(data + 48), *c = (float *)(data + 224);
-        float V[16], W[16];
-        memcpy(V, v, 48);
-        memcpy(W, w, 48);
-        V[12] = V[13] = V[14] = W[12] = W[13] = W[14] = 0;
-        V[15] = W[15] = 1;
-        float sc[3];
-        for (int i = 0; i < 3; ++i) sc[i] = len3(V[i * 4], V[i * 4 + 1], V[i * 4 + 2]);
-        float Hs[16], His[16];
-        for (int i = 0; i < 4; ++i)
-            for (int j = 0; j < 4; ++j) {
-                float si = i < 3 ? sc[i] : 1, sj = j < 3 ? sc[j] : 1;
-                Hs[i * 4 + j] = g_Hv[i * 4 + j] * si / (j < 3 ? sj : 1);
-                His[i * 4 + j] = g_HvInv[i * 4 + j] * si / (j < 3 ? sj : 1);
-            }
-        float Vn[16], Wn[16], G[16];
-        m4mul(Hs, V, Vn);
-        m4mul(W, His, Wn);
-        m4mul(W, Vn, G);
-        float Cn[16];
-        m4mul(c, G, Cn);
-        memcpy(v, Vn, 48);
-        memcpy(w, Wn, 48);
-        memcpy(c, Cn, 64);
-        ++t_patches;
-    }
-    InterlockedIncrement(&g_statKindPatched[kind]);
-}
-
-// other buffers (e.g. the clutter's structured g_ctView) may carry a copy of the camera's
-// world->clip matrix: find row-major 4x4s with the same projection (|row0| = P00, |row1| = P11,
-// |row3| = 1) anywhere in a rewritten dynamic buffer and move them as well
-static std::mutex g_scanMx;
-static std::unordered_set<std::string> g_scanSeen;
-// is m a world/object -> clip matrix of this camera at some uniform object scale k?
-// |row0| = P00 k, |row1| = P11 k, |row3| = k, row2 (reversed infinite depth) nearly 0 - squared, no roots
-static inline bool camMat(const float *m, float &k2) {
-    float r3 = m[12] * m[12] + m[13] * m[13] + m[14] * m[14];
-    if (!(r3 > 1e-4f && r3 < 1e10f)) return false; // object scale 0.01 .. 1e5
-    float p0 = g_P00 * g_P00, p1 = g_P11 * g_P11;
-    float r0 = m[0] * m[0] + m[1] * m[1] + m[2] * m[2];
-    if (fabsf(r0 - p0 * r3) > 0.02f * p0 * r3) return false;
-    float r1 = m[4] * m[4] + m[5] * m[5] + m[6] * m[6];
-    if (fabsf(r1 - p1 * r3) > 0.02f * p1 * r3) return false;
-    float r2 = m[8] * m[8] + m[9] * m[9] + m[10] * m[10];
-    if (r2 > 1e-4f * r3) return false;
-    k2 = r3;
-    return true;
-}
-
-// per buffer: where its matrices were (first + k * stride), or that it has none (skipped a while)
-struct ScanCache {
-    UINT phase = 0, stride = 0;   // instance records: matrices at phase + k * stride
-    std::vector<UINT> offs;       // irregular: the places of the last full scan
-    unsigned fullAt = 0, skipUntil = 0;
-    bool valid = false;
-};
-static std::unordered_map<void *, ScanCache> g_scanCache;
-static volatile LONG g_statFullScans;
-
-static UINT gcdU(UINT a, UINT b) {
-    while (b) {
-        UINT t = a % b;
-        a = b;
-        b = t;
-    }
-    return a;
-}
-
-// finds the camera matrices. Regular buffers (instance records) are checked on their grid every
-// time, so a changing number of instances is followed; irregular ones at the places found by the
-// last full scan; a full scan when nothing is found there, or every 120 frames.
-static void eyeFind(const uint8_t *data, UINT sz, void *key, std::vector<UINT> &out, float &k2first) {
-    out.clear();
-    if (g_xIdx != 3 || g_P00 <= 0 || g_P11 <= 0 || sz < 64) return;
-    const float *f = (const float *)data;
-    std::lock_guard<std::mutex> lk(g_scanMx);
-    ScanCache &e = g_scanCache[key];
-    if (e.skipUntil > g_frame) return;
-    float k2 = 0;
-    auto hit = [&](UINT o) {
-        if (o + 64 <= sz && camMat(f + o / 4, k2)) {
-            if (out.empty()) k2first = k2;
-            out.push_back(o);
-        }
-    };
-    if (e.valid && g_frame - e.fullAt < 120) {
-        if (e.stride)
-            for (UINT o = e.phase; o + 64 <= sz; o += e.stride) hit(o);
-        else
-            for (UINT o : e.offs) hit(o);
-        if (!out.empty()) return;
-    }
-    InterlockedIncrement(&g_statFullScans);
-    UINT n = sz / 4;
-    for (UINT i = 0; i + 16 <= n; ++i)
-        if (camMat(f + i, k2)) {
-            if (out.empty()) k2first = k2;
-            out.push_back(i * 4);
-            i += 15;
-        }
-    e.fullAt = g_frame;
-    e.valid = !out.empty();
-    e.offs = out;
-    e.stride = 0;
-    if (out.size() >= 3) {
-        UINT g = 0;
-        for (size_t j = 1; j < out.size(); ++j) g = gcdU(g, out[j] - out[0]);
-        if (g >= 64) {
-            e.stride = g;
-            e.phase = out[0] % g;
-        }
-    }
-    if (out.empty()) e.skipUntil = g_frame + 120;
-}
-
-// data is patched in place (mayPatch) where camera matrices are found; returns how many
-static int eyeScan(uint8_t *data, UINT sz, void *key, const char *how = "?", bool mayPatch = true) {
-    thread_local std::vector<UINT> offs;
-    float k2 = 0;
-    eyeFind(data, sz, key, offs, k2);
-    InterlockedIncrement(&g_statKindMaps[EK_SCAN]);
-    if (offs.empty()) return 0;
-    if (kReadyWorld() && mayPatch && g_eyeApply[EK_SCAN]) {
-        for (UINT o : offs) kFwd((float *)(data + o));
-        ++t_patches;
-        InterlockedIncrement(&g_statKindPatched[EK_SCAN]);
-    }
-    char key2[64];
-    snprintf(key2, sizeof key2, "%u/%s", sz, how);
-    bool fresh;
-    {
-        std::lock_guard<std::mutex> lk(g_scanMx);
-        fresh = g_scanSeen.insert(key2).second;
-    }
-    if (fresh)
-        logf("eye: %u camera matrices in a %u-byte buffer (%s), first at byte %u (object scale %.3f)",
-             (unsigned)offs.size(), sz, how, offs[0], sqrtf(k2));
-    return (int)offs.size();
-}
-
-// data holds the buffer bytes [base, base + sz)
-static void camPosPatch(uint8_t *data, UINT sz, UINT base, const std::vector<UINT> &offs) {
-    if (!kReadyWorld() || !g_applyCamPos || !g_haveRight) return;
-    const float *t = g_headT;
-    for (UINT o : offs) {
-        if (o < base || o + 12 > base + sz) continue;
-        float *f = (float *)(data + o - base);
-        ++t_patches;
-        for (int i = 0; i < 3; ++i) f[i] += t[0] * g_right[i] + t[1] * g_up[i] + t[2] * g_fwd[i];
-    }
-    InterlockedIncrement(&g_statCamPos);
-}
-
-// constant buffers without a known layout (e.g. 'Sun' with g_worldToShadow holding the camera's
-// matrix for effects): every 16-byte position checked for a camera matrix, moved where found
-static volatile LONG g_statCbScanHits;
-static std::unordered_set<std::string> g_cbScanSeen;
-static int eyeScanCB(const uint8_t *data, UINT sz, UINT base, float *patchOut) {
-    if (g_xIdx != 3 || g_P00 <= 0 || g_P11 <= 0 || sz < 64) return 0;
-    bool on = kReadyWorld();
-    int found = 0;
-    float k2;
-    for (UINT o = (16 - base % 16) % 16; o + 64 <= sz; o += 16) {
-        if (!camMat((const float *)(data + o), k2)) continue;
-        ++found;
-        if (patchOut && on) {
-            kFwd((float *)((uint8_t *)patchOut + o));
-            ++t_patches;
-        }
-        char key[48];
-        snprintf(key, sizeof key, "%u@%u", sz, base + o);
-        bool fresh;
-        {
-            std::lock_guard<std::mutex> lk(g_scanMx);
-            fresh = g_cbScanSeen.insert(key).second;
-        }
-        if (fresh) logf("eye: camera matrix in a %u-byte constant buffer at byte %u (object scale %.3f)", sz, base + o, sqrtf(k2));
-        o += 48;
-    }
-    if (found) InterlockedIncrement(&g_statCbScanHits);
-    return found;
 }
 
 static void eyeReadIni() {
@@ -1131,21 +733,6 @@ static void eyeReadIni() {
             fclose(f);
         }
     }
-    wchar_t b[64];
-    GetPrivateProfileStringW(L"eye", L"offset_m", L"1.0", b, 64, p.c_str());
-    float off = (float)_wtof(b);
-    g_eyeApply[EK_MLR] = GetPrivateProfileIntW(L"eye", L"apply_mlr", 1, p.c_str()) != 0;
-    g_eyeApply[EK_VIEW] = GetPrivateProfileIntW(L"eye", L"apply_view", 1, p.c_str()) != 0;
-    g_eyeApply[EK_CARDS] = GetPrivateProfileIntW(L"eye", L"apply_cards", 1, p.c_str()) != 0;
-    g_eyeApply[EK_REFLECT] = GetPrivateProfileIntW(L"eye", L"apply_reflect", 0, p.c_str()) != 0;
-    g_eyeApply[EK_SCAN] = GetPrivateProfileIntW(L"eye", L"apply_scan", 1, p.c_str()) != 0;
-    g_applyCamPos = GetPrivateProfileIntW(L"eye", L"apply_campos", 1, p.c_str()) != 0;
-    g_eyeInverse = GetPrivateProfileIntW(L"eye", L"apply_inverse", 1, p.c_str()) != 0;
-    g_scanOn = GetPrivateProfileIntW(L"eye", L"scan", 1, p.c_str()) != 0;
-    if (g_srcCamActive) g_scanOn = false; // the camera itself is moved: nothing to look for in the buffers
-    if (g_vrActive) return; // in VR the eye offset comes from [vr] eye_offset_m
-    if (off != g_eyeOffsetM) logf("eye: offset %.3f m", off);
-    g_eyeOffsetM = off;
 }
 
 static void hideOnPresent() {
@@ -1176,17 +763,9 @@ static void hideOnPresent() {
 
 static void eyeOnPresent() {
     hideOnPresent();
-    auditOnPresent();
     static bool first = true;
     if (first) {
         first = false;
-        eyeReadIni();
-        if (!g_vrActive) g_eyeMode = GetPrivateProfileIntW(L"eye", L"mode", 0, (g_dir + L"mw4vr.ini").c_str()) & 3;
-        logf("eye: experiment ready, mode %d, offset %.3f m (Ctrl+F7 cycles the mode)", g_eyeMode, g_eyeOffsetM);
-    }
-    static DWORD lastIni;
-    if (GetTickCount() - lastIni >= 2000) { // every 2 s, whatever the frame rate
-        lastIni = GetTickCount();
         eyeReadIni();
     }
     static bool keyWas;
@@ -1194,8 +773,7 @@ static void eyeOnPresent() {
     if (key && !keyWas) {
         g_eyeMode = (g_eyeMode + 1) & 3;
         static const char *names[] = {"off", "right eye", "left eye", "alternating"};
-        logf("eye: mode %d (%s), offset %.3f m, x term at float %d, P00 %.4f", g_eyeMode, names[g_eyeMode],
-             g_eyeOffsetM, g_xIdx, g_P00);
+        logf("eye: mode %d (%s), P00 %.4f", g_eyeMode, names[g_eyeMode], g_P00);
         Beep(g_eyeMode ? 600 + 200 * g_eyeMode : 400, 80);
     }
     keyWas = key;
@@ -1392,24 +970,8 @@ static void onPresent(IDXGISwapChain *sc) {
              "%.0f labels, %.1f FinishCommandList, %.1f ExecuteCommandList | shaders %u, contexts %u",
              g_statFrames / s, g_statDrawsImm / f, g_statDrawsDef / f, g_statDisp / f, g_statMaps / f,
              g_statLabels / f, g_statFinish / f, g_statExec / f, g_shaderCount, (unsigned)g_ctx.size());
-        if (all) logf("   eye mode %d: per frame maps / patched - Mlr %.0f/%.0f, View %.1f/%.1f, Cards %.1f/%.1f, Reflect %.1f/%.1f",
-             g_eyeMode, g_statKindMaps[EK_MLR] / f, g_statKindPatched[EK_MLR] / f, g_statKindMaps[EK_VIEW] / f,
-             g_statKindPatched[EK_VIEW] / f, g_statKindMaps[EK_CARDS] / f, g_statKindPatched[EK_CARDS] / f,
-             g_statKindMaps[EK_REFLECT] / f, g_statKindPatched[EK_REFLECT] / f);
-        if (all) logf("   Mlr updates per frame: map discard %.0f, map other %.0f, update whole %.0f, update box %.0f",
-             g_mlrPath[0] / f, g_mlrPath[1] / f, g_mlrPath[2] / f, g_mlrPath[3] / f);
-        g_mlrPath[0] = g_mlrPath[1] = g_mlrPath[2] = g_mlrPath[3] = 0;
-        if (all) logf("   camera-position updates moved per frame %.1f (buffers known %u), full scans %.2f per frame",
-             g_statCamPos / f, (unsigned)g_camPosBufs.size(), g_statFullScans / f);
-        g_statFullScans = 0;
-        if (all) logf("   CPU-path draws with the replacement shader per frame %.1f, constant buffers with a camera matrix %.1f",
-             g_statTlSwaps / f, g_statCbScanHits / f);
-        g_statCbScanHits = 0;
+        if (all) logf("   CPU-path draws with the replacement shader per frame %.1f", g_statTlSwaps / f);
         g_statTlSwaps = 0;
-        g_statCamPos = 0;
-        if (all) logf("   scanned dynamic buffers per frame %.1f, with a camera matrix %.1f", g_statKindMaps[EK_SCAN] / f,
-             g_statKindPatched[EK_SCAN] / f);
-        for (int k = 0; k < EK_N; ++k) g_statKindMaps[k] = g_statKindPatched[k] = 0;
         g_statT0 = now;
         g_statFrames = 0;
         g_statDrawsImm = g_statDrawsDef = g_statDisp = g_statMaps = g_statLabels = g_statExec = g_statFinish = 0;
@@ -1441,15 +1003,6 @@ static HRESULT STDMETHODCALLTYPE H_CreateBuffer(ID3D11Device *d, const D3D11_BUF
     if (SUCCEEDED(hr) && out && *out && desc && (desc->BindFlags & D3D11_BIND_CONSTANT_BUFFER)) {
         std::lock_guard<std::mutex> lk(g_shMx);
         g_cbSize[*out] = desc->ByteWidth;
-    } else if (SUCCEEDED(hr) && out && *out && desc && desc->Usage == D3D11_USAGE_DYNAMIC &&
-               desc->ByteWidth <= (4u << 20) && !(desc->BindFlags & (D3D11_BIND_VERTEX_BUFFER | D3D11_BIND_INDEX_BUFFER))) {
-        std::lock_guard<std::mutex> lk(g_shMx);
-        g_dynSize[*out] = desc->ByteWidth;
-    }
-    if (SUCCEEDED(hr) && out && *out && desc && !(desc->BindFlags & D3D11_BIND_CONSTANT_BUFFER) &&
-        desc->ByteWidth <= (4u << 20) && !(desc->BindFlags & (D3D11_BIND_VERTEX_BUFFER | D3D11_BIND_INDEX_BUFFER))) {
-        std::lock_guard<std::mutex> lk(g_shMx);
-        g_bufSize[*out] = desc->ByteWidth;
     }
     return hr;
 }
@@ -1597,34 +1150,13 @@ static void STDMETHODCALLTYPE H_DispatchIndirect(ID3D11DeviceContext *c, ID3D11B
 
 typedef HRESULT(STDMETHODCALLTYPE *PFN_Map)(ID3D11DeviceContext *, ID3D11Resource *, UINT, D3D11_MAP, UINT,
                                             D3D11_MAPPED_SUBRESOURCE *);
-static bool isCamPosBuf(void *b) {
-    std::lock_guard<std::mutex> lk(g_cpMx);
-    return g_camPosBufs.count(b) != 0;
-}
 static HRESULT STDMETHODCALLTYPE H_Map(ID3D11DeviceContext *c, ID3D11Resource *r, UINT sub, D3D11_MAP t,
                                        UINT fl, D3D11_MAPPED_SUBRESOURCE *m) {
     HRESULT hr = ORIG(PFN_Map, c, VT_Ctx_Map)(c, r, sub, t, fl, m);
     InterlockedIncrement(&g_statMaps);
-    if (SUCCEEDED(hr) && t != D3D11_MAP_READ) {
-        std::lock_guard<std::mutex> lk(g_patchedMx);
-        g_lastWrite[r] = (int)t;
-    }
     if (SUCCEEDED(hr) && m && t != D3D11_MAP_READ && !ctxOf(c)->foreign) {
         UINT sz = cbSize(r);
-        int kind = eyeKind(sz);
-        if (kind) InterlockedIncrement(&g_statKindMaps[kind]);
-        if (!sz && t == D3D11_MAP_WRITE_DISCARD && dynSize(r)) {
-            CtxState *s = ctxOf(c);
-            s->mapped[r] = m->pData;
-            s->mapType[r] = -1; // a dynamic buffer to scan for camera matrices
-        } else if (!sz && t == D3D11_MAP_WRITE_NO_OVERWRITE && dynSize(r)) {
-            static volatile LONG probes;
-            if (InterlockedIncrement(&probes) <= 400) { // detection only: which part was written is unknown
-                CtxState *s = ctxOf(c);
-                s->mapped[r] = m->pData;
-                s->mapType[r] = -2;
-            }
-        } else if (sz && (g_cap || kind || isCamPosBuf(r) || (g_scanOn && sz <= 4096) || sz == 48)) {
+        if (sz && (g_cap || eyeKind(sz) || sz == 48)) { // what is looked at when it is unmapped
             CtxState *s = ctxOf(c);
             s->mapped[r] = m->pData;
             s->mapType[r] = (int)t;
@@ -1635,33 +1167,15 @@ static HRESULT STDMETHODCALLTYPE H_Map(ID3D11DeviceContext *c, ID3D11Resource *r
 typedef void(STDMETHODCALLTYPE *PFN_Unmap)(ID3D11DeviceContext *, ID3D11Resource *, UINT);
 static void STDMETHODCALLTYPE H_Unmap(ID3D11DeviceContext *c, ID3D11Resource *r, UINT sub) {
     CtxState *s = ctxOf(c);
-    unsigned patchesBefore = t_patches;
     auto it = s->mapped.find(r);
     if (it != s->mapped.end()) {
         int t = s->mapType[r];
-        if (t == -1 || t == -2) {
-            if (t == -1 && g_scanOn) eyeScan((uint8_t *)it->second, dynSize(r), r, "map discard");
-            if (t_patches != patchesBefore) markPatched(r);
-            else if (t == -2 && g_scanOn) eyeScan((uint8_t *)it->second, dynSize(r), r, "map no-overwrite, NOT patched", false);
-            s->mapped.erase(it);
-            s->mapType.erase(r);
-            ORIG(PFN_Unmap, c, VT_Ctx_Unmap)(c, r, sub);
-            return;
-        }
         UINT sz = cbSize(r);
         int kind = eyeKind(sz);
         // only whole-buffer rewrites: a NO_OVERWRITE map may only fill a part we know nothing about
-        if (kind == EK_MLR) InterlockedIncrement(&g_mlrPath[t == D3D11_MAP_WRITE_DISCARD ? 0 : 1]);
-        if (kind && t == D3D11_MAP_WRITE_DISCARD) eyePatch(kind, (uint8_t *)it->second, sz);
-        if (!kind && t == D3D11_MAP_WRITE_DISCARD && g_scanOn && sz <= 4096)
-            eyeScanCB((const uint8_t *)it->second, sz, 0, (float *)it->second);
-        if (t == D3D11_MAP_WRITE_DISCARD) {
-            thread_local std::vector<UINT> cpo;
-            if (camPosOffsets(r, cpo)) camPosPatch((uint8_t *)it->second, sz, 0, cpo);
-        }
+        if (kind && t == D3D11_MAP_WRITE_DISCARD) eyeLayoutFrom(kind, (const uint8_t *)it->second, sz);
         if (sz == 48 && t == D3D11_MAP_WRITE_DISCARD) frameCbSeen(r, it->second);
         if (g_cap) snapshot(r, it->second, 0, 0);
-        if (t_patches != patchesBefore) markPatched(r);
         s->mapped.erase(it);
         s->mapType.erase(r);
     }
@@ -1698,70 +1212,14 @@ static const char *g_slName[SL_N] = {"Draw", "DrawIndexed", "DrawInstanced", "Dr
                                      "DrawInstancedIndirect", "DrawIndexedInstancedIndirect", "Dispatch",
                                      "DispatchIndirect", "UpdateSubresource", "UpdateSubresource1"};
 
-static void updateCommon2(ID3D11Resource *r, const D3D11_BOX *box, const void *&src);
+// what an UpdateSubresource writes (the data itself is passed on as it is)
 static void updateCommon(ID3D11Resource *r, const D3D11_BOX *box, const void *&src) {
-    {
-        std::lock_guard<std::mutex> lk(g_patchedMx);
-        g_lastWrite[r] = box ? 11 : 10;
-    }
-    unsigned before = t_patches;
-    updateCommon2(r, box, src);
-    if (t_patches != before) markPatched(r);
-}
-static void updateCommon2(ID3D11Resource *r, const D3D11_BOX *box, const void *&src) {
     if (!src) return;
-    thread_local std::vector<uint8_t> tmp;
     UINT csz = cbSize(r);
     if (csz == 48 && !box) frameCbSeen(r, src);
-    if (csz) {
-        int kind = eyeKind(csz);
-        if (kind && !box) {
-            InterlockedIncrement(&g_statKindMaps[kind]);
-            if (kind == EK_MLR) InterlockedIncrement(&g_mlrPath[2]);
-            tmp.assign((const uint8_t *)src, (const uint8_t *)src + csz);
-            eyePatch(kind, tmp.data(), csz);
-            src = tmp.data();
-        } else if (kind && box && box->right > box->left && box->right <= csz) {
-            InterlockedIncrement(&g_statKindMaps[kind]);
-            if (kind == EK_MLR) InterlockedIncrement(&g_mlrPath[3]);
-            UINT n = box->right - box->left;
-            tmp.assign((const uint8_t *)src, (const uint8_t *)src + n);
-            eyePatch(kind, tmp.data(), n, box->left);
-            src = tmp.data();
-        }
-        if (!kind && g_scanOn && csz <= 4096) {
-            UINT base = box ? box->left : 0, n = box ? box->right - box->left : csz;
-            if (n && base + n <= csz && eyeScanCB((const uint8_t *)src, n, base, nullptr) && g_eyeMode) {
-                tmp.assign((const uint8_t *)src, (const uint8_t *)src + n);
-                eyeScanCB(tmp.data(), n, base, (float *)tmp.data());
-                src = tmp.data();
-            }
-        }
-        thread_local std::vector<UINT> cpo;
-        if (g_eyeMode && camPosOffsets(r, cpo)) {
-            UINT base = box ? box->left : 0, n = box ? box->right - box->left : csz;
-            if (n && base + n <= csz) {
-                if (src != tmp.data()) {
-                    tmp.assign((const uint8_t *)src, (const uint8_t *)src + n);
-                    src = tmp.data();
-                }
-                camPosPatch(tmp.data(), n, base, cpo);
-            }
-        }
-        return;
-    }
-    UINT bsz = bufSize(r);
-    if (!bsz) return;
-    if (box || !g_scanOn) return; // partial updates: not scanned (each box would be a full scan)
-    UINT n = bsz;
-    // look first (read only), copy only when there is something to move
-    thread_local std::vector<UINT> offs;
-    float k2 = 0;
-    eyeFind((const uint8_t *)src, n, r, offs, k2);
-    if (offs.empty() || !g_eyeMode) return;
-    tmp.assign((const uint8_t *)src, (const uint8_t *)src + n);
-    if (eyeScan(tmp.data(), n, r, "update whole"))
-        src = tmp.data();
+    int kind = eyeKind(csz);
+    if (kind && !box) eyeLayoutFrom(kind, (const uint8_t *)src, csz);
+    else if (kind && box && box->right > box->left && box->right <= csz) eyeLayoutFrom(kind, (const uint8_t *)src, box->right - box->left, box->left);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -2792,7 +2250,7 @@ BOOL WINAPI DllMain(HINSTANCE h, DWORD reason, LPVOID) {
         if (g_dbg) g_shlog = _wfsopen((g_dir + L"mw4vr_shaders.txt").c_str(), L"w", _SH_DENYNO);
         wchar_t exe[MAX_PATH];
         GetModuleFileNameW(nullptr, exe, MAX_PATH);
-        logf("MW4VR v11.58 (debug level %d) loaded into %s", g_dbg, narrow(exe).c_str());
+        logf("MW4VR v11.59 (debug level %d) loaded into %s", g_dbg, narrow(exe).c_str());
         if (!loadReal()) logf("ERROR: the system d3d11.dll could not be loaded");
     }
     return TRUE;

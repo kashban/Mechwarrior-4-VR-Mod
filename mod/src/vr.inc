@@ -731,7 +731,6 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
         if (g_vr.ok) {
             g_vrActive = true;
             g_eyeMode = 3;                // alternate the eyes from now on
-            g_eyeOffsetM = g_vr.eyeOffset;
         } else {
             logf("vr: not started");
         }
@@ -744,7 +743,6 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
         lastIni = GetTickCount();
         lastMech = g_mechCur;
         vrReadIni();
-        g_eyeOffsetM = g_vr.eyeOffset;
     }
     {   // Ctrl+Home: the game camera becomes the head's current pose
         static bool was;
