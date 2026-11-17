@@ -238,34 +238,56 @@ static void mgTriangle(const MgVtx &a, const MgVtx &b, const MgVtx &c) {
 
 // ---- the sway, from the game's cockpit itself --------------------------------------------------
 // The game moves its cockpit against the camera with the mech's steps. Its vertices are read in every frame (the
-// left eye's pass), in the camera's space as the game left it (the head's pose taken out). When a frame has the
-// same draws with the same numbers of vertices as the one before, each vertex is the one it was: the small rigid
-// movement between the two frames (a shift d and a turn w: q = p + d + w x (p - pc), least squares) is added up,
-// and the sum leaks away in about a second and a half - so it is the movement against the cockpit's average pose.
+// left eye's pass), in the camera's space as the game left it (the head's pose taken out) - without those the
+// game's clipping makes at the view's edges, which move with the head. Each vertex is found again in the frame
+// before (the nearest one); the small rigid movement between the two frames (a shift d and a turn w:
+// q = p + d + w x (p - pc), least squares) is added up, and the sum leaks away in about a second and a half - so
+// it is the movement against the cockpit's average pose.
 // (sway.inc looks for the cockpit's element in the scene graph instead; for some mechs it finds none that moves.)
-enum { SWV_MAX = 3000, SWV_DRAWS = 64 };
+enum { SWV_MAX = 1500 };
 static float g_swvCur[SWV_MAX][3], g_swvPrev[SWV_MAX][3];
-static int g_swvCurN, g_swvPrevN, g_swvSig[SWV_DRAWS], g_swvSigN, g_swvPrevSig[SWV_DRAWS], g_swvPrevSigN;
+static float g_swvPairP[SWV_MAX][3], g_swvPairQ[SWV_MAX][3];
+static int g_swvCurN, g_swvPrevN, g_swvAllN; // AllN: with the vertices at the view's edges (is there a cockpit at all?)
 static float g_swvTh[3], g_swvTau[3]; // the sum: p' = p + tau + th x p
 
 // false: the game drew no cockpit in this frame (or the sway is switched off) - sway.inc's way may still find one
 static bool swvOnPresent() {
     int n = g_swvCurN;
-    bool seated = n >= 90;
+    bool seated = g_swvAllN >= 90;
+    g_swvAllN = 0;
     static unsigned frames, matched;
     static float most;
+    static int pairsLast;
     if (seated) {
         ++frames;
-        bool same = n == g_swvPrevN && g_swvSigN == g_swvPrevSigN && !memcmp(g_swvSig, g_swvPrevSig, g_swvSigN * sizeof(int));
-        if (same) {
+        // Which vertex is which? Not by their order: the game clips the cockpit's triangles at the view's edges, so
+        // with every turn of the head others are there, in another order (compared by order, the cockpit moved
+        // with the head). Each vertex is the nearest one of the frame before, if within 3 cm - a step moves the
+        // cockpit some millimetres a frame, and its vertices lie further apart.
+        static float (*const P)[3] = g_swvPairP, (*const Q)[3] = g_swvPairQ;
+        int m = 0;
+        for (int i = 0; i < n; ++i) {
+            const float *q = g_swvCur[i];
+            float best = 9e-4f;
+            int bj = -1;
+            for (int j = 0; j < g_swvPrevN; ++j) {
+                const float *p = g_swvPrev[j];
+                float dx = q[0] - p[0], dy = q[1] - p[1], dz = q[2] - p[2], d2 = dx * dx + dy * dy + dz * dz;
+                if (d2 < best) best = d2, bj = j;
+            }
+            if (bj >= 0) memcpy(P[m], g_swvPrev[bj], sizeof P[0]), memcpy(Q[m], q, sizeof Q[0]), ++m;
+        }
+        pairsLast = m;
+        if (m >= 60) {
+            n = m;
             double pc[3] = {0, 0, 0}, dm[3] = {0, 0, 0};
             for (int i = 0; i < n; ++i)
-                for (int a = 0; a < 3; ++a) pc[a] += g_swvPrev[i][a], dm[a] += g_swvCur[i][a] - g_swvPrev[i][a];
+                for (int a = 0; a < 3; ++a) pc[a] += P[i][a], dm[a] += Q[i][a] - P[i][a];
             for (int a = 0; a < 3; ++a) pc[a] /= n, dm[a] /= n;
             double A[9] = {0}, b[3] = {0, 0, 0};
             for (int i = 0; i < n; ++i) {
                 double r[3], d[3];
-                for (int a = 0; a < 3; ++a) r[a] = g_swvPrev[i][a] - pc[a], d[a] = g_swvCur[i][a] - g_swvPrev[i][a] - dm[a];
+                for (int a = 0; a < 3; ++a) r[a] = P[i][a] - pc[a], d[a] = Q[i][a] - P[i][a] - dm[a];
                 double rr = r[0] * r[0] + r[1] * r[1] + r[2] * r[2];
                 for (int a = 0; a < 3; ++a)
                     for (int c = 0; c < 3; ++c) A[a * 3 + c] += (a == c ? rr : 0) - r[a] * r[c];
@@ -279,7 +301,7 @@ static bool swvOnPresent() {
                 w[2] = (A[0] * (A[4] * b[2] - b[1] * A[7]) - A[1] * (A[3] * b[2] - b[1] * A[6]) + b[0] * (A[3] * A[7] - A[4] * A[6])) / det;
             }
             double dl = sqrt(dm[0] * dm[0] + dm[1] * dm[1] + dm[2] * dm[2]), wl = sqrt(w[0] * w[0] + w[1] * w[1] + w[2] * w[2]);
-            if (dl < 0.3 && wl < 0.1) { // a step, not a cut to another view
+            if (dl < 0.03 && wl < 0.03) { // a step, not a cut to another view
                 // about the origin: d + w x (p - pc) = (d - w x pc) + w x p
                 g_swvTh[0] += (float)w[0], g_swvTh[1] += (float)w[1], g_swvTh[2] += (float)w[2];
                 g_swvTau[0] += (float)(dm[0] - (w[1] * pc[2] - w[2] * pc[1]));
@@ -289,22 +311,28 @@ static bool swvOnPresent() {
             }
         }
         for (int a = 0; a < 3; ++a) g_swvTh[a] *= 0.99f, g_swvTau[a] *= 0.99f;
+        { // never more than a cockpit sways: 15 cm, 6 degrees
+            float tl = len3(g_swvTau[0], g_swvTau[1], g_swvTau[2]), al = len3(g_swvTh[0], g_swvTh[1], g_swvTh[2]);
+            if (tl > 0.15f)
+                for (int a = 0; a < 3; ++a) g_swvTau[a] *= 0.15f / tl;
+            if (al > 0.1f)
+                for (int a = 0; a < 3; ++a) g_swvTh[a] *= 0.1f / al;
+        }
         most = fmaxf(most, len3(g_swvTau[0], g_swvTau[1], g_swvTau[2]));
         static int told;
-        if (frames % 900 == 0 && told < 4) {
+        if (frames % 900 == 0 && told < 6) {
             ++told;
-            logf("sway: from the game's cockpit - %d vertices in %d draws; %u of the last 900 frames compared with the one before; largest shift %.1f mm",
-                 n, g_swvSigN, matched, most * 1000);
+            logf("sway: from the game's cockpit - %d vertices inside the view, %d found again in the frame before; %u of the last 900 frames compared; largest shift %.1f mm",
+                 g_swvCurN, pairsLast, matched, most * 1000);
             matched = 0, most = 0;
         }
     } else {
         memset(g_swvTh, 0, sizeof g_swvTh);
         memset(g_swvTau, 0, sizeof g_swvTau);
     }
-    memcpy(g_swvPrev, g_swvCur, (size_t)n * sizeof g_swvCur[0]);
-    memcpy(g_swvPrevSig, g_swvSig, sizeof g_swvSig);
-    g_swvPrevN = n, g_swvPrevSigN = g_swvSigN;
-    g_swvCurN = 0, g_swvSigN = 0;
+    memcpy(g_swvPrev, g_swvCur, (size_t)g_swvCurN * sizeof g_swvCur[0]);
+    g_swvPrevN = g_swvCurN;
+    g_swvCurN = 0;
     if (!seated || !g_swayOn) return seated;
     const float *th = g_swvTh;
     float R[9] = {1, -th[2], th[1], th[2], 1, -th[0], -th[1], th[0], 1};
@@ -324,6 +352,7 @@ static void mgRead(const uint8_t *vbase, UINT vbytes, UINT stride, UINT voff, IN
         for (UINT t = 0; t + 2 < count; t += 3) {
             MgVtx v[3];
             float pos[3][3];
+            bool edge[3] = {};
             bool ok = true;
             for (int k = 0; k < 3 && ok; ++k) {
                 long long vi;
@@ -360,6 +389,7 @@ static void mgRead(const uint8_t *vbase, UINT vbytes, UINT stride, UINT voff, IN
                     ok = false;
                     break;
                 }
+                edge[k] = fabsf(nx) > 0.97f || fabsf(ny) > 0.97f || w < g_near * 1.05f;
                 float e[3] = {nx * w / g_P00, ny * w / g_P11, w}; // the eye's view space
                 float x = R[0] * e[0] + R[1] * e[1] + R[2] * e[2] + T[0];
                 float y = R[3] * e[0] + R[4] * e[1] + R[5] * e[2] + T[1];
@@ -372,10 +402,9 @@ static void mgRead(const uint8_t *vbase, UINT vbytes, UINT stride, UINT voff, IN
                 if (!(v[k].d > 0.02f)) ok = false;
             }
             if (!ok) continue;
-            if (g_swvCurN + 3 <= SWV_MAX) { // for the sway (above)
-                memcpy(g_swvCur[g_swvCurN], pos, sizeof pos);
-                g_swvCurN += 3;
-            }
+            g_swvAllN += 3;
+            for (int k = 0; k < 3; ++k) // for the sway (above): not what the clipping made at the view's edges and its near plane
+                if (!edge[k] && g_swvCurN < SWV_MAX) memcpy(g_swvCur[g_swvCurN++], pos[k], sizeof pos[k]);
             if (!g_mechMeasure) continue;
             mgTriangle(v[0], v[1], v[2]);
             ++g_mgTris;
@@ -418,7 +447,6 @@ static void mechDraw(ID3D11DeviceContext *c, bool indexed, UINT count, UINT star
             mgRead((const uint8_t *)mv.pData, vd.ByteWidth, stride, voff, baseV, indexed ? (const uint8_t *)mi.pData : nullptr,
                    id.ByteWidth, ioff, ifmt == DXGI_FORMAT_R32_UINT, start, count, vp.Width, vp.Height);
             ++g_mgDraws;
-            if (g_swvSigN < SWV_DRAWS) g_swvSig[g_swvSigN++] = g_swvCurN;
         }
         if (indexed && miOk && mi.pData) ORIG(MechPFN_Unmap, c, VT_Ctx_Unmap)(c, ib, 0);
         if (mvOk) ORIG(MechPFN_Unmap, c, VT_Ctx_Unmap)(c, vb, 0);
