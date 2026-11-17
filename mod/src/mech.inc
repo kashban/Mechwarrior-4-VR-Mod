@@ -236,6 +236,86 @@ static void mgTriangle(const MgVtx &a, const MgVtx &b, const MgVtx &c) {
     }
 }
 
+// ---- the sway, from the game's cockpit itself --------------------------------------------------
+// The game moves its cockpit against the camera with the mech's steps. Its vertices are read in every frame (the
+// left eye's pass), in the camera's space as the game left it (the head's pose taken out). When a frame has the
+// same draws with the same numbers of vertices as the one before, each vertex is the one it was: the small rigid
+// movement between the two frames (a shift d and a turn w: q = p + d + w x (p - pc), least squares) is added up,
+// and the sum leaks away in about a second and a half - so it is the movement against the cockpit's average pose.
+// (sway.inc looks for the cockpit's element in the scene graph instead; for some mechs it finds none that moves.)
+enum { SWV_MAX = 3000, SWV_DRAWS = 64 };
+static float g_swvCur[SWV_MAX][3], g_swvPrev[SWV_MAX][3];
+static int g_swvCurN, g_swvPrevN, g_swvSig[SWV_DRAWS], g_swvSigN, g_swvPrevSig[SWV_DRAWS], g_swvPrevSigN;
+static float g_swvTh[3], g_swvTau[3]; // the sum: p' = p + tau + th x p
+
+// false: the game drew no cockpit in this frame (or the sway is switched off) - sway.inc's way may still find one
+static bool swvOnPresent() {
+    int n = g_swvCurN;
+    bool seated = n >= 90;
+    static unsigned frames, matched;
+    static float most;
+    if (seated) {
+        ++frames;
+        bool same = n == g_swvPrevN && g_swvSigN == g_swvPrevSigN && !memcmp(g_swvSig, g_swvPrevSig, g_swvSigN * sizeof(int));
+        if (same) {
+            double pc[3] = {0, 0, 0}, dm[3] = {0, 0, 0};
+            for (int i = 0; i < n; ++i)
+                for (int a = 0; a < 3; ++a) pc[a] += g_swvPrev[i][a], dm[a] += g_swvCur[i][a] - g_swvPrev[i][a];
+            for (int a = 0; a < 3; ++a) pc[a] /= n, dm[a] /= n;
+            double A[9] = {0}, b[3] = {0, 0, 0};
+            for (int i = 0; i < n; ++i) {
+                double r[3], d[3];
+                for (int a = 0; a < 3; ++a) r[a] = g_swvPrev[i][a] - pc[a], d[a] = g_swvCur[i][a] - g_swvPrev[i][a] - dm[a];
+                double rr = r[0] * r[0] + r[1] * r[1] + r[2] * r[2];
+                for (int a = 0; a < 3; ++a)
+                    for (int c = 0; c < 3; ++c) A[a * 3 + c] += (a == c ? rr : 0) - r[a] * r[c];
+                b[0] += r[1] * d[2] - r[2] * d[1], b[1] += r[2] * d[0] - r[0] * d[2], b[2] += r[0] * d[1] - r[1] * d[0];
+            }
+            double det = A[0] * (A[4] * A[8] - A[5] * A[7]) - A[1] * (A[3] * A[8] - A[5] * A[6]) + A[2] * (A[3] * A[7] - A[4] * A[6]);
+            double w[3] = {0, 0, 0};
+            if (fabs(det) > 1e-9) {
+                w[0] = (b[0] * (A[4] * A[8] - A[5] * A[7]) - A[1] * (b[1] * A[8] - A[5] * b[2]) + A[2] * (b[1] * A[7] - A[4] * b[2])) / det;
+                w[1] = (A[0] * (b[1] * A[8] - A[5] * b[2]) - b[0] * (A[3] * A[8] - A[5] * A[6]) + A[2] * (A[3] * b[2] - b[1] * A[6])) / det;
+                w[2] = (A[0] * (A[4] * b[2] - b[1] * A[7]) - A[1] * (A[3] * b[2] - b[1] * A[6]) + b[0] * (A[3] * A[7] - A[4] * A[6])) / det;
+            }
+            double dl = sqrt(dm[0] * dm[0] + dm[1] * dm[1] + dm[2] * dm[2]), wl = sqrt(w[0] * w[0] + w[1] * w[1] + w[2] * w[2]);
+            if (dl < 0.3 && wl < 0.1) { // a step, not a cut to another view
+                // about the origin: d + w x (p - pc) = (d - w x pc) + w x p
+                g_swvTh[0] += (float)w[0], g_swvTh[1] += (float)w[1], g_swvTh[2] += (float)w[2];
+                g_swvTau[0] += (float)(dm[0] - (w[1] * pc[2] - w[2] * pc[1]));
+                g_swvTau[1] += (float)(dm[1] - (w[2] * pc[0] - w[0] * pc[2]));
+                g_swvTau[2] += (float)(dm[2] - (w[0] * pc[1] - w[1] * pc[0]));
+                ++matched;
+            }
+        }
+        for (int a = 0; a < 3; ++a) g_swvTh[a] *= 0.99f, g_swvTau[a] *= 0.99f;
+        most = fmaxf(most, len3(g_swvTau[0], g_swvTau[1], g_swvTau[2]));
+        static int told;
+        if (frames % 900 == 0 && told < 4) {
+            ++told;
+            logf("sway: from the game's cockpit - %d vertices in %d draws; %u of the last 900 frames compared with the one before; largest shift %.1f mm",
+                 n, g_swvSigN, matched, most * 1000);
+            matched = 0, most = 0;
+        }
+    } else {
+        memset(g_swvTh, 0, sizeof g_swvTh);
+        memset(g_swvTau, 0, sizeof g_swvTau);
+    }
+    memcpy(g_swvPrev, g_swvCur, (size_t)n * sizeof g_swvCur[0]);
+    memcpy(g_swvPrevSig, g_swvSig, sizeof g_swvSig);
+    g_swvPrevN = n, g_swvPrevSigN = g_swvSigN;
+    g_swvCurN = 0, g_swvSigN = 0;
+    if (!seated || !g_swayOn) return seated;
+    const float *th = g_swvTh;
+    float R[9] = {1, -th[2], th[1], th[2], 1, -th[0], -th[1], th[0], 1};
+    swayOrtho(R);
+    memcpy(g_swayR, R, sizeof R);
+    memcpy(g_swayT, g_swvTau, sizeof g_swvTau);
+    g_swayValid = true;
+    g_swvFrame = g_frame;
+    return true;
+}
+
 // the vertices are read from the buffers' own memory; nothing here has a destructor (SEH)
 static void mgRead(const uint8_t *vbase, UINT vbytes, UINT stride, UINT voff, INT baseV, const uint8_t *ibase, UINT ibytes,
                    UINT ioff, bool idx32, UINT start, UINT count, float W, float H) {
@@ -243,6 +323,7 @@ static void mgRead(const uint8_t *vbase, UINT vbytes, UINT stride, UINT voff, IN
     __try {
         for (UINT t = 0; t + 2 < count; t += 3) {
             MgVtx v[3];
+            float pos[3][3];
             bool ok = true;
             for (int k = 0; k < 3 && ok; ++k) {
                 long long vi;
@@ -283,6 +364,7 @@ static void mgRead(const uint8_t *vbase, UINT vbytes, UINT stride, UINT voff, IN
                 float x = R[0] * e[0] + R[1] * e[1] + R[2] * e[2] + T[0];
                 float y = R[3] * e[0] + R[4] * e[1] + R[5] * e[2] + T[1];
                 float z = R[6] * e[0] + R[7] * e[1] + R[8] * e[2] + T[2];
+                pos[k][0] = x, pos[k][1] = y, pos[k][2] = z;
                 float h = sqrtf(x * x + z * z);
                 v[k].az = atan2f(x, z) * 57.29578f;
                 v[k].el = atan2f(y, h) * 57.29578f;
@@ -290,6 +372,11 @@ static void mgRead(const uint8_t *vbase, UINT vbytes, UINT stride, UINT voff, IN
                 if (!(v[k].d > 0.02f)) ok = false;
             }
             if (!ok) continue;
+            if (g_swvCurN + 3 <= SWV_MAX) { // for the sway (above)
+                memcpy(g_swvCur[g_swvCurN], pos, sizeof pos);
+                g_swvCurN += 3;
+            }
+            if (!g_mechMeasure) continue;
             mgTriangle(v[0], v[1], v[2]);
             ++g_mgTris;
         }
@@ -331,6 +418,7 @@ static void mechDraw(ID3D11DeviceContext *c, bool indexed, UINT count, UINT star
             mgRead((const uint8_t *)mv.pData, vd.ByteWidth, stride, voff, baseV, indexed ? (const uint8_t *)mi.pData : nullptr,
                    id.ByteWidth, ioff, ifmt == DXGI_FORMAT_R32_UINT, start, count, vp.Width, vp.Height);
             ++g_mgDraws;
+            if (g_swvSigN < SWV_DRAWS) g_swvSig[g_swvSigN++] = g_swvCurN;
         }
         if (indexed && miOk && mi.pData) ORIG(MechPFN_Unmap, c, VT_Ctx_Unmap)(c, ib, 0);
         if (mvOk) ORIG(MechPFN_Unmap, c, VT_Ctx_Unmap)(c, vb, 0);
@@ -339,7 +427,8 @@ static void mechDraw(ID3D11DeviceContext *c, bool indexed, UINT count, UINT star
     if (ib) ib->Release();
 }
 
-static inline bool mechMeasuring() { return g_mechMeasure && g_camInMain && g_camPassEye == 0; }
+// (in every frame: the sway is measured from the cockpit's vertices, and they tell whether the camera sits in the mech)
+static inline bool mechMeasuring() { return g_camInMain && g_camPassEye == 0; }
 
 // ---- once per frame (from vrOnPresent) -------------------------------------------------------
 
@@ -424,6 +513,7 @@ static void mechIdentify() {
 static void mechOnPresent(bool inBattle, bool zoomed) {
     bool measured = g_mechMeasure;
     g_mechMeasure = false;
+    bool cockpitNow = swvOnPresent();
     if (!g_mechOn) {
         g_mechCur = -1;
         return;
@@ -458,9 +548,9 @@ static void mechOnPresent(bool inBattle, bool zoomed) {
             }
         }
     }
-    if (measured && g_mgTris >= 30 && !g_mechSeated) {
+    if (((measured && g_mgTris >= 30) || (cockpitNow && inBattle)) && !g_mechSeated) {
         g_mechSeated = true;
-        logf("mech: frame %u - the game draws its cockpit (%d triangles): the camera sits in the mech", g_frame, g_mgTris);
+        logf("mech: frame %u - the game draws its cockpit: the camera sits in the mech (%u frames into the battle)", g_frame, g_frame - g_mechBattleFrame);
     }
     if (inBattle && !g_mechSeated && !g_mechSearching && g_frame - g_mechBattleFrame > 2700) { // never seen for half a minute: not held back for ever
         g_mechSeated = true;

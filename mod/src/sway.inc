@@ -30,6 +30,7 @@ static uint8_t *g_swRoot;                      // the root the graph was searche
 // the sway (view space: x right, y up, z forward; game metres)
 static float g_swayR[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1}, g_swayT[3];
 static volatile bool g_swayValid;
+static unsigned g_swvFrame = ~0u;             // the frame the sway was measured from the cockpit's vertices (mech.inc)
 
 // readable memory, without exceptions: a small cache of committed regions
 static bool swReadable(const void *p, size_t len) {
@@ -156,6 +157,7 @@ static bool swayPose(const float *S, float *Rv, float *tv) {
 
 // once per frame (at Present)
 static void swayOnPresent() {
+    if (g_swvFrame == g_frame) return; // measured from the game's cockpit itself in this frame (mech.inc)
     g_swayValid = false;
     if (!g_swayOn || !g_srcCamActive || g_camLastFrame != g_frame || g_swReadFrame != g_frame) {
         static unsigned misses;

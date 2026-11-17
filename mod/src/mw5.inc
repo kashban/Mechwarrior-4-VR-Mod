@@ -176,9 +176,10 @@ float4 ps(VSOut i) : SV_Target {
 }
 )HLSL";
 
-// Not while the mech is not known yet or the game draws no cockpit (a mission's intro, seen from outside): the
-// cockpit chosen for all mechs showed then, for some seconds, before the mech's own came.
-static inline bool mw5Waiting() { return g_mechOn && g_doubleDraw && (g_mechSearching || !g_mechSeated); }
+// Not while the game draws no cockpit (a mission's intro, seen from outside). Which cockpit: by the mech's name as
+// the game tells it, from the battle's first frame (mw5ForMech) - not only once the mech's profile is recognised
+// by its cockpit's shape, which takes seconds and showed the cockpit chosen for all mechs until then.
+static inline bool mw5Waiting() { return g_mechOn && g_doubleDraw && !g_mechSeated; }
 static inline bool mw5Active() { return g_mw5On && g_mw5State == 1 && !mw5Waiting(); }
 
 // Without a cockpit of our own ([vr] hud_parts=1): the same parts of the HUD as panes before the pilot, in a row
@@ -867,6 +868,34 @@ static std::vector<std::wstring> mw5Files() {
 
 // the cockpit of the mech one sits in: what mw4vr_mechs.ini remembers for it, else [vr] mw5_cockpit
 static void mw5ForMech() {
+    if (g_mechSearching) { // the profile is not known yet, the mech's name is: its cockpit at once
+        static unsigned battle = ~0u;
+        static wchar_t early[32];
+        if (battle != g_mechBattleFrame) battle = g_mechBattleFrame, early[0] = 0;
+        char mech[32];
+        wchar_t model[32], name[64] = L"", list[256] = L"";
+        if (!early[0] && gmPlayerMech(mech, 32)) {
+            swprintf(model, 32, L"%hs", mech);
+            wcscpy(early, model);
+            GetPrivateProfileStringW(L"mechs", model, L"", list, 256, (g_dir + L"mw4vr_cockpit_map.ini").c_str());
+            for (wchar_t *p = list; *p && !name[0];) {
+                wchar_t *e = wcschr(p, L',');
+                if (e) *e = 0;
+                while (*p == L' ') ++p;
+                size_t n = wcslen(p);
+                while (n && p[n - 1] == L' ') p[--n] = 0;
+                if (n && n < 64 && GetFileAttributesW((g_dir + L"mw4vr_cockpits\\" + p + L".mwc").c_str()) != INVALID_FILE_ATTRIBUTES) wcscpy(name, p);
+                if (!e) break;
+                p = e + 1;
+            }
+            if (!name[0]) GetPrivateProfileStringW(L"vr", L"mw5_cockpit", L"", name, 64, (g_dir + L"mw4vr.ini").c_str());
+            if (name[0] && _wcsicmp(name, g_mw5Name)) {
+                logf("mw5: cockpit '%ls' for the mech '%ls' by its name, before its profile is known", name, model);
+                mw5Switch(name);
+            }
+        }
+    }
+    if (g_mw5State == 0 && g_mw5Name[0] && mw5Waiting()) mw5Load(); // ready when the camera sits down
     if (g_mechCur == g_mw5Mech) return;
     g_mw5Mech = g_mechCur;
     if (g_mechCur < 0) return; // between battles: what is loaded stays
