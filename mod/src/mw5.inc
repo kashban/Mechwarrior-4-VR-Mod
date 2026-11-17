@@ -585,7 +585,7 @@ static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw) {
     static bool again[2];
     bool redo = false;
     if (done[e] == g_frame) {
-        if (again[e] || g_workNo - at[e] <= 60) return;
+        if (again[e] || g_workNo - at[e] <= 150) return; // (some 60 come after it in every frame of some scenes)
         redo = true;
     }
     if (!redo && seen[e] != g_frame) {
@@ -714,10 +714,18 @@ static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw) {
     const float *R = g_vrR[e], *T = g_vrT[e], *raw = g_vrRaw[e];
     float S = g_vr.cockpitScale * g_mw5Scale;
     float cb[60] = {};
+    // The cockpit sways with the mech's steps, as the game's own does (sway.inc: the game's cockpit against the
+    // camera, in the camera's space): c' = D c + d. Without a sway D is the identity.
+    float D[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1}, d[3] = {0, 0, 0};
+    if (g_swayValid && g_swayOn) {
+        memcpy(D, g_swayR, sizeof D);
+        for (int i = 0; i < 3; ++i) d[i] = g_swayT[i] * g_swayGain;
+    }
     float o[3];
-    for (int i = 0; i < 3; ++i) o[i] = -S * g_mw5Eye[i] - T[i] - raw[i] * g_cockpitDelta;
+    for (int i = 0; i < 3; ++i)
+        o[i] = -S * (D[i * 3] * g_mw5Eye[0] + D[i * 3 + 1] * g_mw5Eye[1] + D[i * 3 + 2] * g_mw5Eye[2]) + d[i] - T[i] - raw[i] * g_cockpitDelta;
     for (int i = 0; i < 3; ++i) {
-        for (int j = 0; j < 3; ++j) cb[i * 4 + j] = R[j * 3 + i] * S;
+        for (int j = 0; j < 3; ++j) cb[i * 4 + j] = (R[0 * 3 + i] * D[0 * 3 + j] + R[1 * 3 + i] * D[1 * 3 + j] + R[2 * 3 + i] * D[2 * 3 + j]) * S;
         cb[i * 4 + 3] = R[0 * 3 + i] * o[0] + R[1 * 3 + i] * o[1] + R[2 * 3 + i] * o[2];
     }
     cb[15] = 1;

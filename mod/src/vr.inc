@@ -644,6 +644,63 @@ static void fadeProbe(ID3D11DeviceContext *ctx, ID3D11Texture2D *hud) {
     }
 }
 
+// The cross-hair smaller: its part of the HUD picture is made smaller inside the layer's image, about its own
+// middle. (As a layer of its own it cost four of the 16 layers the runtime shows, and fell away with a full HUD.)
+// The part is copied into a small texture with mip levels, the levels are made (each halves it), the part in the
+// image is emptied and the level wanted is copied into its middle. So the size is a half, a quarter or an eighth.
+// Not while a small camera's window (the zoom window) lies in that part.
+static void vrCrossSmaller(ID3D11DeviceContext *ctx, ID3D11Texture2D *dst, ID3D11Texture2D *src, UINT dstW, UINT dstH) {
+    int level = g_vr.crossScale > 0.7f ? 0 : g_vr.crossScale > 0.35f ? 1 : g_vr.crossScale > 0.18f ? 2 : 3;
+    const float *cr = g_vr.cross;
+    if (!level || !g_hudW || !g_hudH || !(cr[2] > cr[0] && cr[3] > cr[1])) return;
+    UINT x0 = (UINT)(cr[0] * g_hudW), y0 = (UINT)(cr[1] * g_hudH), x1 = (UINT)(cr[2] * g_hudW), y1 = (UINT)(cr[3] * g_hudH);
+    if (x1 > dstW || y1 > dstH || x1 < x0 + 16 || y1 < y0 + 16) return;
+    if (g_hudCamFrame == g_frame)
+        for (int i = 0; i < g_hudCamN; ++i) {
+            const HudCamRect &r = g_hudCams[i];
+            if ((UINT)r.x < x1 && (UINT)(r.x + r.w) > x0 && (UINT)r.y < y1 && (UINT)(r.y + r.h) > y0) return;
+        }
+    static ID3D11Texture2D *mips, *empty;
+    static ID3D11ShaderResourceView *srv;
+    static UINT w, h;
+    static DXGI_FORMAT fmt;
+    static bool failed;
+    D3D11_TEXTURE2D_DESC sd;
+    src->GetDesc(&sd);
+    if (sd.SampleDesc.Count != 1) return;
+    if (!mips || w != x1 - x0 || h != y1 - y0 || fmt != sd.Format) {
+        if (failed && w == x1 - x0 && h == y1 - y0 && fmt == sd.Format) return;
+        if (srv) srv->Release();
+        if (mips) mips->Release();
+        if (empty) empty->Release();
+        srv = nullptr, mips = nullptr, empty = nullptr;
+        w = x1 - x0, h = y1 - y0, fmt = sd.Format;
+        D3D11_TEXTURE2D_DESC d = {};
+        d.Width = w, d.Height = h, d.MipLevels = 4, d.ArraySize = 1, d.Format = fmt, d.SampleDesc.Count = 1;
+        d.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE, d.MiscFlags = D3D11_RESOURCE_MISC_GENERATE_MIPS;
+        HRESULT hr = g_dev->CreateTexture2D(&d, nullptr, &mips);
+        if (SUCCEEDED(hr)) hr = g_dev->CreateShaderResourceView(mips, nullptr, &srv);
+        if (SUCCEEDED(hr)) {
+            std::vector<uint8_t> zero((size_t)w * h * 4);
+            D3D11_SUBRESOURCE_DATA init = {zero.data(), w * 4, 0};
+            d.MipLevels = 1, d.BindFlags = D3D11_BIND_SHADER_RESOURCE, d.MiscFlags = 0;
+            hr = g_dev->CreateTexture2D(&d, &init, &empty);
+        }
+        failed = FAILED(hr);
+        if (failed) {
+            logf("hud: the cross-hair stays at full size - no texture for the smaller one (%ux%u, format %d, 0x%08lX)", w, h, (int)fmt, (unsigned long)hr);
+            return;
+        }
+        logf("hud: the cross-hair at 1/%d of its size, inside the HUD's image (its part %ux%u, format %d)", 1 << level, w, h, (int)fmt);
+    }
+    D3D11_BOX part = {x0, y0, 0, x1, y1, 1};
+    ctx->CopySubresourceRegion(mips, 0, 0, 0, 0, src, 0, &part);
+    ctx->GenerateMips(srv);
+    ctx->CopySubresourceRegion(dst, 0, x0, y0, 0, empty, 0, nullptr);
+    UINT lw = max(1u, w >> level), lh = max(1u, h >> level);
+    ctx->CopySubresourceRegion(dst, 0, x0 + (w - lw) / 2, y0 + (h - lh) / 2, 0, mips, (UINT)level, nullptr);
+}
+
 static void vrOnPresent(IDXGISwapChain *swap, int eye) {
     if (!g_vr.tried) {
         g_vr.tried = true;
@@ -866,6 +923,7 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
             g_vr.WaitSwapchainImage(g_vr.hudSc, &wi);
             D3D11_BOX hb = {0, 0, 0, min(g_hudTexW, hudWideW(g_vr.w)), min(g_hudH, g_vr.h), 1};
             ctx->CopySubresourceRegion(g_vr.hudImg[idx].texture, 0, 0, 0, 0, g_hudTex, 0, &hb);
+            vrCrossSmaller(ctx, g_vr.hudImg[idx].texture, g_hudTex, hb.right, hb.bottom);
             noteDraw(ctx, g_vr.hudImg[idx].texture, min(g_hudW, g_vr.w), hb.bottom); // a note of ours (note.inc)
             helpDraw(ctx, g_vr.hudImg[idx].texture, min(g_hudW, g_vr.w), hb.bottom, g_vr.hudLeft, g_vr.hudRight, g_vr.hudTop, g_vr.hudBottom);
             XrSwapchainImageReleaseInfo ri = {XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
@@ -1018,23 +1076,10 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
         }
         memcpy(hd.twist, g_vr.twist, sizeof hd.twist);
         hd.twistDv = g_vr.twistDv;
-        if (g_vr.crossScale < 0.995f) memcpy(hd.cross, g_vr.cross, sizeof hd.cross);
         static McRects hq_;
         mcHudRects(hd, hq_, (int)g_vr.maxLayers - 1);
         float (*rc)[5] = hq_.rc;
         int nr = hq_.n;
-        if (g_vr.crossScale < 0.995f) { // is the cross-hair shown smaller? (not with the zoom window, not with too many parts)
-            int smallNow = 0;
-            for (int i = 0; i < nr; ++i) smallNow |= rc[i][4] == MC_FAR_SMALL;
-            static int was = -1, told;
-            if (smallNow != was && told < 12) {
-                ++told;
-                logf(smallNow ? "hud: frame %u: the cross-hair at %.2f of its size (%d parts of the HUD)"
-                              : "hud: frame %u: the cross-hair at full size, not %.2f (%d parts of the HUD without it; the zoom window open, or no layer left)",
-                     g_frame, g_vr.crossScale, nr);
-            }
-            was = smallNow;
-        }
         // a battle's first pictures (the answer comes a frame late, and the first frame can last long): no HUD yet
         if (g_fadeStage && (g_fadeKnownFrame == ~0u || g_frame - g_fadeKnownFrame > 4)) nr = 0;
         else if (g_fadeA > 0) { // the game's fade sheet: over the whole view, the HUD not
@@ -1108,8 +1153,8 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
             XrVector3f wpos = qrot(g_vr.ref.orientation, local);
             q.pose.orientation = qo;
             q.pose.position = {g_vr.ref.position.x + wpos.x, g_vr.ref.position.y + wpos.y, g_vr.ref.position.z + wpos.z};
-            // the zoom window smaller, about its centre; and the cross-hair
-            float ws = rc[i][4] == 3 ? g_vr.zoomWinScale : rc[i][4] == MC_FAR_SMALL ? g_vr.crossScale : 1.0f;
+            // the zoom window smaller, about its centre
+            float ws = rc[i][4] == 3 ? g_vr.zoomWinScale : 1.0f;
             q.size = {W * (u1 - u0) * ws, H * (v1 - v0) * ws};
             if (rc[i][4] == 5) { // straight ahead of the mech, many times the view
                 XrVector3f c = qrot(g_vr.ref.orientation, XrVector3f{0, 0, -D});

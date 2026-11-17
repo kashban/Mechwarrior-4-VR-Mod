@@ -157,7 +157,16 @@ static bool swayPose(const float *S, float *Rv, float *tv) {
 // once per frame (at Present)
 static void swayOnPresent() {
     g_swayValid = false;
-    if (!g_swayOn || !g_srcCamActive || g_camLastFrame != g_frame || g_swReadFrame != g_frame) return;
+    if (!g_swayOn || !g_srcCamActive || g_camLastFrame != g_frame || g_swReadFrame != g_frame) {
+        static unsigned misses;
+        static int told;
+        if (g_swayOn && g_srcCamActive && ++misses % 600 == 300 && told < 3) {
+            ++told;
+            logf("sway: not measured - the camera's matrix is %u frames old, its elements were read %u frames ago (%d ancestors, %d elements watched)",
+                 g_frame - g_camLastFrame, g_frame - g_swReadFrame, g_camAncN, g_swNodeN);
+        }
+        return;
+    }
     static float Rv[SW_NODES][9], tv[SW_NODES][3];
     static bool ok[SW_NODES];
     int follow = -1;
@@ -202,11 +211,13 @@ static void swayOnPresent() {
             if (v > 2.5e-7f && v < 0.09f && d < bd) bd = d, best = l;
         }
         static int dumps;
-        if (ripe && dumps < 5) { // the candidates, for the log
+        static unsigned none;
+        if (ripe && best < 0 && ++none % 900 == 450 && dumps < 3) { // none fits for a while: the candidates, for the log
             ++dumps;
+            logf("sway: %d elements watched near the camera, none moves like a cockpit (0.5 mm .. 30 cm, within 4 m):", g_swNodeN);
             for (int l = 0; l < g_swNodeN && l < 40; ++l)
                 if (ok[l])
-                    if (g_dbg) logf("sway:   element %p - right %.2f up %.2f forward %.2f m, moving %.1f mm (rms)%s", g_swNodes[l].e, tv[l][0],
+                    logf("sway:   element %p - right %.2f up %.2f forward %.2f m, moving %.1f mm (rms)%s", g_swNodes[l].e, tv[l][0],
                          tv[l][1], tv[l][2], sqrtf(g_swNodes[l].st.var) * 1000, l == best ? "  <- followed" : "");
         }
         if (best >= 0 && g_swNodes[best].e != g_swFollow) {
@@ -216,7 +227,17 @@ static void swayOnPresent() {
         }
         follow = best;
     }
-    if (follow < 0) return;
+    if (follow < 0) {
+        static unsigned waits;
+        static int told;
+        if (++waits % 900 == 600 && told < 3) {
+            ++told;
+            int ripeN = 0;
+            for (int l = 0; l < g_swNodeN; ++l) ripeN += ok[l] && g_swNodes[l].st.n >= 150;
+            logf("sway: no element followed yet - %d watched, %d of them long enough", g_swNodeN, ripeN);
+        }
+        return;
+    }
     const SwStat &s = g_swNodes[follow].st;
     float Ra[9], T[9];
     for (int i = 0; i < 3; ++i)

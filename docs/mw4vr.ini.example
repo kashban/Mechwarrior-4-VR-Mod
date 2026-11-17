@@ -62,7 +62,8 @@ hud_panel_distance_m=1.5
 hud_panel_scale=0.6
 hud_panel_x_m=0
 hud_panel_y_m=0
-; 1 = the near HUD sways with the cockpit; hud_sway_gain: how much (1 = as the cockpit)
+; 1 = the near HUD and a MechWarrior 5 cockpit sway with the mech's steps, as the game's own cockpit does;
+; hud_sway_gain: how much (1 = as the game's cockpit)
 hud_sway=1
 hud_sway_gain=1.0
 ; the torso mark (below the cross-hair) is cut out of the HUD picture (u0 v0 u1 v1) and shown higher by
@@ -70,8 +71,9 @@ hud_sway_gain=1.0
 hud_twist_rect=0.42 0.585 0.58 0.665
 hud_twist_shift=-0.045
 ; the cross-hair with its range, pitch scale and weapon groups: that part of the HUD picture (u0 v0 u1 v1, about the
-; picture's middle) is shown at hud_cross_scale of its size (0.1..1; 1 = as the game draws it). A target mark inside
-; that part shrinks with it. Not while the zoom window is open.
+; picture's middle) is shown at hud_cross_scale of its size: a half, a quarter or an eighth (the nearest of 1, 0.5,
+; 0.25, 0.125 is taken; 1 = as the game draws it). A target mark inside that part shrinks with it. Not while the zoom
+; window is open.
 hud_cross_rect=0.39 0.415 0.61 0.585
 hud_cross_scale=0.25
 ; zoomed in: the zoom window's size against the game's picture, and the zoomed picture's share of the full view
