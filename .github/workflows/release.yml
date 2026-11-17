@@ -1,0 +1,73 @@
+name: Release
+
+# A tag v<version> makes the release: the tag must be the version the mod logs, the mod builds, every test passes,
+# the package is put together with the trees and goes up as a pre-release with the tag's commit message as its
+# notes. Nothing is released by hand any more, so nothing untested or unbuilt gets a release.
+# Making it the public version (and sending it to Nexus Mods) is the Publish workflow, started by hand.
+on:
+  push:
+    tags: ['v[0-9]*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+
+jobs:
+  release:
+    name: Build, test, package, pre-release
+    runs-on: windows-2025
+    timeout-minutes: 40
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.ref_name }}
+      TREES: build-data-trees-1 # a release of this repository holding trees.zip: build_trees.py's output (Poly Haven, CC0)
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: The tag is the version the mod logs
+        shell: pwsh
+        run: |
+          $m = [regex]::Match((Get-Content mod/src/main.cpp -Raw), 'MW4VR v([0-9.]+) \(debug')
+          if (-not $m.Success) { throw 'no version found in mod/src/main.cpp' }
+          if ("v$($m.Groups[1].Value)" -ne $env:TAG) { throw "the tag is $env:TAG, but the mod calls itself v$($m.Groups[1].Value)" }
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.10'
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - name: Install the converter's libraries
+        run: python -m pip install -r requirements.txt
+      - name: Visual Studio's x86 compiler
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
+        with:
+          arch: x86
+      - name: The shader tests have a compiler here
+        run: python -c "import sys; sys.path.insert(0, 'tests'); import test_shaders; sys.exit(0 if test_shaders.FXC else 'no fxc.exe on the runner')"
+      - name: The trees
+        shell: pwsh
+        run: |
+          gh release download $env:TREES --repo $env:GITHUB_REPOSITORY --pattern trees.zip --dir $env:RUNNER_TEMP
+          Expand-Archive (Join-Path $env:RUNNER_TEMP 'trees.zip') (Join-Path $env:RUNNER_TEMP 'trees')
+          if (-not (Test-Path (Join-Path $env:RUNNER_TEMP 'trees/clutter_trees.txt'))) { throw 'trees.zip holds no clutter_trees.txt' }
+      - name: Build, all tests, package
+        shell: pwsh
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File tools\package.ps1 -Trees (Join-Path $env:RUNNER_TEMP 'trees')
+          if ($LASTEXITCODE -ne 0) {
+            Get-Content mod\build\package_build.txt, mod\build\package_tests.txt -ErrorAction SilentlyContinue | Select-Object -Last 60
+            exit 1
+          }
+      - name: Pre-release with the commit's message as notes
+        shell: pwsh
+        run: |
+          $zip = "release/MW4VR-$env:TAG.zip"
+          if (-not (Test-Path $zip)) { throw "$zip was not made" }
+          $notes = Join-Path $env:RUNNER_TEMP 'notes.md'
+          $body = (git log -1 --format=%b $env:GITHUB_SHA | Where-Object { $_ -notmatch '^Co-Authored-By:' }) -join "`n"
+          $subject = git log -1 --format=%s $env:GITHUB_SHA
+          "$subject`n`n$($body.Trim())`n`nSHA-256 of the package: ``$((Get-FileHash $zip -Algorithm SHA256).Hash.ToLower())``" | Set-Content $notes -Encoding utf8
+          gh release view $env:TAG --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) { gh release upload $env:TAG $zip --clobber --repo $env:GITHUB_REPOSITORY }
+          else { gh release create $env:TAG $zip --prerelease --title "MW4VR $env:TAG" --notes-file $notes --repo $env:GITHUB_REPOSITORY }
+          if ($LASTEXITCODE -ne 0) { exit 1 }

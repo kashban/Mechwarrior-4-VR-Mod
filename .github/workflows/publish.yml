@@ -1,0 +1,75 @@
+name: Publish
+
+# Started by hand, for a version tested in the headset: its pre-release becomes the latest release, and its
+# package goes to Nexus Mods as a new version of the mod's file (the mod page and its first file are made by
+# hand; then set the repository variables NEXUS_FILE_ID and NEXUS_MOD_ID and the secret NEXUSMODS_API_KEY).
+# ModDB has no way in for a program: the run's summary says what to do there by hand.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: The version's tag, as v11.46
+        required: true
+        type: string
+      nexus:
+        description: Also send it to Nexus Mods
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish
+
+jobs:
+  publish:
+    name: Latest release, Nexus Mods
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ inputs.version }}
+    steps:
+      - name: The version's package and notes
+        id: get
+        run: |
+          case "$TAG" in v[0-9]*) ;; *) echo "not a version tag: $TAG"; exit 1 ;; esac
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "MW4VR-$TAG.zip"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body > notes.md
+          want=$(sed -n 's/.*SHA-256 of the package: `\([0-9a-f]\{64\}\)`.*/\1/p' notes.md)
+          if [ -n "$want" ]; then echo "$want  MW4VR-$TAG.zip" | sha256sum -c -; fi
+          # the changes alone, as plain text, for the other sites
+          grep -v 'SHA-256 of the package' notes.md | sed '1{/^$/d}' > changes.txt
+          { echo 'changes<<END_OF_CHANGES'; cat changes.txt; echo 'END_OF_CHANGES'; } >> "$GITHUB_OUTPUT"
+          echo "number=${TAG#v}" >> "$GITHUB_OUTPUT"
+      - name: The pre-release becomes the latest release
+        run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --prerelease=false --latest
+      - name: Nexus Mods - a new version of the mod's file
+        if: ${{ inputs.nexus && vars.NEXUS_FILE_ID != '' }}
+        uses: Nexus-Mods/upload-action@98532f7670c27cbecc78fae03fa3e278147827e2 # v1.0.0-beta.11
+        with:
+          api_key: ${{ secrets.NEXUSMODS_API_KEY }}
+          file_id: ${{ vars.NEXUS_FILE_ID }}
+          mod_id: ${{ vars.NEXUS_MOD_ID }}
+          filename: MW4VR-${{ inputs.version }}.zip
+          version: ${{ steps.get.outputs.number }}
+          display_name: MW4VR ${{ inputs.version }}
+          changelog: ${{ steps.get.outputs.changes }}
+          archive_existing_version: true
+          update_mod_version: true
+      - name: What is left to do by hand
+        env:
+          NEXUS_WANTED: ${{ inputs.nexus }}
+          NEXUS_FILE: ${{ vars.NEXUS_FILE_ID }}
+        run: |
+          {
+            echo "## MW4VR $TAG is the latest release"
+            if [ "$NEXUS_WANTED" = true ] && [ -n "$NEXUS_FILE" ]; then echo "- Nexus Mods: sent as a new version of file $NEXUS_FILE."
+            else echo "- Nexus Mods: **not sent** (not wanted, or NEXUS_FILE_ID is not set)."; fi
+            echo "- ModDB: **by hand** - Add file on the mod's page: MW4VR-$TAG.zip from this release, the text below as its description."
+            echo
+            echo '```'
+            cat changes.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
