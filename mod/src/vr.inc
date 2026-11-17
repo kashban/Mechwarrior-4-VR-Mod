@@ -81,9 +81,7 @@ struct VrState {
     // functions
     PFN_xrCreateInstance CreateInstance;
     PFN_xrGetSystem GetSystem;
-    PFN_xrGetSystemProperties GetSystemProperties;
     PFN_xrDestroySwapchain DestroySwapchain;
-    uint32_t maxLayers = 16; // what every runtime shows at least
     PFN_xrCreateSession CreateSession;
     PFN_xrCreateReferenceSpace CreateReferenceSpace;
     PFN_xrEnumerateSwapchainFormats EnumerateSwapchainFormats;
@@ -103,6 +101,8 @@ struct VrState {
     PFN_xrGetD3D11GraphicsRequirementsKHR GetD3D11GraphicsRequirementsKHR;
 };
 static VrState g_vr;
+
+enum : uint32_t { VR_LAYERS = 16 }; // XR_MIN_COMPOSITION_LAYERS_SUPPORTED
 
 static bool vrCheck(XrResult r, const char *what) {
     if (XR_SUCCEEDED(r)) return true;
@@ -346,12 +346,6 @@ static bool vrInit(IDXGISwapChain *swap) {
     if (!vrCheck(g_vr.GetSystem(g_vr.instance, &sgi, &g_vr.system), "xrGetSystem (is the headset connected?)"))
         return false;
     vrGet(g_vr.DestroySwapchain, "xrDestroySwapchain");
-    { // how many layers the runtime shows: the HUD's parts are layers, and the smaller cross-hair costs four
-        XrSystemProperties sp = {XR_TYPE_SYSTEM_PROPERTIES};
-        if (vrGet(g_vr.GetSystemProperties, "xrGetSystemProperties") && XR_SUCCEEDED(g_vr.GetSystemProperties(g_vr.instance, g_vr.system, &sp)))
-            g_vr.maxLayers = min(max(sp.graphicsProperties.maxLayerCount, 16u), (uint32_t)MC_RECTS + 1);
-        logf("vr: the runtime shows %u layers at most; %u in use at most", sp.graphicsProperties.maxLayerCount, g_vr.maxLayers);
-    }
     XrGraphicsRequirementsD3D11KHR req = {XR_TYPE_GRAPHICS_REQUIREMENTS_D3D11_KHR};
     if (!vrCheck(g_vr.GetD3D11GraphicsRequirementsKHR(g_vr.instance, g_vr.system, &req),
                  "xrGetD3D11GraphicsRequirementsKHR"))
@@ -521,25 +515,11 @@ static void vrLocate(XrTime when) {
     XrViewState vs = {XR_TYPE_VIEW_STATE};
     XrView views[2] = {{XR_TYPE_VIEW}, {XR_TYPE_VIEW}};
     uint32_t n = 0;
-    static int missed;
-    XrResult lr = g_vr.LocateViews(g_vr.session, &li, &vs, 2, &n, views);
-    if (XR_FAILED(lr) || n != 2 || !(vs.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT)) {
-        // No pose for the coming frame. Without one that frame is drawn with the game's own camera and without
-        // our cockpit - one such frame is a flash. For up to half a second the last pose stays in use.
-        static int told;
-        if (++missed == 1 && told < 60) {
-            ++told;
-            logf("vr: frame %u: no head pose for the next frame (result %d, %u views, flags %x) - the last one stays", g_frame, (int)lr, n,
-                 (unsigned)vs.viewStateFlags);
-        }
-        if (missed > 45) g_vrPoseOk[0] = g_vrPoseOk[1] = false;
+    if (XR_FAILED(g_vr.LocateViews(g_vr.session, &li, &vs, 2, &n, views)) || n != 2 ||
+        !(vs.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT)) {
+        g_vrPoseOk[0] = g_vrPoseOk[1] = false;
         return;
     }
-    if (missed > 1) {
-        static int told;
-        if (told++ < 20) logf("vr: frame %u: the head pose is back after %d frames without", g_frame, missed);
-    }
-    missed = 0;
     if (!g_vr.haveRef || g_vr.recenter) {
         // the head between the eyes, looking where the left eye looks
         g_vr.ref.orientation = views[0].pose.orientation;
@@ -1019,10 +999,6 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
                 for (int i = 0; i < 3; ++i)
                     for (int j = 0; j < 3; ++j) Dx[i * 3 + j] = sg[i] * Dv[i * 3 + j] * sg[j];
                 XrQuaternionf dq = qfromm(Dx);
-                if (dq.w < 0.999f && dq.w > -0.999f) { // more than 5 degrees in one frame: worth a line
-                    static int told;
-                    if (told++ < 30) logf("vr: frame %u: eye %d's older picture turned by %.1f degrees with the mech", g_frame, e, 2 * acosf(fminf(fabsf(dq.w), 1.0f)) * 57.29578f);
-                }
                 if (dq.w > 0.94f || dq.w < -0.94f) { // less than 40 degrees: a turn, not a cut
                     XrQuaternionf rq = g_vr.ref.orientation;
                     XrQuaternionf wq = qmul(qmul(rq, dq), qconj(rq));
@@ -1116,7 +1092,7 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
         memcpy(hd.twist, g_vr.twist, sizeof hd.twist);
         hd.twistDv = g_vr.twistDv;
         static McRects hq_;
-        mcHudRects(hd, hq_, (int)g_vr.maxLayers - 1);
+        mcHudRects(hd, hq_);
         float (*rc)[5] = hq_.rc;
         int nr = hq_.n;
         // a battle's first pictures (the answer comes a frame late, and the first frame can last long): no HUD yet
@@ -1134,9 +1110,11 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
             bool isFar = rc[i][4] == 1 || rc[i][4] >= 3, opaque = rc[i][4] == 2 || rc[i][4] == 3;
 
             if (rc[i][4] != 5 && (u1 - u0 < 0.005f || v1 - v0 < 0.005f)) continue;
-            if (nl >= g_vr.maxLayers - (crossNow ? 1u : 0u)) { // with more, xrEndFrame fails and the picture stands still (one is kept for the cross-hair)
+            // what every runtime shows at least (Virtual Desktop: no more); with more, xrEndFrame fails and the picture
+            // stands still. One is kept for the cross-hair.
+            if (nl >= VR_LAYERS - (crossNow ? 1u : 0u)) {
                 static bool told;
-                if (!told) logf("vr: more than %u layers - %d parts of the HUD left out", g_vr.maxLayers, nr - i);
+                if (!told) logf("vr: more than %u layers - %d parts of the HUD left out", (unsigned)VR_LAYERS, nr - i);
                 told = true;
                 break;
             }
@@ -1204,7 +1182,7 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
             layers[nl++] = (const XrCompositionLayerBaseHeader *)&q;
         }
         static XrCompositionLayerQuad cq;
-        if (crossNow && nl < g_vr.maxLayers) { // the cross-hair: where its part lies in the far middle, smaller about its own middle
+        if (crossNow && nl < VR_LAYERS) { // the cross-hair: where its part lies in the far middle, smaller about its own middle
             cq = {XR_TYPE_COMPOSITION_LAYER_QUAD};
             float u0 = (float)g_crossX / g_vr.w, v0 = (float)g_crossY / g_vr.h, u1 = (float)(g_crossX + g_crossW) / g_vr.w,
                   v1 = (float)(g_crossY + g_crossH) / g_vr.h;
@@ -1219,20 +1197,6 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
             cq.pose.position = {g_vr.ref.position.x + wpos.x, g_vr.ref.position.y + wpos.y, g_vr.ref.position.z + wpos.z};
             cq.size = {W * (u1 - u0) * g_vr.crossScale, H * (v1 - v0) * g_vr.crossScale};
             layers[nl++] = (const XrCompositionLayerBaseHeader *)&cq;
-        }
-    }
-    { // A set of layers that lasts a few frames only is a flash: say so (layers: their number, +100 with the world's)
-        int sig = (int)nl + (proj.viewCount ? 100 : 0);
-        static int cur = -1, before = -1, told;
-        static unsigned since;
-        if (sig != cur) {
-            if (sig == before && g_frame - since <= 5 && battle && told < 60) {
-                ++told;
-                logf("vr: frames %u-%u: layers %d instead of %d (tracking %d, both eyes' pictures %d %d, poses %d %d, HUD drawn %u frames ago, fade %d %.2f)",
-                     since, g_frame - 1, cur, sig, (int)track, (int)g_vr.have[0], (int)g_vr.have[1], (int)g_vr.layerOk[0], (int)g_vr.layerOk[1],
-                     g_frame - g_hudDrawnFrame, (int)(g_fadeStage != nullptr), g_fadeA);
-            }
-            before = cur, cur = sig, since = g_frame;
         }
     }
     XrFrameEndInfo ei = {XR_TYPE_FRAME_END_INFO};
