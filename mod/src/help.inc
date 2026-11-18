@@ -84,6 +84,7 @@ static void helpBuild(UINT w, UINT h) {
             if (GetTextExtentPoint32W(dc, t.what, (int)wcslen(t.what), &s))
                 over = max(over, (float)s.cx / (float)((int)w - left - (t.key ? mid : left)));
             if (t.key && GetTextExtentPoint32W(dc, t.key, (int)wcslen(t.key), &s))
+                // NOLINTNEXTLINE(bugprone-integer-division): whole pixels
                 over = max(over, (float)s.cx / (float)(mid - left - left / 2 - 6));
         }
         if (over <= 1 || size < 9) break;
@@ -156,8 +157,8 @@ static BOOL WINAPI helpW_Qpc(LARGE_INTEGER *p) {
     if (r && p) p->QuadPart -= g_helpOffQpc;
     return r;
 }
-static DWORD WINAPI helpW_Tgt(void) { return g_helpTgt() - g_helpOffMs; }
-static DWORD WINAPI helpW_Gtc(void) { return g_helpGtc() - g_helpOffMs; }
+static DWORD WINAPI helpW_Tgt() { return g_helpTgt() - g_helpOffMs; }
+static DWORD WINAPI helpW_Gtc() { return g_helpGtc() - g_helpOffMs; }
 
 // every place in the module's image that holds one of the three clock functions' addresses (its import slots,
 // pointers it keeps) gets our wrapper instead; -> how many

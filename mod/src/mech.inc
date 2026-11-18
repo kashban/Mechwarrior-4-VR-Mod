@@ -649,7 +649,7 @@ static void mechOnPresent(bool inBattle, bool zoomed) {
         if (gmPlayerMech(mech, 32)) {
             swprintf(model, 32, L"%hs", mech);
             for (int i = 0; i < g_mechN; ++i) {
-                if (_wcsicmp(model, g_mechs[i].model)) continue;
+                if (_wcsicmp(model, g_mechs[i].model) != 0) continue;
                 g_mechSearching = false;
                 g_mgSampleN = 0;
                 g_mechCur = i;

@@ -95,13 +95,24 @@ typedef HRESULT(WINAPI *PFN_CreateDeviceAndSwapChain)(IDXGIAdapter *, D3D_DRIVER
 static PFN_CreateDevice r_CreateDevice;
 static PFN_CreateDeviceAndSwapChain r_CreateDeviceAndSwapChain;
 
+// by hand: clang-format finds no stable form for a list of macro calls
+// clang-format off
 #define FWD_LIST(X)                                                                                                    \
     X(D3D11CoreCreateDevice)                                                                                           \
-    X(D3D11CoreCreateLayeredDevice) X(D3D11CoreGetLayeredDeviceSize) X(D3D11CoreRegisterLayers)                        \
-        X(D3D11CreateDeviceForD3D12) X(D3D11On12CreateDevice) X(CreateDirect3D11DeviceFromDXGIDevice)                  \
-            X(CreateDirect3D11SurfaceFromDXGISurface) X(D3DPerformance_BeginEvent) X(D3DPerformance_EndEvent)          \
-                X(D3DPerformance_GetStatus) X(D3DPerformance_SetMarker) X(EnableFeatureLevelUpgrade) X(OpenAdapter10)  \
-                    X(OpenAdapter10_2)
+    X(D3D11CoreCreateLayeredDevice)                                                                                    \
+    X(D3D11CoreGetLayeredDeviceSize)                                                                                   \
+    X(D3D11CoreRegisterLayers)                                                                                         \
+    X(D3D11CreateDeviceForD3D12)                                                                                       \
+    X(D3D11On12CreateDevice)                                                                                           \
+    X(CreateDirect3D11DeviceFromDXGIDevice)                                                                            \
+    X(CreateDirect3D11SurfaceFromDXGISurface)                                                                          \
+    X(D3DPerformance_BeginEvent)                                                                                       \
+    X(D3DPerformance_EndEvent)                                                                                         \
+    X(D3DPerformance_GetStatus)                                                                                        \
+    X(D3DPerformance_SetMarker)                                                                                        \
+    X(EnableFeatureLevelUpgrade)                                                                                       \
+    X(OpenAdapter10)                                                                                                   \
+    X(OpenAdapter10_2)
 
 #define DECL_FWD(n)                                                                                                    \
     extern "C" FARPROC r_##n;                                                                                          \
@@ -109,6 +120,7 @@ static PFN_CreateDeviceAndSwapChain r_CreateDeviceAndSwapChain;
     extern "C" __declspec(naked) void P_##n() {                                                                        \
         __asm { jmp dword ptr [r_##n] }                                                                                    \
     }
+// clang-format on
 FWD_LIST(DECL_FWD)
 
 #pragma comment(linker, "/EXPORT:D3D11CoreCreateDevice=_P_D3D11CoreCreateDevice")
@@ -1390,7 +1402,7 @@ static bool hudWidePre(ID3D11DeviceContext *c) {
     }
     static float last[12];
     static bool have;
-    if (!have || memcmp(last, d, 48)) {
+    if (!have || memcmp(last, d, 48) != 0) {
         D3D11_MAPPED_SUBRESOURCE m;
         if (FAILED(ORIG(PFN_Map, c, VT_Ctx_Map)(c, g_wideCB, 0, D3D11_MAP_WRITE_DISCARD, 0, &m))) return false;
         memcpy(m.pData, d, 48);

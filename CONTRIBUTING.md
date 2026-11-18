@@ -47,7 +47,9 @@ tools\security\binskim.bat                         the DLLs' hardening
 
 ## Style
 
-- **C++:** `.clang-format` (LLVM's style, four spaces, 120 columns) and `.clang-tidy`. C++17, no exceptions across
+- **C++:** `.clang-format` (LLVM's style, four spaces, 120 columns) and `.clang-tidy`. The sources are in
+  that format and `tools\security\tidy.bat` finds nothing; both are to stay so (the command for the format
+  is at the top of `.clang-format`). C++17, no exceptions across
   the hooks, no dependencies beyond the Windows SDK and the OpenXR headers in `mod/include`. The checked forms of
   the C library's functions (`swscanf_s`, `wcscpy_s`, ...): the build has `/sdl`.
 - **Python:** `ruff format` and `ruff check` with the rules in `pyproject.toml`; `%` formatting is the one way of

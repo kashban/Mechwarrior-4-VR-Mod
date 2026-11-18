@@ -439,7 +439,8 @@ static inline void mcSeatStep(McSeat &s, int tris, bool ahead) {
 // fades in (told only once it was well there, the menu showed in the HUD's parts first and jumped). A black sheet
 // hardly there yet is none: taken for a fade, it switched the HUD off for a moment. Black: every colour below a
 // sixteenth of the alpha. Any other colour (light amplification) stays with the HUD as it is.
-enum { MC_SHEET_NONE, MC_SHEET_FADE, MC_SHEET_MENU, MC_SHEET_MIN = 2, MC_SHEET_ALPHA = 16 };
+enum { MC_SHEET_NONE, MC_SHEET_FADE, MC_SHEET_MENU };
+enum { MC_SHEET_MIN = 2, MC_SHEET_ALPHA = 16 };
 // a: the point's alpha, r g b: its colour (all 0..255)
 static inline int mcSheet(int a, int r, int g, int b) {
     if (a < MC_SHEET_MIN) return MC_SHEET_NONE;

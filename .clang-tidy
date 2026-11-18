@@ -7,7 +7,6 @@ Checks: >
   clang-analyzer-*,
   performance-*,
   portability-*,
-  modernize-use-nullptr,
   modernize-use-override,
   modernize-use-bool-literals,
   modernize-redundant-void-arg,
@@ -28,15 +27,38 @@ Checks: >
   -cert-err33-c,
   -cert-err58-cpp,
   -cert-flp30-c,
+  -cert-exp42-c,
+  -cert-flp37-c,
+  -cert-dcl50-cpp,
+  -bugprone-multi-level-implicit-pointer-conversion,
+  -bugprone-incorrect-roundings,
+  -bugprone-macro-parentheses,
+  -performance-enum-size,
+  -performance-no-int-to-ptr,
+  -clang-analyzer-valist.Uninitialized,
+  -clang-analyzer-optin.performance.Padding,
   -readability-braces-around-statements
 # Off, and why:
 #   easily-swappable-parameters   matrices and rectangles are rows of floats; every call would be named
 #   narrowing-conversions, implicit-widening   pixel and index arithmetic between float, int and UINT, checked by hand
 #   suspicious-memory-comparison  memcmp on floats means "has anything changed"
+#   exp42-c, flp37-c              the same memcmp on floats
+#   dcl50-cpp                     the log functions take printf's arguments
+#   multi-level-implicit-pointer-conversion   vtables and COM out-parameters are void** handed on as void*
+#   incorrect-roundings           "+ 0.5 and cut" rounds values that are never negative (pixels, colours)
+#   macro-parentheses             HP_ROW's argument is a template's name: it cannot stand in parentheses
+#   enum-size                     unnamed enums are the constants; nothing stores one
+#   no-int-to-ptr                 addresses inside the game and mw4hook are numbers to begin with
+#   valist.Uninitialized          the analyser does not know this compiler's va_start: every vfprintf is found
+#   optin.performance.Padding     the members of a struct stand in the order of their meaning
 #   err33-c                       swprintf's and fclose's results are not needed
 #   err58-cpp                     globals with constructors (std::mutex, std::wstring) cannot throw here
 #   flp30-c                       float loop counters in the grids of directions
+#   modernize-use-nullptr         not listed: clang-tidy 19.1.5 crashes in it on the Windows headers
 #   braces-around-statements      one-line bodies stay without braces (the project's style)
+# "!(a > x && b < y)" on floats is false for NaN on purpose; De Morgan's form would let NaN through
+CheckOptions:
+  readability-simplify-boolean-expr.SimplifyDeMorgan: false
 WarningsAsErrors: ''
 HeaderFilterRegex: 'mod[\\/]src[\\/].*'
 FormatStyle: file

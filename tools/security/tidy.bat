@@ -8,11 +8,11 @@ if not exist "%TIDY%" echo clang-tidy not found: %TIDY% & exit /b 1
 cd /d "%~dp0..\..\mod"
 if not exist build\analyze mkdir build\analyze
 set OUT=build\analyze
-rem what is looked for: bugs, the CERT rules, the analyser's paths. Left out: rules about style and names only.
-set CHECKS=-*,bugprone-*,cert-*,clang-analyzer-*,-bugprone-easily-swappable-parameters,-bugprone-narrowing-conversions,-bugprone-reserved-identifier,-cert-dcl37-c,-cert-dcl51-cpp,-bugprone-implicit-widening-of-multiplication-result,-cert-err33-c,-bugprone-unchecked-string-to-number-conversion,-cert-err34-c,-cert-dcl50-cpp,-cert-err58-cpp,-bugprone-multi-level-implicit-pointer-conversion,-bugprone-casting-through-void,-bugprone-switch-missing-default-case,-bugprone-branch-clone,-bugprone-macro-parentheses
+rem The checks, and why some are off: .clang-tidy in the repository's root. Exit code 1: something was found.
 set ARGS=--target=i686-pc-windows-msvc -fms-compatibility -fms-extensions -D_CRT_SECURE_NO_WARNINGS -Iinclude -w
-"%TIDY%" --quiet --checks=%CHECKS% --header-filter=mod.src.* src\main.cpp -- -std=c++17 %ARGS% > %OUT%\tidy.log 2>&1
-"%TIDY%" --quiet --checks=%CHECKS% src\vtidx.c -- %ARGS% >> %OUT%\tidy.log 2>&1
-"%TIDY%" --quiet --checks=%CHECKS% dinput\dinput.cpp -- -std=c++17 %ARGS% >> %OUT%\tidy.log 2>&1
+"%TIDY%" --quiet --config-file=..\.clang-tidy --header-filter=mod.src.* src\main.cpp -- -std=c++17 %ARGS% > %OUT%\tidy.log 2>&1
+"%TIDY%" --quiet --config-file=..\.clang-tidy src\vtidx.c -- %ARGS% >> %OUT%\tidy.log 2>&1
+"%TIDY%" --quiet --config-file=..\.clang-tidy dinput\dinput.cpp -- -std=c++17 %ARGS% >> %OUT%\tidy.log 2>&1
 "%SystemRoot%\System32\find.exe" /c "warning:" %OUT%\tidy.log
+"%SystemRoot%\System32\findstr.exe" /c:"warning:" /c:"error:" %OUT%\tidy.log >nul && exit /b 1
 exit /b 0

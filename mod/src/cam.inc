@@ -328,7 +328,7 @@ static void camPreEye(uint8_t *cam, int eyeOv) {
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         g_camAncN = 0;
     }
-    if (memcmp(m, base, sizeof base)) memcpy(m, base, sizeof base); // our last move undone first
+    if (memcmp(m, base, sizeof base) != 0) memcpy(m, base, sizeof base); // our last move undone first
     bool act = g_srcCam && g_camCal && g_vrTracking && g_eyeMode && !g_menuMode;
     int eye = eyeOv >= 0 ? eyeOv : (eyeSign() > 0 ? 1 : 0);
     if (!act || !g_vrPoseOk[eye]) {

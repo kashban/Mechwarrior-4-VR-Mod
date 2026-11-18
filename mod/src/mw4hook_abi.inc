@@ -93,7 +93,7 @@ static bool gmPlayerMech(char *out, int n) {
         uintptr_t veh = *(const uint32_t *)(holder + PL_VEHICLE);
         if (veh < 0x10000) return false;
         const char *path = *(const char **)(veh + VEH_MODEL);
-        if ((uintptr_t)path < 0x10000 || _strnicmp(path, "mechs\\", 6)) return false;
+        if ((uintptr_t)path < 0x10000 || _strnicmp(path, "mechs\\", 6) != 0) return false;
         int k = 0;
         for (const char *p = path + 6; *p && *p != '\\' && k < n - 1; ++p) {
             char c = *p;

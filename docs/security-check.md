@@ -239,4 +239,5 @@ them itself, `mw5.inc:950`, and Direct3D defines a draw with an index outside th
 1. S4's cost: the frame time with `/sdl` and Control Flow Guard against v11.69 (not measured yet; Control Flow
    Guard checks nothing inside the game, whose `.exe` is built without it).
 2. Fuzzing of the cockpit loader, once it can be called without the game (the refactoring's step 3).
-3. clang-tidy (`tools/security/tidy.bat`) is not in the pipeline: its messages are style, for the style work.
+3. clang-tidy (`tools/security/tidy.bat`, with the checks of `.clang-tidy`) is not in the pipeline. Since the
+   style work it finds nothing; what is switched off is listed in `.clang-tidy` with the reason.

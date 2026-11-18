@@ -350,7 +350,7 @@ static void mw5ReadIni() {
         g_mw5On = GetPrivateProfileIntW(L"vr", L"mw5_on", 1, ini.c_str()) != 0;
     }
     static wchar_t told[64];
-    if (wcscmp(told, g_mw5Name)) {
+    if (wcscmp(told, g_mw5Name) != 0) {
         wcscpy_s(told, g_mw5Name);
         logf("mw5: cockpit '%ls' (%s), settings from %s, size %.2f, eye %.2f m right %.2f m up %.2f m forward",
              g_mw5Name, g_mw5On ? "on" : "off - Ctrl+F11", g_mw5Own ? "its own file" : "mw4vr.ini", g_mw5Scale,
@@ -1046,7 +1046,7 @@ static void mw5ForMech() {
             }
             if (!name[0])
                 GetPrivateProfileStringW(L"vr", L"mw5_cockpit", L"", name, 64, (g_dir + L"mw4vr.ini").c_str());
-            if (name[0] && _wcsicmp(name, g_mw5Name)) {
+            if (name[0] && _wcsicmp(name, g_mw5Name) != 0) {
                 logf("mw5: cockpit '%ls' for the mech '%ls' by its name, before its profile is known", name, model);
                 mw5Switch(name);
             }
@@ -1210,7 +1210,7 @@ static void mw5GlassFit() {
     }
     static wchar_t told[64];
     static int toldN = -1;
-    if (wcscmp(told, g_mw5Name) || toldN != fitted * 16 + failed) {
+    if (wcscmp(told, g_mw5Name) != 0 || toldN != fitted * 16 + failed) {
         wcscpy_s(told, g_mw5Name);
         toldN = fitted * 16 + failed;
         logf("mw5: cockpit '%ls': %d parts of the HUD placed in its windows, %d found no open place (left where they "
@@ -1615,7 +1615,7 @@ static void mw5OnPresent() {
         static float last[8];
         float now[8] = {g_vr.seatUp, g_vr.seatFwd, g_vr.cockpitScale, g_mw5Eye[0],
                         g_mw5Eye[1], g_mw5Eye[2],  g_mw5Scale,        (float)g_m5Tri.size()};
-        if (g_mw5State == 1 && memcmp(last, now, sizeof now)) {
+        if (g_mw5State == 1 && memcmp(last, now, sizeof now) != 0) {
             memcpy(last, now, sizeof now);
             mw5GlassFit();
         }

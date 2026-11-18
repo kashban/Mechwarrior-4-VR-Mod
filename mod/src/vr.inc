@@ -324,7 +324,7 @@ static void vrReadIni() {
         static float last[7];
         float now[7] = {g_vr.cockpitScale, g_vr.seatFwd, g_vr.seatUp,       g_vr.panelX,
                         g_vr.panelY,       g_vr.hudNear, g_vr.hudPanelScale};
-        if (g_mechOn && (lastCur != g_mechCur || memcmp(last, now, sizeof now))) {
+        if (g_mechOn && (lastCur != g_mechCur || memcmp(last, now, sizeof now) != 0)) {
             lastCur = g_mechCur;
             memcpy(last, now, sizeof now);
             logf("mech: profile %d in use (%s) - cockpit scale %.3f, seat %.2f m forward %.2f m up, panels %.2f m "
@@ -1217,7 +1217,6 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
         if (g_fadeStage && (g_fadeKnownFrame == ~0u || g_frame - g_fadeKnownFrame > 4))
             nr = 0;
         else if (g_fadeA > 0) { // the game's fade sheet: over the whole view, the HUD not
-            nr = 0;
             float du = 3.0f / g_vr.w, dv = 3.0f / g_vr.h;
             rc[0][0] = g_fadePts[g_fadePt][0] - du, rc[0][1] = g_fadePts[g_fadePt][1] - dv,
             rc[0][2] = g_fadePts[g_fadePt][0] + du, rc[0][3] = g_fadePts[g_fadePt][1] + dv, rc[0][4] = 5;
