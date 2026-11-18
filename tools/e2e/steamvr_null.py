@@ -4,6 +4,7 @@
 
 The file is changed in place; tools/e2e/run.ps1 keeps a copy and puts it back after the run.
 """
+
 import json
 import sys
 
@@ -12,9 +13,19 @@ def with_null_driver(settings, width=1512, height=1680):
     """The settings with the null driver switched on and no headset asked for (the argument is not changed)."""
     out = json.loads(json.dumps(settings))
     steamvr = out.setdefault('steamvr', {})
-    steamvr.update({'requireHmd': False, 'forcedDriver': 'null', 'activateMultipleDrivers': False, 'enableHomeApp': False,
-                    'startMonitorOnStartup': False, 'showMirrorView': False})
-    out.setdefault('driver_null', {}).update({'enable': True, 'renderWidth': width, 'renderHeight': height, 'displayFrequency': 90.0})
+    steamvr.update(
+        {
+            'requireHmd': False,
+            'forcedDriver': 'null',
+            'activateMultipleDrivers': False,
+            'enableHomeApp': False,
+            'startMonitorOnStartup': False,
+            'showMirrorView': False,
+        }
+    )
+    out.setdefault('driver_null', {}).update(
+        {'enable': True, 'renderWidth': width, 'renderHeight': height, 'displayFrequency': 90.0}
+    )
     return out
 
 

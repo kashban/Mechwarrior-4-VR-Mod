@@ -31,7 +31,7 @@ try {
     "PSScriptAnalyzer: {0} findings" -f $r.Count
     $grave = @($b -match 'Severity: (Medium|High)').Count
     if ($grave -or $errors) {
-        $b -match '^>> Issue|Severity: (Medium|High)|Location:' | Select-Object -First 30
+        if ($grave) { $b -match '^>> Issue|Severity: (Medium|High)|Location:' | Select-Object -First 30 }
         Get-Content (Join-Path $out 'pssa.log') | Select-Object -First 30
         exit 1
     }

@@ -50,7 +50,7 @@ function Stop-All([string[]]$names, [int]$waitSec = 60) {
     for ($i = 0; $i -lt $waitSec * 2; $i++) {
         $left = @(Get-Process -Name $names -ErrorAction SilentlyContinue)
         if (-not $left.Count) { return $true }
-        foreach ($p in $left) { try { $p.Kill() } catch { } }
+        foreach ($p in $left) { try { $p.Kill() } catch { Write-Verbose "passed over: $($_.Exception.Message)" } }
         Start-Sleep -Milliseconds 500
     }
     return $false
@@ -116,7 +116,7 @@ try {
                     $tail = (New-Object IO.StreamReader($fs)).ReadToEnd() -split "`n"
                 } finally { $fs.Close() }
                 if ($tail.Count -ge 3) { $t = [double]::Parse(($tail[$tail.Count - 2] -split ',')[2], [Globalization.CultureInfo]::InvariantCulture) }
-            } catch { }
+            } catch { Write-Verbose "passed over: $($_.Exception.Message)" }
         }
         if ($t -ge $Seconds) { $why = 'done'; break }
         if (((Get-Date) - $started).TotalSeconds -ge $TimeoutSec) { break }
