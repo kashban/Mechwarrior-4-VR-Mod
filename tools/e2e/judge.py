@@ -20,6 +20,7 @@ FLASH = 18.0       # an eye's brightness this far from its neighbours' median, f
 DARK = 3.0         # an eye's brightness below this: black
 STILL_SWAY = 0.01  # metres the cockpit may wander while only the head turns
 WALK_SWAY = 0.004  # metres the cockpit sways at least with the mech's steps
+FIRE_GLOW = 1.5    # the least an eye brightens while the mech fires
 SETTLE = 1.0       # seconds a key may take to show its effect
 SHARE = 0.8        # of a window's frames must show what the window is for
 
@@ -115,7 +116,9 @@ def judge(frames, log_text, cockpit=None, seconds=10.0, walk=None, fire=None, ou
 
     turned = [f for f in seated if abs(f['yaw']) > 1]
     if turned:
-        still = [f for f in seated if abs(f['yaw']) <= 1]
+        # (at rest right before and after the turns - not while the cockpit still settles after the mech was set
+        # down, some seconds, and not what the plan does later: walking sways it)
+        still = [f for f in seated if abs(f['yaw']) <= 1 and turned[0]['t'] - 2.0 <= f['t'] <= turned[-1]['t'] + 1.0]
         rest = [statistics.mean(f[k] for f in still) if still else 0.0 for k in ('sx', 'sy', 'sz')]
         wander = max(max(abs(f[k] - r) for k, r in zip(('sx', 'sy', 'sz'), rest)) for f in turned)
         check(wander <= STILL_SWAY, 'the cockpit stays put while only the head turns (wandered %.1f cm)' % (wander * 100))
@@ -127,9 +130,11 @@ def judge(frames, log_text, cockpit=None, seconds=10.0, walk=None, fire=None, ou
     if fire:
         before = within(seated, fire[0] - 2.0, fire[0] - 0.1)
         part = within(seated, fire[0], fire[1])
-        was = statistics.mean(f['draws'] for f in before) if before else 0.0
-        now = max((f['draws'] for f in part), default=0.0)
-        check(bool(before) and now >= was + 3, 'the mech fires: more is drawn (%d draws a frame before, up to %d while firing)' % (was, now))
+        # (the beams and flashes brighten the picture a little; the head is at rest here. Counting draws tells nothing:
+        # a laser's beam adds none.)
+        was = statistics.median(f['left'] for f in before) if before else 0.0
+        now = max((f['left'] for f in part), default=0.0)
+        check(bool(before) and now >= was + FIRE_GLOW, 'the mech fires: the picture brightens (%.1f before, up to %.1f while firing)' % (was, now))
     if outside:
         part = within(timed, outside[0] + SETTLE, outside[1])
         out = [f for f in part if f['outside'] and not f['own']]

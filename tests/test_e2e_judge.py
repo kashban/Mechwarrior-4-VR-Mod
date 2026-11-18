@@ -26,7 +26,7 @@ def acted(walk=True, fire=True, outside=True, menu=True, back=True, menu_at=6.05
         if walk and 1.5 <= t <= 3:
             x['sy'] = 0.01
         if fire and 4.2 <= t <= 4.8:
-            x['draws'] = 640.0
+            x['left'] = x['right'] = 84.0
         if outside and 6.3 <= t <= (8.2 if back else 99):
             x['outside'], x['own'], x['seated'] = 1.0, 0.0, 0.0
         if menu and menu_at + 4 <= t <= 12.1:

@@ -1,8 +1,9 @@
 # An end-to-end test of the mod in the game, without a headset on anybody's head:
 #   powershell -File tools\e2e\run.ps1 -Game <the game's folder> -Pilot <pilot> [-Mech 'Mad Cat'] [-Cockpit madcat]
-#       [-Runtime steamvr-null|active] [-Seconds 46] [-Yaw '2:0 5:45 9:45 12:0'] [-Shots '1 21 30 38'] [-KeepDll]
-#       [-Keys '14:LMB:0.4 15.5:LMB:0.4 18:W:5 28:V:0.1 32:V:0.1 36:ESC:0.1 40:ESC:0.1']
-#       [-Walk 18:26] [-Fire 14:17] [-Outside 28:32] [-Menu 36:40]      (what the keys are to do, for the judge;
+#       [-Runtime steamvr-null|active] [-Seconds 51] [-Yaw '7:0 10:45 14:45 17:0'] [-Shots '1 19.2 26 35 44'] [-KeepDll]
+#       [-Keys '19:LMB:0.4 20.5:LMB:0.4 23:W:5 33:V:0.1 37:V:0.1 37.5:V:0.1 38:V:0.1 42:ESC:0.1 46:ESC:0.1']
+#       [-Walk 23:31] [-Fire 19:22] [-Outside 33:38] [-Menu 42:46]      (what the keys are to do, for the judge; the
+#       view key steps through four views, three of them outside;
 #       '' leaves a check out. The keys are the game's own defaults - another pilot's keys need another -Keys.)
 # What it does:
 #   1. puts mod\build\d3d11.dll into the game's folder (the one that was there comes back at the end);
@@ -20,14 +21,14 @@ param(
     [string]$Mech = 'Mad Cat',
     [string]$Cockpit = '',
     [ValidateSet('steamvr-null', 'active')][string]$Runtime = 'steamvr-null',
-    [int]$Seconds = 46,
-    [string]$Yaw = '2:0 5:45 9:45 12:0',
-    [string]$Shots = '1 21 30 38',
-    [string]$Keys = '14:LMB:0.4 15.5:LMB:0.4 18:W:5 28:V:0.1 32:V:0.1 36:ESC:0.1 40:ESC:0.1',
-    [string]$Walk = '18:26',
-    [string]$Fire = '14:17',
-    [string]$Outside = '28:32',
-    [string]$Menu = '36:40',
+    [int]$Seconds = 51,
+    [string]$Yaw = '7:0 10:45 14:45 17:0',
+    [string]$Shots = '1 19.2 26 35 44',
+    [string]$Keys = '19:LMB:0.4 20.5:LMB:0.4 23:W:5 33:V:0.1 37:V:0.1 37.5:V:0.1 38:V:0.1 42:ESC:0.1 46:ESC:0.1',
+    [string]$Walk = '23:31',
+    [string]$Fire = '19:22',
+    [string]$Outside = '33:38',
+    [string]$Menu = '42:46',
     [int]$TimeoutSec = 240,
     [switch]$KeepDll
 )
