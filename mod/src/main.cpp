@@ -1482,6 +1482,7 @@ static void hudSheetPost(ID3D11DeviceContext *c) {
 
 template <int V> static void STDMETHODCALLTYPE HP_Draw(ID3D11DeviceContext *c, UINT a, UINT b) {
     onWork(c, "Draw", false);
+    ++g_m5AllDraws;
     if (eyeHidden(c)) return;
     if (smallCamBackdrop(c)) return;
     bool sw = eyeTlPre(c);
@@ -1494,6 +1495,7 @@ template <int V> static void STDMETHODCALLTYPE HP_Draw(ID3D11DeviceContext *c, U
 }
 template <int V> static void STDMETHODCALLTYPE HP_DrawIndexed(ID3D11DeviceContext *c, UINT a, UINT b, INT d) {
     onWork(c, "DrawIndexed", false);
+    ++g_m5AllDraws;
     if (eyeHidden(c)) return;
     bool sw = eyeTlPre(c);
     int ck = sw && mechMeasuring() ? mechDraw(c, true, a, b, d, g_camPassEye == 0) : 0;
