@@ -743,7 +743,7 @@ static void hideOnPresent() {
     }
     static bool keyWas;
     static int idx;
-    bool key = (GetAsyncKeyState(VK_CONTROL) & 0x8000) && (GetAsyncKeyState(VK_F8) & 0x8000);
+    bool key = g_dbg && (GetAsyncKeyState(VK_CONTROL) & 0x8000) && (GetAsyncKeyState(VK_F8) & 0x8000); // (diagnosis: [debug] level=1 only)
     if (key && !keyWas) {
         std::lock_guard<std::mutex> lk(g_hideMx);
         int n = (int)g_vsList.size();
@@ -769,7 +769,9 @@ static void eyeOnPresent() {
         eyeReadIni();
     }
     static bool keyWas;
-    bool key = (GetAsyncKeyState(VK_CONTROL) & 0x8000) && (GetAsyncKeyState(VK_F7) & 0x8000);
+    // (diagnosis, [debug] level=1 only: without it a slip beside Ctrl+F11 switched the eyes off - one flat picture,
+    // no HUD layer, no menu)
+    bool key = g_dbg && (GetAsyncKeyState(VK_CONTROL) & 0x8000) && (GetAsyncKeyState(VK_F7) & 0x8000);
     if (key && !keyWas) {
         g_eyeMode = (g_eyeMode + 1) & 3;
         static const char *names[] = {"off", "right eye", "left eye", "alternating"};
@@ -2335,7 +2337,7 @@ BOOL WINAPI DllMain(HINSTANCE h, DWORD reason, LPVOID) {
         if (g_dbg) g_shlog = _wfsopen((g_dir + L"mw4vr_shaders.txt").c_str(), L"w", _SH_DENYNO);
         wchar_t exe[MAX_PATH];
         GetModuleFileNameW(nullptr, exe, MAX_PATH);
-        logf("MW4VR v11.65 (debug level %d) loaded into %s", g_dbg, narrow(exe).c_str());
+        logf("MW4VR v11.66 (debug level %d) loaded into %s", g_dbg, narrow(exe).c_str());
         if (!loadReal()) logf("ERROR: the system d3d11.dll could not be loaded");
     }
     return TRUE;

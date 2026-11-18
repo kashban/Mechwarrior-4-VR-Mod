@@ -370,7 +370,8 @@ static volatile int g_camKeep = -1;
 static void camKeepKey() {
     if (g_camKeep < 0) g_camKeep = GetPrivateProfileIntW(L"vr", L"cam_keep", 0, (g_dir + L"mw4vr.ini").c_str()) % 3;
     static bool was;
-    bool down = (GetAsyncKeyState(VK_CONTROL) & 0x8000) && (GetAsyncKeyState(VK_F6) & 0x8000);
+    // (a key for diagnosis, [debug] level=1 only: pressed by mistake beside Ctrl+F11 it changed the picture for good)
+    bool down = g_dbg && (GetAsyncKeyState(VK_CONTROL) & 0x8000) && (GetAsyncKeyState(VK_F6) & 0x8000);
     if (down && !was) {
         g_camKeep = (g_camKeep + 1) % 3;
         logf("cam: keep mode %d (%s), frame %u", (int)g_camKeep,

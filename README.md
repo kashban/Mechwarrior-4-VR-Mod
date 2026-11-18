@@ -78,6 +78,7 @@ Ctrl+Alt keys below.
 | Ctrl+F10 | this cockpit fits: remember it for this mech |
 | Ctrl+F12 | a picture of both eyes and the HUD into `mw4vr_shots\` |
 | Ctrl+F9 | the renderer's labels of one frame into `mw4vr_labels.txt` |
+| Ctrl+F6 / F7 / F8 | diagnosis, only with `[debug] level=1`: the camera's matrix kept / the eyes' mode / shaders hidden one by one |
 
 `[debug] level=1` in `mw4vr.ini` writes the diagnosis files (shaders, frame captures with Ctrl+Shift+F11) and the full log.
 
