@@ -390,7 +390,9 @@ static inline bool mcGridFit(const McGrid &g, float w, float h, float wantR, flo
 // side or back (its cockpit is then outside the picture), and there ours has to stay. So a frame counts against
 // "inside" only while the head looks ahead, where the game's cockpit cannot be missed: some such frames in a row
 // mean outside, one frame with the game's cockpit means inside again.
-enum { MC_COCKPIT_TRIS = 30, MC_OUTSIDE_FRAMES = 5 };
+// A frame with a little of the cockpit (the pilot leans far forward, the seat is set near the window: most of the
+// game's cockpit lies behind the eye) says nothing either way - counted as "none", it made ours flicker.
+enum { MC_COCKPIT_TRIS = 30, MC_NO_COCKPIT_TRIS = 6, MC_OUTSIDE_FRAMES = 5 };
 struct McSeat {
     int misses;   // frames in a row, looking ahead, without the game's cockpit
     bool outside; // the camera is not in the mech
@@ -401,7 +403,7 @@ static inline void mcSeatStep(McSeat &s, int tris, bool ahead) {
         s.misses = 0, s.outside = false;
         return;
     }
-    if (!ahead) return;
+    if (!ahead || tris >= MC_NO_COCKPIT_TRIS) return;
     if (s.misses < MC_OUTSIDE_FRAMES) ++s.misses;
     if (s.misses >= MC_OUTSIDE_FRAMES) s.outside = true;
 }

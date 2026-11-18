@@ -575,14 +575,29 @@ static void mechOnPresent(bool inBattle, bool zoomed) {
     // the third-person view: the game draws no cockpit although the head looks ahead (not judged in the zoomed view)
     int ckTris = g_mechCkTris;
     g_mechCkTris = 0;
-    if (inBattle && !zoomed && g_doubleDraw) {
-        bool was = g_mechSeat.outside;
-        mcSeatStep(g_mechSeat, ckTris, g_vrPoseOk[0] && g_vrR[0][8] > 0.94f); // (within 20 degrees of straight ahead)
-        if (was != g_mechSeat.outside) {
-            static int told;
-            if (told++ < 20)
-                logf(g_mechSeat.outside ? "mech: frame %u - the game draws no cockpit although the head looks ahead: seen from outside, ours is not drawn"
-                                        : "mech: frame %u - the game draws its cockpit again (%d triangles): back in the mech", g_frame, ckTris);
+    // (only a frame the camera's passes were drawn in: one without them has no cockpit, and says nothing)
+    static unsigned skipped;
+    if (inBattle && !zoomed && g_doubleDraw && g_camBothFrame != g_frame) ++skipped;
+    if (inBattle && !zoomed && g_doubleDraw && g_camBothFrame == g_frame) {
+        bool was = g_mechSeat.outside, ahead = g_vrPoseOk[0] && g_vrR[0][8] > 0.94f; // (within 20 degrees of straight ahead)
+        mcSeatStep(g_mechSeat, ckTris, ahead);
+        // what the judgement rests on, for the log: how much of the game's cockpit there is while the head looks ahead
+        static int least = 1 << 30, most = -1, told, toldSum;
+        static unsigned judged, little, sumFrame;
+        if (ahead) {
+            ++judged;
+            if (ckTris < least) least = ckTris;
+            if (ckTris > most) most = ckTris;
+            if (ckTris >= MC_NO_COCKPIT_TRIS && ckTris < MC_COCKPIT_TRIS) ++little;
+        }
+        if (was != g_mechSeat.outside && told++ < 300)
+            logf(g_mechSeat.outside ? "mech: frame %u - the game draws no cockpit although the head looks ahead (%d triangles now): seen from outside, ours is not drawn"
+                                    : "mech: frame %u - the game draws its cockpit again (%d triangles): back in the mech", g_frame, ckTris);
+        if (g_frame - sumFrame >= 2700 && judged) { // every half minute
+            if (toldSum++ < 60)
+                logf("mech: the game's cockpit, head ahead, %u frames (%s now): %d to %d triangles, %u frames with a little of it (%d to %d), %u frames without the camera's passes",
+                     judged, g_mechSeat.outside ? "outside" : "inside", least, most, little, (int)MC_NO_COCKPIT_TRIS, MC_COCKPIT_TRIS - 1, skipped);
+            sumFrame = g_frame, judged = little = skipped = 0, least = 1 << 30, most = -1;
         }
     }
     if (!g_mechOn) {

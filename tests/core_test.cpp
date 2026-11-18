@@ -1033,8 +1033,18 @@ static void testSeat() {
     // one frame with the cockpit: inside again, and the count starts anew
     mcSeatStep(s, MC_COCKPIT_TRIS, false);
     CHECK(!s.outside && s.misses == 0);
+    // a little of the cockpit says nothing: no miss, and a count begun is not taken back
     mcSeatStep(s, MC_COCKPIT_TRIS - 1, true);
+    CHECK(!s.outside && s.misses == 0);
+    mcSeatStep(s, MC_NO_COCKPIT_TRIS, true);
+    CHECK(!s.outside && s.misses == 0);
+    mcSeatStep(s, MC_NO_COCKPIT_TRIS - 1, true);
     CHECK(!s.outside && s.misses == 1);
+    mcSeatStep(s, MC_NO_COCKPIT_TRIS, true);
+    CHECK(!s.outside && s.misses == 1);
+    // ... so frames with nothing need not follow each other, as long as the cockpit is not seen in between
+    for (int i = 0; i < MC_OUTSIDE_FRAMES - 1; ++i) mcSeatStep(s, 0, true), mcSeatStep(s, 10, true);
+    CHECK(s.outside);
 }
 
 static void testSheet() {
