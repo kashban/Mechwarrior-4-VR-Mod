@@ -1135,6 +1135,13 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
                 nr = 1;
             }
         }
+        {   // Esc was pressed a moment ago: the menu of a paused battle comes up. Its sheet fades in from nothing, and
+            // until it can be told (some frames) the menu's lines stood small in the far middle with the cross-hair, in
+            // wrong colours. No HUD for those moments; without a menu after them it is there again.
+            static unsigned esc = ~0u;
+            if (GetAsyncKeyState(VK_ESCAPE) & 0x8000) esc = g_frame;
+            if (esc != ~0u && g_frame - esc < 25 && !g_fadeMenu && !(g_fadeA > 0)) nr = 0;
+        }
         bool crossNow = g_crossShown && g_crossSc != XR_NULL_HANDLE && nr > 0 && !(g_fadeA > 0) && !g_fadeMenu;
         for (int i = 0; i < nr; ++i) {
             float u0 = rc[i][0], v0 = rc[i][1], u1 = rc[i][2], v1 = rc[i][3];
