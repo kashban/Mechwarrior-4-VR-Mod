@@ -974,7 +974,9 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
             g_vr.ReleaseSwapchainImage(g_vr.sc[e], &ri);
             g_vr.have[e] = true;
         }
-        if (bothNow) e2eFrame(ctx, g_eyeTex[0], g_eyeTex[1]); // a test run's line for this frame (e2e.inc)
+        // a test run's line for this frame (e2e.inc); one flat picture (a menu's screen) has no pair of eyes
+        if (bothNow) e2eFrame(ctx, g_eyeTex[0], g_eyeTex[1]);
+        else if (g_menuMode) e2eFrame(ctx, bb, nullptr);
         // diagnosis pictures (shot.inc): what went to the eyes just now, and the HUD layer's image
         shotFrame(ctx, bothNow ? g_eyeTex[0] : bb, bothNow ? g_eyeTex[1] : nullptr,
                   (g_hudLayerOn && g_hudTex && g_hudDrawnFrame == g_frame) ? g_hudTex : nullptr,

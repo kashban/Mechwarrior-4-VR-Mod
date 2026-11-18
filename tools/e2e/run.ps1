@@ -1,10 +1,11 @@
 # An end-to-end test of the mod in the game, without a headset on anybody's head:
 #   powershell -File tools\e2e\run.ps1 -Game <the game's folder> -Pilot <pilot> [-Mech 'Mad Cat'] [-Cockpit madcat]
-#       [-Runtime steamvr-null|active] [-Seconds 57] [-Yaw '7:0 10:45 14:45 17:0'] [-Shots '1 19.2 26 35 44'] [-KeepDll]
-#       [-Keys '19:LMB:0.4 20.5:LMB:0.4 23:W:5 33:V:0.1 37:V:0.1 37.5:V:0.1 38:V:0.1 42:ESC:0.1 46:ESC:0.1 48.5:CTRL:0.6 48.7:F7:0.1 50:CTRL:0.6 50.2:F11:0.1 53:CTRL:0.6 53.2:F11:0.1']
-#       [-Walk 23:31] [-Fire 19:22] [-Outside 33:38] [-Menu 42:46] [-Off 50.2:53.2]      (what the keys are to do, for the judge; the
+#       [-Runtime steamvr-null|active] [-Seconds 62] [-Yaw '7:0 10:45 14:45 17:0'] [-Shots '1 19.2 26 35 43 46'] [-KeepDll]
+#       [-Keys '19:LMB:0.4 20.5:LMB:0.4 23:W:5 33:V:0.1 37:V:0.1 37.5:V:0.1 38:V:0.1 42:ESC:0.1 43.5:MOVE:0.5,0.459 44:LMB:0.15 48:MOVE:0.835,0.767 48.5:LMB:0.15 51:ESC:0.1 53.5:CTRL:0.6 53.7:F7:0.1 55:CTRL:0.6 55.2:F11:0.1 58:CTRL:0.6 58.2:F11:0.1']
+#       [-Walk 23:31] [-Fire 19:22] [-Outside 33:38] [-Menu 42:44] [-Options 44:48.5] [-Off 55.2:58.2]      (what the keys are to do, for the judge; the
 #       view key steps through four views, three of them outside;
-#       '' leaves a check out. Ctrl+F7 at 48.7 s is a key for diagnosis that must do nothing: with it the eyes go off and the
+#       'none' leaves a check out. The two clicks (MOVE, LMB) open the options' screen from the paused battle's menu and
+#       close it; the pointer's places are measured for a window of 1300 x 1300 with its title bar. Ctrl+F7 at 53.7 s is a key for diagnosis that must do nothing: with it the eyes go off and the
 #       run ends short. The keys are the game's own defaults - another pilot's keys need another -Keys.)
 # What it does:
 #   1. puts mod\build\d3d11.dll into the game's folder (the one that was there comes back at the end);
@@ -22,15 +23,16 @@ param(
     [string]$Mech = 'Mad Cat',
     [string]$Cockpit = '',
     [ValidateSet('steamvr-null', 'active')][string]$Runtime = 'steamvr-null',
-    [int]$Seconds = 57,
+    [int]$Seconds = 62,
     [string]$Yaw = '7:0 10:45 14:45 17:0',
-    [string]$Shots = '1 19.2 26 35 44',
-    [string]$Keys = '19:LMB:0.4 20.5:LMB:0.4 23:W:5 33:V:0.1 37:V:0.1 37.5:V:0.1 38:V:0.1 42:ESC:0.1 46:ESC:0.1 48.5:CTRL:0.6 48.7:F7:0.1 50:CTRL:0.6 50.2:F11:0.1 53:CTRL:0.6 53.2:F11:0.1',
+    [string]$Shots = '1 19.2 26 35 43 46',
+    [string]$Keys = '19:LMB:0.4 20.5:LMB:0.4 23:W:5 33:V:0.1 37:V:0.1 37.5:V:0.1 38:V:0.1 42:ESC:0.1 43.5:MOVE:0.5,0.459 44:LMB:0.15 48:MOVE:0.835,0.767 48.5:LMB:0.15 51:ESC:0.1 53.5:CTRL:0.6 53.7:F7:0.1 55:CTRL:0.6 55.2:F11:0.1 58:CTRL:0.6 58.2:F11:0.1',
     [string]$Walk = '23:31',
     [string]$Fire = '19:22',
     [string]$Outside = '33:38',
-    [string]$Menu = '42:46',
-    [string]$Off = '50.2:53.2',
+    [string]$Menu = '42:44',
+    [string]$Options = '44:48.5',
+    [string]$Off = '55.2:58.2',
     [int]$TimeoutSec = 240,
     [switch]$KeepDll
 )
@@ -131,11 +133,12 @@ try {
         $a = @((Join-Path $PSScriptRoot 'judge.py'), (Join-Path $out 'mw4vr_e2e.csv'), (Join-Path $out 'mw4vr.log'), '--seconds', ($Seconds - 2))
         if ($Cockpit) { $a += @('--cockpit', $Cockpit) }
         if ($Keys) {
-            if ($Walk) { $a += @('--walk', $Walk) }
-            if ($Fire) { $a += @('--fire', $Fire) }
-            if ($Outside) { $a += @('--outside', $Outside) }
-            if ($Menu) { $a += @('--menu', $Menu) }
-            if ($Off) { $a += @('--off', $Off) }
+            if ($Walk -and $Walk -ne 'none') { $a += @('--walk', $Walk) }
+            if ($Fire -and $Fire -ne 'none') { $a += @('--fire', $Fire) }
+            if ($Outside -and $Outside -ne 'none') { $a += @('--outside', $Outside) }
+            if ($Menu -and $Menu -ne 'none') { $a += @('--menu', $Menu) }
+            if ($Off -and $Off -ne 'none') { $a += @('--off', $Off) }
+            if ($Options -and $Options -ne 'none') { $a += @('--options', $Options) }
         }
         & python @a | Tee-Object -FilePath (Join-Path $out 'verdict.txt')
         $code = $LASTEXITCODE

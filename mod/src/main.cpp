@@ -1239,12 +1239,6 @@ static int e2eCockpit(wchar_t *name, int n) {
     name[n - 1] = 0;
     return mw5Active() ? 1 : 0;
 }
-static void e2eState(int *v) {
-    static unsigned last;
-    v[0] = g_fadeMenu ? 1 : 0;
-    v[1] = (int)(g_m5AllDraws - last);
-    last = g_m5AllDraws;
-}
 static void e2ePass(int e, int *v) {
     bool now = g_m5PassFrame[e] == g_frame;
     v[0] = now ? g_m5PassDraws[e] : 0, v[1] = now ? g_m5PassOrd[e] : 0, v[2] = now ? g_m5PassCk[e] : 0;
@@ -1484,6 +1478,16 @@ static void hudSheetPost(ID3D11DeviceContext *c) {
              g_sheetN, g_frame);
     }
     if (g_sheetFrom < 0 || from < g_sheetFrom) g_sheetFrom = from;
+}
+
+static void e2eState(int *v) {
+    static unsigned last, lastFrame = ~0u;
+    static int hud;
+    v[0] = g_fadeMenu && !g_menuMode ? 1 : 0; // (a menu's own screen draws no HUD: the sheet's state is an old one there)
+    v[1] = (int)(g_m5AllDraws - last);
+    last = g_m5AllDraws;
+    if (g_sheetFrame != lastFrame) lastFrame = g_sheetFrame, hud = g_sheetN; // (counted in the frame before: this one's HUD is still to come)
+    v[2] = g_fadeMenu ? hud : 0;
 }
 
 template <int V> static void STDMETHODCALLTYPE HP_Draw(ID3D11DeviceContext *c, UINT a, UINT b) {

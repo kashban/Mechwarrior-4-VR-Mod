@@ -13,7 +13,7 @@ def frames(n=900, fps=60.0, own=1, cockpit='atlas', bright=80.0):
     out = []
     for i in range(n):
         out.append({'frame': 1000.0 + i, 'ms': i * 1000.0 / fps, 't': i / fps, 'seated': 1.0, 'own': float(own), 'yaw': 0.0,
-                    'left': bright, 'right': bright + 1, 'sx': 0.0, 'sy': 0.0, 'sz': 0.0, 'outside': 0.0, 'menu': 0.0, 'draws': 600.0,
+                    'left': bright, 'right': bright + 1, 'sx': 0.0, 'sy': 0.0, 'sz': 0.0, 'outside': 0.0, 'menu': 0.0, 'draws': 600.0, 'flat': 0.0,
                     'cockpit': cockpit})
     return out
 
@@ -90,6 +90,27 @@ class Acting(unittest.TestCase):
         failed = judge.judge(f, LOG, off=(12, 13))[1]  # it never came back
         self.assertEqual(len(failed), 1)
         self.assertIn('switched on again', failed[0])
+
+    def options_run(self, shown=True, black=False, back=True):
+        """the options' screen from second 8 to 10, then the paused battle's menu again until 13"""
+        f = frames()
+        for x in f:
+            if shown and 8.3 <= x['t'] <= 10.2:
+                x['flat'], x['seated'], x['left'] = 1.0, 0.0, (0.0 if black else 60.0)
+            elif back and 10.2 < x['t'] <= 13:
+                x['menu'] = 1.0
+        return judge.judge(f, LOG, options=(8, 10))[1]
+
+    def test_the_options_screen(self):
+        self.assertEqual(self.options_run(), [])
+        failed = self.options_run(shown=False)
+        self.assertTrue(any("options' screen is shown" in x for x in failed), failed)
+        failed = self.options_run(black=True)
+        self.assertEqual(len(failed), 1)
+        self.assertIn('not black', failed[0])
+        failed = self.options_run(back=False)
+        self.assertEqual(len(failed), 1)
+        self.assertIn('menu is back', failed[0])
 
     def test_windows(self):
         self.assertEqual(judge.window('13:18.5'), (13.0, 18.5))
