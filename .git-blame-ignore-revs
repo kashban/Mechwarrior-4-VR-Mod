@@ -1,0 +1,6 @@
+# Commits that only change the layout: git blame leaves them out with
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+# (GitHub reads this file by itself.)
+
+# the C++ of mod/ in clang-format's form
+4338fb2424741b236230354630831d72c0f52799
