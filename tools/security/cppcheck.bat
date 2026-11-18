@@ -1,6 +1,7 @@
 @echo off
 rem cppcheck on the mod's C++ (and the core's tests). The log goes to mod\build\analyze\cppcheck.log.
 rem CPPCHECK: the path of cppcheck.exe.
+rem Exit code: 1 when it names a finding of the severity "error", 0 otherwise.
 setlocal
 if not defined CPPCHECK echo set CPPCHECK to the path of cppcheck.exe & exit /b 1
 cd /d "%~dp0..\..\mod"
@@ -11,4 +12,5 @@ set COMMON=--platform=win32W --quiet --inline-suppr --suppress=missingIncludeSys
    src\main.cpp dinput\dinput.cpp ..\tests\core_test.cpp 2> build\analyze\cppcheck.log
 "%CPPCHECK%" %COMMON% %T% --enable=warning,portability src\vtidx.c 2>> build\analyze\cppcheck.log
 "%SystemRoot%\System32\find.exe" /c "[" build\analyze\cppcheck.log
+"%SystemRoot%\System32\findstr.exe" /c:"[error/" build\analyze\cppcheck.log && exit /b 1
 exit /b 0

@@ -15,13 +15,20 @@ import {
   dedupeParagraphs,
   defang,
   dropRetracted,
+  fromBot,
+  fromMaintainer,
   historyOf,
+  insideByName,
   parseEvent,
   requestBody,
   servers,
   serverTimings,
   timings,
 } from './ai-review.mjs';
+
+// who wrote a comment: the review's own are the bot's, verdicts count from somebody who may write to the repository
+const BOT = { user: { login: 'github-actions[bot]' } };
+const OWNER = { user: { login: 'owner' }, author_association: 'OWNER' };
 
 const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), 'ai-review.mjs');
 const DIFF_FILE = join(mkdtempSync(join(tmpdir(), 'ai-review-')), 'pr.diff');
@@ -135,7 +142,7 @@ async function mockGitHub(initialComments = []) {
     const one = req.url.match(/^\/repos\/o\/r\/issues\/comments\/(\d+)$/);
     if (list && req.method === 'GET') return res.end(JSON.stringify(comments));
     if (list && req.method === 'POST') {
-      comments.push({ id: comments.length + 100, body: body.body });
+      comments.push({ id: comments.length + 100, body: body.body, ...BOT });
       res.statusCode = 201;
       return res.end('{}');
     }
@@ -196,7 +203,7 @@ test('unreachable Ollama posts a visible skip notice and exits 0', async () => {
 test('busy GPU (no first token) skips fast, unloads, keeps the previous review', async () => {
   const ollama = await mockOllama('stall');
   const previous = '<!-- ai-review -->\n### 🤖 AI review (local `m`, commit old1234)\n\n- earlier finding';
-  const github = await mockGitHub([{ id: 1, body: previous }]);
+  const github = await mockGitHub([{ id: 1, body: previous, ...BOT }]);
   const started = Date.now();
   const { code } = await runScript({ OLLAMA_URL: ollama.url, GITHUB_API: github.url, FIRST_TOKEN_TIMEOUT_S: '1' });
   const elapsed = Date.now() - started;
@@ -276,7 +283,8 @@ test('a model that keeps crashing while loading is a skip after one retry', asyn
   assert.equal(code, 0);
   assert.equal(ollama.calls.chatRequests.length, 2);
   assert.equal(github.comments.length, 1);
-  assert.match(github.comments[0].body, /skipped.*llama-server process has terminated/);
+  assert.match(github.comments[0].body, /skipped.*returned HTTP 500/);
+  assert.doesNotMatch(github.comments[0].body, /llama-server|CUDA/); // (the server's own words stay out of the comment)
 });
 
 test('other server errors are not retried', async () => {
@@ -288,13 +296,14 @@ test('other server errors are not retried', async () => {
 
   assert.equal(code, 0);
   assert.equal(ollama.calls.chatRequests.length, 1);
-  assert.match(github.comments[0].body, /skipped.*something else broke/);
+  assert.match(github.comments[0].body, /skipped.*returned HTTP 500/);
+  assert.doesNotMatch(github.comments[0].body, /something else broke/);
 });
 
 test('a successful review replaces an earlier skip notice', async () => {
   const ollama = await mockOllama('stream');
   const skipped = '<!-- ai-review -->\n<!-- ai-review-notice -->\n> ⚠️ **AI review skipped for commit abc:** x.\n<!-- /ai-review-notice -->\n';
-  const github = await mockGitHub([{ id: 1, body: skipped }]);
+  const github = await mockGitHub([{ id: 1, body: skipped, ...BOT }]);
   const { code } = await runScript({ OLLAMA_URL: ollama.url, GITHUB_API: github.url });
   ollama.server.close();
   github.server.close();
@@ -545,7 +554,7 @@ test('a PR without application code changes gets a note instead of a review', as
   // Only a file mode change (chmod +x): no hunks, nothing for a model to read.
   writeFileSync(emptyDiff, 'diff --git a/services/bff/mvnw b/services/bff/mvnw\nold mode 100644\nnew mode 100755\n');
   const previous = '<!-- ai-review -->\n### 🤖 AI review (local `m`, commit old1234)\n\n- stale finding';
-  const github = await mockGitHub([{ id: 1, body: previous }]);
+  const github = await mockGitHub([{ id: 1, body: previous, ...BOT }]);
   const { code } = await runScript({ AI_REVIEW_DIFF_FILE: emptyDiff, OLLAMA_URL: 'http://127.0.0.1:1', GITHUB_API: github.url });
   github.server.close();
 
@@ -578,15 +587,44 @@ test('defang drops image URLs and raw HTML the model wrote, so a comment loads n
   assert.equal(
     defang(text),
     '- **a.ts** — leaks [image removed: token] and [image removed: x] and [image removed]\n' +
-      '- **b.ts** — &lt;img src="https://evil.example/y"> and &lt;/details> and &lt;!-- hidden -->',
+      '- **b.ts** — &lt;img src="`https://evil.example/y`"> and &lt;/details> and &lt;!-- hidden -->',
   );
 });
 
-test('defang leaves code, comparisons and plain links alone', () => {
+test('defang leaves code and comparisons alone', () => {
   const text =
-    '- `List<String>` vs `![a](b)` — `a < b` holds, see [docs](https://example.com)\n' +
-    '```ts\nconst x = <div>{![y](z)}</div>;\n```\nend';
+    '- `List<String>` vs `![a](b)` — `a < b` holds, see `[docs](https://example.com)` and `@someone`\n' +
+    '```ts\nconst x = <div>{![y](z)}</div>; // https://example.com @someone\n```\nend';
   assert.equal(defang(text), text);
+});
+
+test('defang takes the address off links, makes bare addresses code and lets an @name notify nobody', () => {
+  assert.equal(
+    defang('see [the docs](https://evil.example/a?b=c) or https://evil.example/x, says @octocat (mail a@b.c)'),
+    'see the docs [link removed] or `https://evil.example/x`, says @\u200boctocat (mail a@\u200bb.c)',
+  );
+});
+
+test('insideByName refuses what leaves the checkout', () => {
+  for (const ok of ['a.ts', 'mod/src/main.cpp', 'docs/a b.md', '.github/workflows/ci.yml']) assert.equal(insideByName(ok), true, ok);
+  for (const bad of ['', '/etc/passwd', '../x', 'a/../../x', 'a\\..\\x', 'C:/Windows/win.ini', 'c:x', '\\\\host\\share\\x', 'a\0b']) {
+    assert.equal(insideByName(bad), false, bad);
+  }
+});
+
+test('changedPaths drops a header that names a file outside the checkout', () => {
+  const diff = ['+++ b/a.ts', '+++ b/../../secrets.txt', '+++ b//etc/passwd', '+++ b/C:/Windows/key'].join('\n');
+  assert.deepEqual(changedPaths(diff), ['a.ts']);
+});
+
+test('only the bot\'s own comment is the last review, only a maintainer\'s verdicts count', () => {
+  const stranger = { user: { login: 'somebody' }, author_association: 'NONE' };
+  assert.equal(historyOf([{ body: LAST_REVIEW, ...stranger }, { body: VERDICT, ...stranger }]), '');
+  assert.equal(fromBot({ user: { login: 'github-actions[bot]' } }), true);
+  assert.equal(fromBot({ user: { login: 'github-actions' } }), false);
+  assert.equal(fromBot({}), false);
+  for (const who of ['OWNER', 'MEMBER', 'COLLABORATOR']) assert.equal(fromMaintainer({ author_association: who }), true);
+  for (const who of ['CONTRIBUTOR', 'FIRST_TIME_CONTRIBUTOR', 'NONE', undefined]) assert.equal(fromMaintainer({ author_association: who }), false);
 });
 
 const LAST_REVIEW = [
@@ -605,7 +643,7 @@ const VERDICT = [
 ].join('\n');
 
 test('historyOf gives the last review and the verdicts, without markers and footer', () => {
-  const history = historyOf([{ body: 'a person' }, { body: LAST_REVIEW }, { body: VERDICT }]);
+  const history = historyOf([{ body: 'a person' }, { body: LAST_REVIEW, ...BOT }, { body: VERDICT, ...OWNER }]);
   assert.match(history, /^### 🤖 AI review \(local `m`, commit aaa1111\) — the last review/);
   assert.match(history, /maxlength unchecked/);
   assert.match(history, /\*\*false\*\* — "maxlength unchecked": V29 has VARCHAR\(1000\)/);
@@ -614,11 +652,11 @@ test('historyOf gives the last review and the verdicts, without markers and foot
 
 test('historyOf leaves out skip notices and "nothing to review", and drops the oldest verdicts first', () => {
   const skip = '<!-- ai-review -->\n<!-- ai-review-notice -->\n> ⚠️ skipped\n<!-- /ai-review-notice -->\n';
-  assert.equal(historyOf([{ body: skip }]), '');
+  assert.equal(historyOf([{ body: skip, ...BOT }]), '');
   const nothing = '<!-- ai-review -->\n### 🤖 AI review (commit a)\n\nNo application code changed, nothing to review.';
-  assert.equal(historyOf([{ body: nothing }]), '');
+  assert.equal(historyOf([{ body: nothing, ...BOT }]), '');
   const old = `<!-- ai-review-verdicts -->\n### AI review verdicts (commit old)\n- **real** — ${'x'.repeat(200)}`;
-  const kept = historyOf([{ body: old }, { body: VERDICT }], VERDICT.length + 10);
+  const kept = historyOf([{ body: old, ...OWNER }, { body: VERDICT, ...OWNER }], VERDICT.length + 10);
   assert.doesNotMatch(kept, /commit old/);
   assert.match(kept, /commit aaa1111/);
 });
@@ -632,7 +670,7 @@ test('buildMessages puts the earlier reviews before the diff', () => {
 
 test('a later push sends the last review and its verdicts to the model', async () => {
   const ollama = await mockOllama('stream');
-  const github = await mockGitHub([{ id: 1, body: LAST_REVIEW }, { id: 2, body: VERDICT }]);
+  const github = await mockGitHub([{ id: 1, body: LAST_REVIEW, ...BOT }, { id: 2, body: VERDICT, ...OWNER }]);
   const { code, out } = await runScript({ OLLAMA_URL: ollama.url, GITHUB_API: github.url });
   ollama.server.close();
   github.server.close();

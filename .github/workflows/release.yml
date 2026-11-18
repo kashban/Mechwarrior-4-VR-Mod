@@ -20,9 +20,10 @@ jobs:
     runs-on: windows-2025
     timeout-minutes: 40
     env:
-      GH_TOKEN: ${{ github.token }}
       TAG: ${{ github.ref_name }}
       TREES: build-data-trees-2 # a release of this repository holding trees.zip: build_trees.py's output (Poly Haven, CC0)
+      # trees.zip's SHA-256: a release's file can be replaced, so the one the package is built with is named here
+      TREES_SHA256: f66557498a6e6d317c2ad97e11d09daa08516f64aa3621c5359b7c3814af9ff8
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: The tag is the version the mod logs
@@ -46,10 +47,20 @@ jobs:
         run: python -c "import sys; sys.path.insert(0, 'tests'); import test_shaders; sys.exit(0 if test_shaders.FXC else 'no fxc.exe on the runner')"
       - name: The trees
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }} # (the token only where gh is called: not for the build, the tests, pip)
         run: |
           gh release download $env:TREES --repo $env:GITHUB_REPOSITORY --pattern trees.zip --dir $env:RUNNER_TEMP
+          $got = (Get-FileHash (Join-Path $env:RUNNER_TEMP 'trees.zip') -Algorithm SHA256).Hash.ToLower()
+          if ($got -ne $env:TREES_SHA256) { throw "trees.zip is not the file named here: SHA-256 $got" }
           Expand-Archive (Join-Path $env:RUNNER_TEMP 'trees.zip') (Join-Path $env:RUNNER_TEMP 'trees')
           if (-not (Test-Path (Join-Path $env:RUNNER_TEMP 'trees/clutter_trees.txt'))) { throw 'trees.zip holds no clutter_trees.txt' }
+      - name: BinSkim on the DLLs (pinned, checksum-verified) - no release with an error
+        shell: pwsh
+        run: |
+          $env:BINSKIM = & tools\security\get_binskim.ps1
+          cmd /c tools\security\binskim.bat
+          if ($LASTEXITCODE -ne 0) { exit 1 }
       - name: Build, all tests, package
         shell: pwsh
         run: |
@@ -60,6 +71,8 @@ jobs:
           }
       - name: Pre-release with the commit's message as notes
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           $zip = "release/MW4VR-$env:TAG.zip"
           if (-not (Test-Path $zip)) { throw "$zip was not made" }

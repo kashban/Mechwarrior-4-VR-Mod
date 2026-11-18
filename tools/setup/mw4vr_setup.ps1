@@ -604,14 +604,18 @@ $bGo.Add_Click({
     $script:JobOut = Join-Path $env:TEMP 'mw4vr_setup_cockpits.txt'
     Set-Content $script:JobOut '' -Encoding UTF8
     $script:JobPos = 0
-    $a = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$(Join-Path $script:Pkg 'mw4vr_setup_cockpits.ps1')`"",
-        '-Tools', "`"$(Join-Path $script:Pkg 'cockpit_tools')`"", '-Paks', "`"$($tPaks.Text.Trim())`"", '-Umodel', "`"$($tUm.Text.Trim())`"",
-        '-Game', "`"$g`"", '-Python', "`"$($script:Py.Exe)`"", '-Log', "`"$($script:JobOut)`"")
+    # Each path between quotes. One typed with a \ at its end ("...\Paks\") would end in \" - which the program
+    # started reads as a quote inside the argument, so that the arguments ran together: its last backslashes doubled.
+    function Quote-Arg([string]$s) { '"' + ($s -replace '(\\+)$', '$1$1') + '"' }
+    $a = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Quote-Arg (Join-Path $script:Pkg 'mw4vr_setup_cockpits.ps1')),
+        '-Tools', (Quote-Arg (Join-Path $script:Pkg 'cockpit_tools')), '-Paks', (Quote-Arg $tPaks.Text.Trim()), '-Umodel', (Quote-Arg $tUm.Text.Trim()),
+        '-Game', (Quote-Arg $g), '-Python', (Quote-Arg $script:Py.Exe), '-Log', (Quote-Arg $script:JobOut))
     if ($script:Py.Arg) { $a += @('-PythonArg', $script:Py.Arg) }
     if (-not $script:PyMods) { $a += '-Pip' }
     if ($cKeep.Checked) { $a += '-DeleteExport' }
-    if ($cMods.Checked -and $script:ModsDir) { $a += @('-Mods', "`"$($script:ModsDir)`"") }
-    $script:Job = Start-Process powershell -ArgumentList $a -WindowStyle Hidden -PassThru
+    if ($cMods.Checked -and $script:ModsDir) { $a += @('-Mods', (Quote-Arg $script:ModsDir)) }
+    # (Windows' own PowerShell by its full path, not whatever is called powershell in the folder the setup runs in)
+    $script:Job = Start-Process (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') -ArgumentList $a -WindowStyle Hidden -PassThru
     $timer.Start()
 })
 

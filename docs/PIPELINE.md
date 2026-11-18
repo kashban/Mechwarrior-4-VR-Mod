@@ -4,7 +4,7 @@ Five workflows on GitHub Actions (`.github/workflows`). What a workflow checks, 
 
 | Workflow | When | What it does |
 |---|---|---|
-| **CI** (`ci.yml`) | every push to `main`, every pull request | builds the DLLs, runs all tests, holds the coverage gate, puts the package together, runs the guards and the SAST scan |
+| **CI** (`ci.yml`) | every push to `main`, every pull request | builds the DLLs, runs all tests, holds the coverage gate, puts the package together, runs the guards, the SAST scan and the security checks (`docs/security-check.md`) |
 | **Mutation tests** (`mutation.yml`) | every night after a day with commits; pull requests that touch `core.h`, the converter or their tests; by hand | plants errors into `core.h` and the converter and fails when a test does not notice one |
 | **AI review** (`ai-review.yml`) | pull requests from the repository itself, once switched on | a local model reads the diff and writes its findings as a comment; advisory, never fails |
 | **Release** (`release.yml`) | a tag `v<version>` | checks the tag against the version the mod logs, builds, tests, packages with the trees, makes the pre-release |
@@ -25,6 +25,10 @@ Five workflows on GitHub Actions (`.github/workflows`). What a workflow checks, 
 | No secrets in the code or its history (gitleaks) | CI | `gitleaks git --redact .` |
 | No known vulnerabilities in the converter's libraries (pip-audit) | CI | `pip-audit -r requirements.txt` |
 | SAST (Semgrep: Python, the workflows) | CI | `semgrep scan --error --config p/python --config p/security-audit --config p/github-actions tools tests docs .github` |
+| The DLLs' hardening (BinSkim, pinned and checksum-verified) | CI, Release | `tools\securityinskim.bat` - an error fails; warnings are listed |
+| The scripts (bandit: Python; PSScriptAnalyzer: PowerShell) | CI | `tools\security\scripts.ps1` - bandit's medium or high findings and the analyser's errors fail |
+| cppcheck on the mod's C++ | CI | a finding of the severity "error" fails |
+| The compiler's analyser (`cl /analyze`) | CI | `tools\securitynalyze.bat` - a report in the run's `security-logs`, no gate |
 | The AI review's script works (mock model server, mock GitHub) | CI | `node --test tools/ci/ai-review.test.mjs` |
 | The tag is the version the mod logs | Release | - |
 | Newer actions and libraries arrive as pull requests (Dependabot) | weekly | - |

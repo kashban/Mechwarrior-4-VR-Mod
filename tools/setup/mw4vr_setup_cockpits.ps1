@@ -14,11 +14,12 @@ $export = Join-Path $Game 'mw4vr_export'
 $out = Join-Path $Game 'mw4vr_cockpits'
 
 if ($Pip) {
-    Say 'Installing the Python packages numpy and Pillow ...'
-    if ((Run $Python ($py + @('-m', 'pip', 'install', '--user', 'numpy', 'pillow'))) -ne 0) { Say 'pip failed.'; exit 1 }
+    # (within the versions the converter was run with: not whatever is newest on the day)
+    Say 'Installing the Python packages numpy (1.24 to 2.x) and Pillow (9 to 13) ...'
+    if ((Run $Python ($py + @('-m', 'pip', 'install', '--user', 'numpy>=1.24,<3', 'pillow>=9,<14'))) -ne 0) { Say 'pip failed.'; exit 1 }
 }
 Say 'Exporting the cockpits from MechWarrior 5 (about 2 GB) ...'
-$code = Run 'powershell' (@('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $Tools 'export_cockpits.ps1'), '-Paks', $Paks, '-Out', $export, '-Umodel', $Umodel) + $(if ($Mods) { @('-Mods', $Mods) } else { @() }))
+$code = Run (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') (@('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $Tools 'export_cockpits.ps1'), '-Paks', $Paks, '-Out', $export, '-Umodel', $Umodel) + $(if ($Mods) { @('-Mods', $Mods) } else { @() }))
 if ($code -ne 0 -or -not (Test-Path (Join-Path $export 'cockpits.txt'))) { Say 'The export failed.'; exit 2 }
 Say 'Converting the cockpits (about 4 GB) ...'
 if ((Run $Python ($py + @((Join-Path $Tools 'convert_all.py'), $export, $out))) -ne 0) { Say 'The conversion failed.'; exit 3 }

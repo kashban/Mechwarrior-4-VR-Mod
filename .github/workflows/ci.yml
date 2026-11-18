@@ -53,6 +53,62 @@ jobs:
           path: release/*.zip
           retention-days: 14
 
+  security:
+    name: Security checks (analyser, BinSkim, bandit, PSScriptAnalyzer)
+    runs-on: windows-2025
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - name: Install bandit
+        run: python -m pip install -r requirements-ci.txt
+      - name: Visual Studio's x86 compiler
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
+        with:
+          arch: x86
+      - name: The compiler's analyser (a report - kept below, no gate)
+        shell: cmd
+        run: tools\security\analyze.bat
+      - name: BinSkim on the DLLs (pinned, checksum-verified) - fails on an error
+        shell: pwsh
+        run: |
+          $env:BINSKIM = & tools\security\get_binskim.ps1
+          cmd /c tools\security\binskim.bat
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+      - name: bandit and PSScriptAnalyzer on the scripts - fail on medium or high, on errors
+        shell: pwsh
+        run: tools\security\scripts.ps1
+      - name: Keep the logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: security-logs
+          path: |
+            mod/build/analyze/*.log
+            mod/build/analyze/*.sarif
+          retention-days: 14
+
+  cppcheck:
+    name: cppcheck on the mod's C++
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install cppcheck (the distribution's package)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq cppcheck
+      - name: Check (fails on a finding of the severity "error")
+        run: |
+          common="--platform=win32W --quiet --inline-suppr --suppress=missingIncludeSystem -D_WIN32 -D_MSC_VER=1940 -D_M_IX86"
+          cppcheck $common "--template={file}:{line}: [{severity}/{id}] {message}" --enable=warning,portability,performance \
+            --std=c++17 --language=c++ -Imod/include mod/src/main.cpp mod/dinput/dinput.cpp tests/core_test.cpp 2> cppcheck.log
+          cppcheck $common "--template={file}:{line}: [{severity}/{id}] {message}" --enable=warning,portability mod/src/vtidx.c 2>> cppcheck.log
+          echo "$(grep -c '\[' cppcheck.log || true) messages"
+          if grep -F '[error/' cppcheck.log; then exit 1; fi
+
   guards:
     name: Guards (foreign assets, private data, secrets, dependencies)
     runs-on: ubuntu-24.04

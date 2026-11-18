@@ -38,7 +38,9 @@ jobs:
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "MW4VR-$TAG.zip"
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body > notes.md
           want=$(sed -n 's/.*SHA-256 of the package: `\([0-9a-f]\{64\}\)`.*/\1/p' notes.md)
-          if [ -n "$want" ]; then echo "$want  MW4VR-$TAG.zip" | sha256sum -c -; fi
+          # (no hash in the notes: not published - a package nobody can hold against what the pipeline built)
+          if [ -z "$want" ]; then echo "the release's notes name no SHA-256 of the package"; exit 1; fi
+          echo "$want  MW4VR-$TAG.zip" | sha256sum -c -
           # the changes alone, as plain text, for the other sites
           grep -v 'SHA-256 of the package' notes.md | sed '1{/^$/d}' > changes.txt
           { echo 'changes<<END_OF_CHANGES'; cat changes.txt; echo 'END_OF_CHANGES'; } >> "$GITHUB_OUTPUT"

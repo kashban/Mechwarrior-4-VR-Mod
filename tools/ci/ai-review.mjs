@@ -30,7 +30,8 @@
 //      REPO, PR_NUMBER, GITHUB_TOKEN.
 // The functions are exported for the tests (tools/ci/ai-review.test.mjs).
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, statSync, lstatSync, realpathSync } from 'node:fs';
+import { sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const BASE_REF = process.env.BASE_REF || 'main';
@@ -183,7 +184,9 @@ export function dropRetracted(text) {
 /**
  * Makes the model's answer inert before it goes into a PR comment: a code change could talk the model into writing
  * an image whose URL carries data off (GitHub loads images when the page is shown) or raw HTML. Images lose their URL
- * and keep their alt text, and `<` outside code starts no tag. Code spans and fenced blocks stay as they are.
+ * and keep their alt text, and `<` outside code starts no tag. A link keeps its text and loses its address, a bare
+ * address becomes code (nobody is sent anywhere by a click), and an @name notifies nobody (a zero-width space after
+ * the @). Code spans and fenced blocks stay as they are.
  */
 export function defang(text) {
   return text
@@ -193,6 +196,9 @@ export function defang(text) {
         ? part
         : part
             .replace(/!\[([^\]]*)\](\([^)]*\)|\[[^\]]*\])?/g, (_, alt) => `[image removed${alt ? `: ${alt}` : ''}]`)
+            .replace(/\[([^\]]*)\]\([^)]*\)/g, (_, label) => `${label} [link removed]`)
+            .replace(/\bhttps?:\/\/[^\s<>)\]"'`]+/g, (url) => url.replace(/^(.*?)([.,;:!?]*)$/, '`$1`$2'))
+            .replace(/@(?=[A-Za-z0-9])/g, '@\u200b')
             .replace(/<(?=[a-zA-Z/!?])/g, '&lt;'),
     )
     .join('');
@@ -216,15 +222,38 @@ function prDiff() {
   return diff;
 }
 
-// Paths of files that exist after the change, taken from the diff headers.
+/**
+ * A path as a diff may name it: inside the checkout by its looks - not absolute, no drive, no `..` step. (A line of
+ * a reviewed file that reads like a diff header named a file anywhere on the runner's disk.)
+ */
+export function insideByName(path) {
+  if (!path || path.startsWith('/') || path.startsWith('\\') || /^[A-Za-z]:/.test(path) || path.includes('\0')) return false;
+  return !path.split(/[\\/]/).includes('..');
+}
+
+// Paths of files that exist after the change, taken from the diff headers. (For a fixed diff of the tests; the
+// working tree's are asked of git, changedFiles.)
 export function changedPaths(diff) {
   const paths = [];
   for (const match of diff.matchAll(/^\+\+\+ b\/(.+)$/gm)) paths.push(match[1].trim());
-  return paths;
+  return paths.filter(insideByName);
 }
 
-function readText(path) {
-  if (!existsSync(path) || !statSync(path).isFile()) return null;
+// The files the branch changes, as git names them - not as text inside the diff does.
+function changedFiles() {
+  const exclude = [':(exclude)**/package-lock.json', ':(exclude)**/*.lock'];
+  return git('diff', '--name-only', '-z', '--diff-filter=d', `origin/${BASE_REF}...HEAD`, '--', ...REVIEW_PATHS, ...exclude)
+    .split('\0')
+    .filter(insideByName);
+}
+
+// A file's text, if it is a plain file inside the checkout: no link, and its real place under the folder's.
+function readText(path, root = process.cwd()) {
+  if (!insideByName(path) || !existsSync(path)) return null;
+  if (lstatSync(path).isSymbolicLink() || !statSync(path).isFile()) return null;
+  const real = realpathSync(path);
+  const base = realpathSync(root);
+  if (real !== base && !real.startsWith(base + sep)) return null;
   const text = readFileSync(path, 'utf8');
   return text.includes('\0') ? null : text;
 }
@@ -261,9 +290,14 @@ export function fileBudget(diff, guide, history = '') {
  * review") and the verdicts on earlier reviews, oldest first. Over `max` characters the oldest verdicts go first, then
  * the last review. '' when there is nothing.
  */
+// The review's own comment: the marker alone is not enough, anybody may write it on a public repository.
+export const fromBot = (c) => c.user?.login === 'github-actions[bot]';
+// A comment of somebody who may write to the repository: only their verdicts are the author's word.
+export const fromMaintainer = (c) => ['OWNER', 'MEMBER', 'COLLABORATOR'].includes(c.author_association);
+
 export function historyOf(comments, max = MAX_HISTORY_CHARS) {
   const parts = [];
-  const last = comments.filter((c) => c.body.includes(MARKER)).at(-1);
+  const last = comments.filter((c) => c.body.includes(MARKER) && fromBot(c)).at(-1);
   if (last) {
     const findings = stripNotice(last.body)
       .replace(MARKER, '')
@@ -274,7 +308,7 @@ export function historyOf(comments, max = MAX_HISTORY_CHARS) {
     }
   }
   const verdicts = comments
-    .filter((c) => c.body.includes(VERDICTS))
+    .filter((c) => c.body.includes(VERDICTS) && fromMaintainer(c))
     .map((c) => c.body.replace(VERDICTS, '').trim());
   const fits = () => [...parts, ...verdicts].join('\n\n').length <= max;
   while (verdicts.length && !fits()) verdicts.shift();
@@ -424,7 +458,8 @@ async function reviewOnce(messages, model, think, numPredict, server) {
     });
     if (!res.ok) {
       const text = await res.text();
-      const message = `${label(server)} returned HTTP ${res.status}: ${text}`;
+      // (the status alone: the server's own text may name its hosts and paths, and this message can end in a comment)
+      const message = `${label(server)} returned HTTP ${res.status}`;
       throw res.status === 500 && LOAD_FAILURE.test(text) ? new ModelLoadFailed(message) : new Error(message);
     }
 
@@ -442,7 +477,7 @@ async function reviewOnce(messages, model, think, numPredict, server) {
         const event = parseEvent(buffer.slice(0, newline).trim(), api);
         buffer = buffer.slice(newline + 1);
         if (!event) continue;
-        if (event.error) throw new Error(`${label(server)}: ${event.error.message ?? event.error}`);
+        if (event.error) throw new Error(`${label(server)} reported an error while answering`);
         if (api === 'openai') {
           content += event.choices?.[0]?.delta?.content ?? '';
           if (event.timings) console.log(`::notice::${serverTimings(model, event.timings)}`);
@@ -517,7 +552,7 @@ const canPost = () => Boolean(process.env.GITHUB_TOKEN && process.env.PR_NUMBER)
 
 async function existingComment() {
   const comments = await github(`/issues/${process.env.PR_NUMBER}/comments?per_page=100`);
-  return comments.find((c) => c.body.includes(MARKER));
+  return comments.find((c) => c.body.includes(MARKER) && fromBot(c));
 }
 
 async function upsertComment(body) {
@@ -572,7 +607,8 @@ async function main() {
       ? historyOf(await github(`/issues/${process.env.PR_NUMBER}/comments?per_page=100`))
       : '';
     if (history) console.log(`::notice::Earlier reviews and verdicts in the prompt: ${history.length} characters`);
-    const { files, skipped } = collectFiles(changedPaths(diff), readText, fileBudget(diff, guide, history));
+    const names = process.env.AI_REVIEW_DIFF_FILE ? changedPaths(diff) : changedFiles();
+    const { files, skipped } = collectFiles(names, readText, fileBudget(diff, guide, history));
     messages = buildMessages({ diff, files, skipped, guide, history });
   } catch (err) {
     await reportSkip(`review failed (${err.message})`, sha);

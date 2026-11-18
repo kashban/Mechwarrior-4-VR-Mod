@@ -1,6 +1,32 @@
 # Security check of the mod's code
 
-State: v11.59 (`cc3f5b0`), branch `security-check`. Findings only - nothing in `mod/` was changed.
+The findings below are of v11.59 (`cc3f5b0`). **All of them are dealt with in v11.70** - what was done is in the
+table; the text of each finding stays as it was found.
+
+| | Finding | Done in v11.70 |
+|---|---|---|
+| S1 | a monitor's number below zero reads outside a table | the number is parsed in `core.h` (`mcScreen`): 0 .. monitors - 1 only; tests |
+| S2 | a cockpit's name goes into paths as it is | `mcNameOk` refuses separators, a colon, two dots and what a file's name cannot hold, wherever a name comes in; tests |
+| S3 | a cockpit file can exhaust the process | lower limits for a part and 640 MB for a file (`mcGroupBytes`), `bad_alloc` caught in the loader, a failed file's parts freed; tests |
+| S4 | no Control Flow Guard, no `/sdl` | both on (`mod/build.bat`); the 23 uses of the C library's unchecked functions are replaced. BinSkim names no error |
+| T1 | `powershell` by its name only | the full path in the two `.cmd` and the two scripts |
+| T2 | Python packages without a version | `numpy>=1.24,<3`, `pillow>=9,<14` |
+| T3 | arguments quoted by hand | a path's last backslashes are doubled before the closing quote (`Quote-Arg`) |
+| T4 | AI review: file names from any line of the diff | the names come from `git diff --name-only -z`; `insideByName` and a check of the real path before a file is read; tests |
+| T5 | AI review: comments count whoever wrote them | the last review only from `github-actions[bot]`, verdicts only from OWNER / MEMBER / COLLABORATOR; tests |
+| T6 | the server's error text in the comment | the status code alone |
+| T6 | links and @mentions in the model's answer | a link loses its address, a bare address becomes code, an @name notifies nobody; tests |
+| T6 | the write token in every step of the release | only on the two steps that call `gh` |
+| T6 | the package's hash compared only if the notes hold one | Publish fails without one |
+| T6 | `trees.zip` without a hash | its SHA-256 is in `release.yml` |
+| T6 | Poly Haven: redirect, size only | a redirect only to https, the site's checksum compared |
+| T6 | `convert_all.py`: the mech's name into a path | names that are not a file's name are refused |
+
+Not changed, as said below: the runner on the developer's PC (fine while the owner is the only one who can push),
+`LoadLibraryW` from `DllMain`, the game's path in the log.
+
+The checks run in the pipeline now (`docs/PIPELINE.md`): the compiler's analyser as a report, BinSkim as a gate of
+CI and of the release, bandit and PSScriptAnalyzer as gates (medium or high, errors), cppcheck as a gate (errors).
 
 ## What was run
 
@@ -210,8 +236,7 @@ them itself, `mw5.inc:950`, and Direct3D defines a draw with an index outside th
 
 ## Next
 
-1. Fix S1 - S3 with a test each (the loader's checks moved to `core.h`, where the tests reach them).
-2. S4: switch on, measure the frame time.
-3. T1 - T3 in the installer and the start script.
-4. The four scripts here as a job of the pipeline (BinSkim as a gate of the release).
-5. Fuzzing of the cockpit loader after the refactoring's step 3.
+1. S4's cost: the frame time with `/sdl` and Control Flow Guard against v11.69 (not measured yet; Control Flow
+   Guard checks nothing inside the game, whose `.exe` is built without it).
+2. Fuzzing of the cockpit loader, once it can be called without the game (the refactoring's step 3).
+3. clang-tidy (`tools/security/tidy.bat`) is not in the pipeline: its messages are style, for the style work.

@@ -21,6 +21,11 @@ def main(argv):
     done = failed = 0
     for mech, path, *own in rows:
         name = mech.lower()
+        # (the name becomes a file's name in the out folder: a list made by hand could leave it)
+        if not name or name in ('.', '..') or any(c in name for c in '\\/:*?"<>|') or '..' in name:
+            failed += 1
+            print('%-16s FAILED: not a file name' % name)
+            continue
         target = os.path.join(out, name + '.mwc')
         if (only and name not in only) or os.path.exists(target):
             continue
