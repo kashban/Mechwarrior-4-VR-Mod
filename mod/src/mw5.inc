@@ -595,6 +595,9 @@ static void mw5HudCopy(ID3D11DeviceContext *c, ID3D11Texture2D *hud) {
 static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw, bool gameCockpit) {
     int e = g_camPassEye;
     if (e < 0 || e > 1 || !g_camInMain || !g_kTlOnly || mw5Waiting()) return;
+    static unsigned done[2] = {~0u, ~0u}; // the frame ours was drawn in for this eye
+    static int others[2], again[2];       // CPU-path draws not of the game's cockpit since then; times ours was drawn again
+    if (done[e] == g_frame && !gameCockpit) ++others[e];
     // Where in the pass? Where the game draws its own cockpit: it puts that in the right place among its other
     // draws, and a CPU-path draw that comes earlier in some frames is not taken for it. (It is the pass's first
     // CPU-path draw as a rule - the log of a test.) The first CPU-path draw only while no cockpit of the game's
@@ -616,8 +619,22 @@ static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw, bool gameCockpi
             return;
         }
     }
-    static unsigned done[2] = {~0u, ~0u};
-    if (done[e] == g_frame) return;
+    // Once a pass - or again: in some frames the game draws a first part of its cockpit, then other things on the CPU
+    // path (17 draws, measured in a test run; they cover the whole picture), and only then its cockpit. Ours, drawn
+    // at the first of them, was painted over: one eye showed the world without a cockpit for a frame. So when the
+    // game's cockpit comes again after other CPU-path draws, ours is drawn again there (same depths: it passes).
+    if (done[e] == g_frame) {
+        if (!gameCockpit || !others[e] || again[e] >= 2) return;
+        ++again[e];
+        static int toldAgain;
+        if (toldAgain < 6) {
+            ++toldAgain;
+            logf("mw5: frame %u, eye %d: the game's cockpit comes again after %d other CPU-path draws - ours is drawn again", g_frame, e, others[e]);
+        }
+    } else {
+        again[e] = 0;
+    }
+    others[e] = 0;
     { // a small camera (the target's view) drawn inside the main camera's pass: not there
         D3D11_VIEWPORT vp[1] = {};
         UINT nvp = 1;
