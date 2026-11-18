@@ -1235,7 +1235,7 @@ static void updateCommon(ID3D11Resource *r, const D3D11_BOX *box, const void *&s
 #include "mw5.inc"
 
 static int e2eCockpit(wchar_t *name, int n) {
-    wcsncpy(name, g_mw5Name, n - 1);
+    wcsncpy_s(name, (size_t)n, g_mw5Name, _TRUNCATE);
     name[n - 1] = 0;
     return mw5Active() ? 1 : 0;
 }

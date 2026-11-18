@@ -677,7 +677,7 @@ static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw, int ckTris) {
             char s[1600] = "";
             for (int i = 0; i < trDraws[e] && i < 32; ++i) {
                 const M5Seq &q = seq[e][i];
-                sprintf(s + strlen(s), " [%u ck%d rt%04x w%d%s]", q.at - seq[e][0].at, q.ck, (unsigned)((uintptr_t)q.rtv & 0xffff), q.vpW, q.ours ? " OURS" : "");
+                snprintf(s + strlen(s), sizeof s - strlen(s), " [%u ck%d rt%04x w%d%s]", q.at - seq[e][0].at, q.ck, (unsigned)((uintptr_t)q.rtv & 0xffff), q.vpW, q.ours ? " OURS" : "");
             }
             logf("mw5: frame %u, eye %d: %d CPU-path draws in the pass (draw of the frame, counted from the first; cockpit triangles; target; viewport):%s",
                  trFrame[e], e, trDraws[e], s);
