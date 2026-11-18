@@ -70,6 +70,7 @@ Ctrl+Alt keys below.
 | Ctrl+Alt+7 | all floating parts back to their automatic places (in the cockpit's windows; without a cockpit of our own: their row) |
 | Ctrl+Alt+9 | this cockpit's monitors off / on (off: all of the HUD on the glass) |
 | Ctrl+Alt+Shift+9 | the chosen part leaves its monitor and goes onto the glass |
+| Ctrl+Alt+Shift+8 | all parts together (the game's cockpits, the view from outside): then Ctrl+Alt+Shift + arrows, PgUp / PgDn, Ins / Del change them all at once |
 | Ctrl+Alt+Shift+1 … 6 | choose a part (it gets a yellow frame for some seconds); then Ctrl+Alt+Shift + arrows move it, PgUp / PgDn size it, Ins / Del put it farther / nearer, 0 hides it. A part on a monitor: arrows move what the monitor shows of the HUD, PgUp / PgDn nearer / more, Ins / Del longer / shorter, Home / End turn the picture left / right |
 | Ctrl+Alt+arrows, PgUp / PgDn | eye position in the cockpit mesh, its size (remembered per cockpit) |
 | Ctrl+Ins / Del | the cockpit's size (with Shift: the world's) |

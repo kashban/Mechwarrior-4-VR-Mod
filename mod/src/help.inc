@@ -34,6 +34,7 @@ static const HelpLine g_helpText[] = {
     {L"      PgUp / PgDn", L"larger / smaller"},
     {L"      Ins / Del", L"farther / nearer"},
     {L"      0", L"hide it"},
+    {L"Ctrl+Alt+Shift+8", L"all parts together (no cockpit of ours): then the same keys"},
     {L"Ctrl+Alt+7", L"all parts back to their automatic places"},
     {nullptr, L"MechWarrior 5 cockpits"},
     {L"Ctrl+F11", L"the cockpits on / off"},

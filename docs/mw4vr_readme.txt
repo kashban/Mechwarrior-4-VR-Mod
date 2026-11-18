@@ -81,6 +81,8 @@ The HUD's parts: 1 radar, 2 target, 3 damage, 4 lance list, 5 weapons, 6 top str
       PgUp / PgDn              larger / smaller
       Ins / Del                farther / nearer
       0                        hide it
+  Ctrl+Alt+Shift+8             all parts together (the game's cockpits, the view from outside):
+                               then arrows, PgUp / PgDn, Ins / Del change them all at once
   Ctrl+Alt+7                   all parts back to their automatic places
   The part the keys change has a yellow frame for some seconds.
 
@@ -278,6 +280,8 @@ Teile des HUD: 1 Radar, 2 Ziel, 3 Schaden, 4 Lanzenliste, 5 Waffen, 6 Kopfleiste
       Bild auf / ab            größer / kleiner
       Einfg / Entf             weiter weg / näher
       0                        ausblenden
+  Strg+Alt+Umschalt+8          alle Teile gemeinsam (Cockpits des Spiels, Au�enansicht):
+                               dann �ndern Pfeile, Bild auf / ab, Einfg / Entf alle zugleich
   Strg+Alt+7                   alle Teile zurück an ihre automatischen Plätze
   Der Teil, den die Tasten gerade ändern, hat einige Sekunden einen gelben Rahmen.
 

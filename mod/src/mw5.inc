@@ -43,6 +43,7 @@ static std::vector<float> g_m5Pos;       // the mesh's vertices (x y z each) and
 static std::vector<uint32_t> g_m5Tri;
 static void mw5GlassFit();
 static bool g_m5GlassOn = true; // [vr] mw5_glass
+static bool g_m5All;            // Ctrl+Alt+Shift+8: the keys change all parts together (the row without a cockpit of ours)
 static int g_m5GlassLast = -1;  // the part chosen (Ctrl+Alt+Shift+1..6) or placed last: what the Ctrl+Alt+Shift keys change
 static ULONGLONG g_m5HiUntil;   // until then that part is framed in the HUD picture, to show which one the keys change
 static void mw5HiTouch() { g_m5HiUntil = GetTickCount64() + 6000; }
@@ -1114,7 +1115,20 @@ static void mw5Assign(int part, bool shift) {
     const bool plain = !mw5Active(), outside = mw5Outside();
     int n = plain ? -1 : g_m5Looked - 1, p = part - 1;
     wchar_t note[200], k[32];
-    if (plain && (part == 8 || part == 9)) return;
+    if (part == 8) { // with Shift: all parts together - in the row without a cockpit of ours (the game's cockpits, seen from outside)
+        if (!shift) return;
+        if (!plain) {
+            noteShow(L"All parts together only without a cockpit of ours: there each has its place in a window or on a monitor", 5);
+            Beep(300, 150);
+            return;
+        }
+        g_m5All = true;
+        swprintf(note, 200, L"%ls: all parts chosen - Ctrl+Alt+Shift + arrows move them together, PgUp/PgDn size, Ins/Del depth", mw5Who());
+        noteShow(note, 5);
+        Beep(900, 40);
+        return;
+    }
+    if (plain && part == 9) return;
     if (part == 7) {
         if (shift) return;
         for (int i = 0; i < M5_PARTS; ++i) {
@@ -1170,8 +1184,8 @@ static void mw5Assign(int part, bool shift) {
         Beep(1000, 40);
         return;
     }
-    if (part == 8) return;
     if (shift && p >= 0) {
+        g_m5All = false;
         g_m5GlassLast = p, mw5HiTouch();
         if (p < 5 && mw5MonitorOf(p) >= 0)
             swprintf(note, 200, L"%ls (on a monitor) chosen: Ctrl+Alt+Shift + arrows move what it shows, PgUp/PgDn nearer/more, Ins/Del longer/shorter",
@@ -1259,6 +1273,30 @@ static void mw5MonitorTurn(float step) {
 
 // Ctrl+Alt+Shift + arrows, PgUp / PgDn, Ins / Del (k: 0..7): the chosen part's place, size, distance
 static void mw5GlassAdjust(int k) {
+    if (g_m5All && !mw5Active()) { // all parts of the row together: they keep their places against each other
+        int n = 0;
+        for (int i = 0; i < M5_PARTS; ++i) {
+            float *g = mw5G(i);
+            if (!(g[2] > 0.5f)) continue; // (hidden: stays hidden)
+            if (k == 0) g[1] += 1;
+            if (k == 1) g[1] -= 1;
+            if (k == 2) g[0] += 1;
+            if (k == 3) g[0] -= 1;
+            if (k == 4) g[2] = min(120.0f, g[2] * 1.05f), g[0] *= 1.05f, g[1] *= 1.05f; // (larger about the view's middle: the row stays a row)
+            if (k == 5) g[2] = max(2.0f, g[2] / 1.05f), g[0] /= 1.05f, g[1] /= 1.05f;
+            if (k == 6) g[3] = min(20.0f, g[3] * 1.05f);
+            if (k == 7) g[3] = max(0.3f, g[3] / 1.05f);
+            mw5GlassPut(i);
+            ++n;
+        }
+        wchar_t note[200];
+        swprintf(note, 200, L"%ls: all %d parts %ls", mw5Who(), n,
+                 k < 2 ? (k == 0 ? L"up" : L"down") : k < 4 ? (k == 2 ? L"right" : L"left") : k < 6 ? (k == 4 ? L"larger" : L"smaller") : (k == 6 ? L"farther" : L"nearer"));
+        noteShow(note, 3);
+        logf("mw5: %ls: all %d parts of the row changed together (key %d, saved)", mw5Who(), n, k);
+        Beep(k < 4 ? 1000 : k < 6 ? 1400 : 800, 30);
+        return;
+    }
     int p = g_m5GlassLast;
     if (p < 0) {
         noteShow(L"Choose a part first: Ctrl+Alt+Shift+1..6 (radar, target, damage, lance, weapons, top strip)", 4);
