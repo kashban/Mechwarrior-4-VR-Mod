@@ -52,6 +52,7 @@ thread, so those are not locked. Splitting them into units of their own is plann
 | `mw5.inc` | A cockpit mesh of our own (`.mwc`): loading, drawing, its monitors, the HUD's parts on its glass, the hot keys that place them. |
 | `cross.inc` | The cross-hair taken out of the HUD's picture by its colour, as a layer of its own. |
 | `sway.inc`, `note.inc`, `help.inc`, `shot.inc` | The sway's values for its users; a line of text in the headset; the page of keys (Ctrl+F1); pictures for diagnosis (Ctrl+F12). |
+| `e2e.inc` | The test mode for the end-to-end test: only with `MW4VR_E2E` set, plays a plan of keys and records every frame. |
 | `eye_tl_vs.hlsl` / `.h` | The replacement vertex shader for the CPU path. |
 | `vtidx.c` | The positions of methods in Direct3D's vtables, taken from the SDK's own C declarations. |
 | `mod/dinput/dinput.cpp` | A second, small DLL: `dinput.dll` in front of the system's, which leaves out one class of devices that crashes the game on some PCs. |
@@ -85,6 +86,7 @@ trusted: sizes, counts and names are checked before they are used (`core.h`: `mc
 | `tools/start` | Starts the game without the administrator prompt. |
 | `tools/trees` | Card trees for mw4hook's terrain clutter, made from Poly Haven's plants (CC0). |
 | `tools/ci` | The repository guard (nothing of MechWarrior 5, no private data) and the AI review. |
+| `tools/e2e` | The end-to-end test's runner and judge (see Tests). |
 | `tools/security` | The security checks the pipeline runs. |
 | `tools/package.ps1` | Puts the release package together. |
 
@@ -94,7 +96,10 @@ trusted: sizes, counts and names are checked before they are used (`core.h`: `mc
   guard and the check of mw4hook's build.
 - `tests/mutate.py` plants errors into `core.h` and the converter and expects a test to fail for each
   (`tests/mutation_floor.json`: both at 100 %, and the floors only rise).
-- What needs the game, a headset or Direct3D is not reached by those. An end-to-end test that starts the game,
-  plays a plan of keys and judges a record of every frame exists on the branch `e2e`.
+- What needs the game, a headset or Direct3D is not reached by those. For that there is an end-to-end test
+  (`tools/e2e/run.ps1`): it starts the game with `MW4VR_E2E` set to a plan, the mod (`e2e.inc`) plays the plan's
+  keys and writes a record of every frame, and `tools/e2e/judge.py` judges that record. It needs the game, the
+  cockpits and an awake headset, so it runs on a developer's PC and not in the pipeline. Without `MW4VR_E2E` the
+  test mode does nothing.
 
 The pipeline is described in [PIPELINE.md](PIPELINE.md).
