@@ -61,7 +61,7 @@ function EndGame([int]$WaitSec = 90) {
             if ($told) { Say "Old game process gone after $([int]((Get-Date) - $since).TotalSeconds) s." }
             return $true
         }
-        foreach ($q in $left) { try { $q.Kill() } catch { } }
+        foreach ($q in $left) { try { $q.Kill() } catch { Write-Verbose "passed over: $($_.Exception.Message)" } }
         if (-not $told) { Say "Waiting for the old game process ($($left[0].Id)) to end ..."; $told = $true }
         if (((Get-Date) - $since).TotalSeconds -ge $WaitSec) {
             Say "The old game process ($($left[0].Id)) does not end - close it in the Task Manager (or sign out), then start again."

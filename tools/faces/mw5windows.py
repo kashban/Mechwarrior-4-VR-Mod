@@ -1,6 +1,11 @@
 # What the pilot sees of each MW5 cockpit: a map of directions from the eye (the mesh's origin), the frame
 # shaded by its distance, the open windows light blue.   python mw5windows.py <cockpits folder> <out folder>
-import os, struct, sys
+import io
+import os
+import struct
+import sys
+from pathlib import Path
+
 import numpy as np
 from PIL import Image, ImageDraw
 
@@ -9,10 +14,10 @@ W, H = int(2 * AZ / STEP), int((EL1 - EL0) / STEP)
 
 
 def groups(path):
-    f = open(path, 'rb')
+    f = io.BytesIO(Path(path).read_bytes())
     assert f.read(4) == b'MWC1'
     for _ in range(struct.unpack('<I', f.read(4))[0]):
-        name, nv, ni, cs, es, k = struct.unpack('<48sIIIIf', f.read(68))
+        name, nv, ni, cs, es, _k = struct.unpack('<48sIIIIf', f.read(68))
         V = np.frombuffer(f.read(nv * 32), '<f4').reshape(nv, 8)
         I = np.frombuffer(f.read(ni * 4), '<u4').reshape(-1, 3)
         for s in (cs, es):

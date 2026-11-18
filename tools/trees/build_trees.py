@@ -6,14 +6,19 @@
 # cards for the outline. The broad-leaved trees need no source at all: their crowns are grown here, leaf by leaf,
 # and drawn into the same two pictures.
 #
-#   python build_trees.py <fir_sapling folder with the glTF and its textures> <out folder> [<folder of fetch_polyhaven.py>]
+#   python build_trees.py <fir_sapling folder with the glTF and its textures> <out folder>
+#                         [<folder of fetch_polyhaven.py>]
 #
 # With the third folder (jacaranda_tree, island_tree_02, pine_sapling_small, quiver_tree_02, searsia_lucida,
 # wild_rooibos_bush, shrub_02 in it) those plants are drawn into pictures the same way and become card trees too.
 #
 # Writes <kind>.obj / .mtl / .material and the pictures they use, <kind>_preview.png (the tree as built, from the
 # side), sheet.png (all of them) and clutter_trees.txt (the kinds for clutter.txt).
-import json, math, os, sys
+import json
+import math
+import os
+import sys
+
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
@@ -22,9 +27,12 @@ SIZE = 1024
 
 # ---------------------------------------------------------------- the sapling's pictures
 
+
 def gltf_mesh(folder, mesh_index):
-    j = json.load(open(os.path.join(folder, 'fir_sapling_1k.gltf')))
-    raw = open(os.path.join(folder, j['buffers'][0]['uri']), 'rb').read()
+    with open(os.path.join(folder, 'fir_sapling_1k.gltf')) as text:
+        j = json.load(text)
+    with open(os.path.join(folder, j['buffers'][0]['uri']), 'rb') as data:
+        raw = data.read()
 
     def acc(i):
         a = j['accessors'][i]
@@ -43,8 +51,15 @@ def gltf_mesh(folder, mesh_index):
     parts = []
     for p in j['meshes'][mesh_index]['primitives']:
         at = p['attributes']
-        parts.append((j['materials'][p['material']]['name'], acc(at['POSITION']), acc(at['NORMAL']), acc(at['TEXCOORD_0']),
-                      acc(p['indices']).reshape(-1, 3).astype(np.int64)))
+        parts.append(
+            (
+                j['materials'][p['material']]['name'],
+                acc(at['POSITION']),
+                acc(at['NORMAL']),
+                acc(at['TEXCOORD_0']),
+                acc(p['indices']).reshape(-1, 3).astype(np.int64),
+            )
+        )
     return parts
 
 
@@ -65,7 +80,9 @@ def points(parts, folder):
             t = (uv[tri] * b[:, :, None]).sum(1)
             x = np.clip((t[:, 0] % 1) * w, 0, w - 1).astype(int)
             y = np.clip((t[:, 1] % 1) * h, 0, h - 1).astype(int)
-            P.append(p), N.append(n), C.append(tex[y, x])
+            P.append(p)
+            N.append(n)
+            C.append(tex[y, x])
     return np.concatenate(P), np.concatenate(C), np.concatenate(N)
 
 
@@ -78,8 +95,10 @@ def qrot(q, v):
 def model_points(folder, name, meshes=None, total=5_000_000, scale=1.0, seed=1):
     """Any Poly Haven model (fetch_polyhaven.py) as coloured points spread evenly over its surface: position (the
     foot's middle at 0 0 0, times scale), colour, normal. meshes: which of its meshes (the variants a .. n), or all."""
-    j = json.load(open(os.path.join(folder, name + '_1k.gltf'), encoding='utf-8'))
-    raw = open(os.path.join(folder, j['buffers'][0]['uri']), 'rb').read()
+    with open(os.path.join(folder, name + '_1k.gltf'), encoding='utf-8') as text:
+        j = json.load(text)
+    with open(os.path.join(folder, j['buffers'][0]['uri']), 'rb') as data:
+        raw = data.read()
 
     def acc(i):
         a = j['accessors'][i]
@@ -103,17 +122,31 @@ def model_points(folder, name, meshes=None, total=5_000_000, scale=1.0, seed=1):
             tex = mat.get('pbrMetallicRoughness', {}).get('baseColorTexture')
             if tex is None:
                 continue
-            pos, nrm = acc(p['attributes']['POSITION']).astype(np.float64), acc(p['attributes']['NORMAL']).astype(np.float64)
+            pos, nrm = (
+                acc(p['attributes']['POSITION']).astype(np.float64),
+                acc(p['attributes']['NORMAL']).astype(np.float64),
+            )
             if 'rotation' in node:
                 pos, nrm = qrot(node['rotation'], pos), qrot(node['rotation'], nrm)
             uri = j['images'][j['textures'][tex['index']]['source']]['uri']
-            parts.append((os.path.join(folder, *uri.split('/')), mat.get('alphaMode', 'OPAQUE') != 'OPAQUE', pos, nrm, acc(p['attributes']['TEXCOORD_0']),
-                          acc(p['indices']).reshape(-1, 3).astype(np.int64)))
-    areas = [np.linalg.norm(np.cross(pos[tri[:, 1]] - pos[tri[:, 0]], pos[tri[:, 2]] - pos[tri[:, 0]]), axis=1) for _, _, pos, _, _, tri in parts]
+            parts.append(
+                (
+                    os.path.join(folder, *uri.split('/')),
+                    mat.get('alphaMode', 'OPAQUE') != 'OPAQUE',
+                    pos,
+                    nrm,
+                    acc(p['attributes']['TEXCOORD_0']),
+                    acc(p['indices']).reshape(-1, 3).astype(np.int64),
+                )
+            )
+    areas = [
+        np.linalg.norm(np.cross(pos[tri[:, 1]] - pos[tri[:, 0]], pos[tri[:, 2]] - pos[tri[:, 0]]), axis=1)
+        for _, _, pos, _, _, tri in parts
+    ]
     whole = sum(a.sum() for a in areas)
     rng = np.random.default_rng(seed)
     P, C, N = [], [], []
-    for (path, cut, pos, nrm, uv, tri), area in zip(parts, areas):
+    for (path, cut, pos, nrm, uv, tri), area in zip(parts, areas, strict=False):
         n = int(total * area.sum() / whole)
         if n == 0:
             continue
@@ -130,9 +163,14 @@ def model_points(folder, name, meshes=None, total=5_000_000, scale=1.0, seed=1):
         h, w = tex.shape[:2]
         s = tex[np.clip((t[:, 1] % 1) * h, 0, h - 1).astype(int), np.clip((t[:, 0] % 1) * w, 0, w - 1).astype(int)]
         keep = s[:, 3] > 0.5
-        if cut and img.mode not in ('RGBA', 'LA'):  # a cut-out without its mask: what is not leaf is black in the picture
+        if cut and img.mode not in (
+            'RGBA',
+            'LA',
+        ):  # a cut-out without its mask: what is not leaf is black in the picture
             keep &= s[:, :3].max(1) > 0.07
-        P.append(p[keep]), N.append(nn[keep]), C.append(s[keep, :3])
+        P.append(p[keep])
+        N.append(nn[keep])
+        C.append(s[keep, :3])
     P, C, N = np.concatenate(P), np.concatenate(C), np.concatenate(N)
     low = P[P[:, 1] < P[:, 1].min() + 0.03 * np.ptp(P[:, 1])]  # the foot
     P = (P - [low[:, 0].mean(), P[:, 1].min(), low[:, 2].mean()]) * scale
@@ -201,12 +239,16 @@ def recolour(cards, mul, grey=0.0, thin=0.0, seed=5):
     if thin > 0:  # in clumps, not pixel by pixel: whole twigs bare
         rng = np.random.default_rng(seed)
         n = rng.random((SIZE // 16, SIZE * 2 // 16)).astype(np.float32)
-        n = np.asarray(Image.fromarray((n * 255).astype(np.uint8)).resize((SIZE * 2, SIZE), Image.BICUBIC), np.float32) / 255
+        n = (
+            np.asarray(Image.fromarray((n * 255).astype(np.uint8)).resize((SIZE * 2, SIZE), Image.BICUBIC), np.float32)
+            / 255
+        )
         alpha = alpha * (n > thin)
     return Image.fromarray((np.dstack([np.clip(rgb, 0, 1), alpha]) * 255).astype(np.uint8), 'RGBA')
 
 
 # ---------------------------------------------------------------- a crown grown here
+
 
 def crown(seed, rx, ry, cy, clusters, leaves, spread, droop, leaf, colour, vary, bare=0.0):
     """leaves of a broad-leaved crown: an uneven ellipsoid (radii rx across, ry up, centre cy up the tree) filled
@@ -228,10 +270,17 @@ def crown(seed, rx, ry, cy, clusters, leaves, spread, droop, leaf, colour, vary,
         P = P[rng.random(len(P)) > bare]
     out = np.linalg.norm((P - [0, cy, 0]) / [rx, ry, rx], axis=1)
     shade = np.clip(0.45 + 0.4 * np.clip(out, 0, 1.2) + 0.25 * (P[:, 1] - cy) / ry, 0.25, 1.15)
-    col = np.array(colour) * shade[:, None] * (1 + rng.normal(size=(len(P), 1)) * vary) + rng.normal(size=(len(P), 3)) * vary * 0.1
+    col = (
+        np.array(colour) * shade[:, None] * (1 + rng.normal(size=(len(P), 1)) * vary)
+        + rng.normal(size=(len(P), 3)) * vary * 0.1
+    )
     size = leaf * rng.uniform(0.7, 1.3, len(P))
     # a few boughs, each leaving the stem a little below its cluster (many from one point make a brown funnel)
-    boughs = [((0.0, max(cy - ry * 0.95, c[i][1] - ry * rng.uniform(0.25, 0.6)), 0.0), tuple(c[i])) for i in range(clusters) if rng.random() < 0.14]
+    boughs = [
+        ((0.0, max(cy - ry * 0.95, c[i][1] - ry * rng.uniform(0.25, 0.6)), 0.0), tuple(c[i]))
+        for i in range(clusters)
+        if rng.random() < 0.14
+    ]
     return P, size, np.clip(col, 0, 1), boughs, rng
 
 
@@ -245,7 +294,7 @@ def crown_view(P, size, col, boughs, rng, ax, ay, depth, lo, hi, bark):
         return ((p[ax] - lo[0]) * sx, (hi[1] - p[ay]) * sy)
 
     for a, b in boughs:
-        dr.line([px(a), px(b)], fill=tuple(int(255 * v) for v in bark) + (255,), width=max(2, int(0.07 * sx)))
+        dr.line([px(a), px(b)], fill=(*tuple(int(255 * v) for v in bark), 255), width=max(2, int(0.07 * sx)))
     order = np.argsort(P[:, depth])
     ang = rng.uniform(0, math.pi, len(P))
     near = (P[:, depth] - P[:, depth].min()) / max(np.ptp(P[:, depth]), 1e-6)
@@ -255,7 +304,10 @@ def crown_view(P, size, col, boughs, rng, ax, ay, depth, lo, hi, bark):
         dx, dy = math.cos(a) * L, math.sin(a) * L
         wx, wy = -dy * 0.42, dx * 0.42
         c = np.clip(col[i] * (0.82 + 0.3 * near[i]), 0, 1)
-        dr.polygon([(x - dx, y - dy), (x + wx, y + wy), (x + dx, y + dy), (x - wx, y - wy)], fill=tuple(int(255 * v) for v in c) + (255,))
+        dr.polygon(
+            [(x - dx, y - dy), (x + wx, y + wy), (x + dx, y + dy), (x - wx, y - wy)],
+            fill=(*tuple(int(255 * v) for v in c), 255),
+        )
     a = np.asarray(img, np.float32) / 255
     return bleed(a[:, :, :3].copy(), a[:, :, 3] > 0, a[:, :, 3] * 255)
 
@@ -264,7 +316,9 @@ def birch_bark(seed=3):
     rng = np.random.default_rng(seed)
     n = rng.random((64, 32)).astype(np.float32)
     n = np.asarray(Image.fromarray((n * 255).astype(np.uint8)).resize((256, 512), Image.BICUBIC), np.float32) / 255
-    img = Image.fromarray((np.dstack([0.80 + 0.14 * n, 0.79 + 0.14 * n, 0.74 + 0.14 * n]) * 255).astype(np.uint8), 'RGB')
+    img = Image.fromarray(
+        (np.dstack([0.80 + 0.14 * n, 0.79 + 0.14 * n, 0.74 + 0.14 * n]) * 255).astype(np.uint8), 'RGB'
+    )
     dr = ImageDraw.Draw(img)
     for _ in range(70):  # the dark lens-shaped marks
         x, y, w, h = rng.uniform(0, 256), rng.uniform(0, 512), rng.uniform(8, 46), rng.uniform(2, 7)
@@ -275,6 +329,7 @@ def birch_bark(seed=3):
 
 # ---------------------------------------------------------------- the model
 
+
 class Obj:
     def __init__(self, name):
         self.name, self.v, self.vt, self.vn, self.groups = name, [], [], [], {}
@@ -283,7 +338,9 @@ class Obj:
         """pts: three (position, uv, normal)"""
         f = []
         for p, t, n in pts:
-            self.v.append(p), self.vt.append(t), self.vn.append(n)
+            self.v.append(p)
+            self.vt.append(t)
+            self.vn.append(n)
             f.append(len(self.v))
         self.groups.setdefault(mat, []).append(f)
 
@@ -295,18 +352,14 @@ class Obj:
 
     def write(self, path, mtl):
         with open(path, 'w') as f:
-            f.write('# %s: MW4VR tree, built by tools/trees/build_trees.py. Y up, metres.\n' % self.name)
-            f.write('mtllib %s\no %s\n' % (mtl, self.name))
-            for p in self.v:
-                f.write('v %.4f %.4f %.4f\n' % tuple(p))
-            for t in self.vt:
-                f.write('vt %.4f %.4f\n' % tuple(t))
-            for n in self.vn:
-                f.write('vn %.3f %.3f %.3f\n' % tuple(n))
+            f.write('# {}: MW4VR tree, built by tools/trees/build_trees.py. Y up, metres.\n'.format(self.name))
+            f.write('mtllib {}\no {}\n'.format(mtl, self.name))
+            f.writelines('v {:.4f} {:.4f} {:.4f}\n'.format(*tuple(p)) for p in self.v)
+            f.writelines('vt {:.4f} {:.4f}\n'.format(*tuple(t)) for t in self.vt)
+            f.writelines('vn {:.3f} {:.3f} {:.3f}\n'.format(*tuple(n)) for n in self.vn)
             for mat, faces in self.groups.items():
-                f.write('usemtl %s\n' % mat)
-                for a, b, c in faces:
-                    f.write('f %d/%d/%d %d/%d/%d %d/%d/%d\n' % (a, a, a, b, b, b, c, c, c))
+                f.write('usemtl {}\n'.format(mat))
+                f.writelines('f %d/%d/%d %d/%d/%d %d/%d/%d\n' % (a, a, a, b, b, b, c, c, c) for a, b, c in faces)
 
 
 def unit(v):
@@ -344,23 +397,39 @@ def build(name, height, trunk, whorls, cards, lean=0.0, sides=8):
         for s in range(sides):
             a0, a1 = 2 * math.pi * s / sides, 2 * math.pi * (s + 1) / sides
             c0, s0, c1, s1 = math.cos(a0), math.sin(a0), math.cos(a1), math.sin(a1)
-            o.quad(bark, ((off(y0) + r0 * c0, y0, r0 * s0), (s / 4, y0 / 2), (c0, 0, s0)), ((off(y0) + r0 * c1, y0, r0 * s1), ((s + 1) / 4, y0 / 2), (c1, 0, s1)),
-                   ((off(y1) + r1 * c1, y1, r1 * s1), ((s + 1) / 4, y1 / 2), (c1, 0, s1)), ((off(y1) + r1 * c0, y1, r1 * s0), (s / 4, y1 / 2), (c0, 0, s0)))
+            o.quad(
+                bark,
+                ((off(y0) + r0 * c0, y0, r0 * s0), (s / 4, y0 / 2), (c0, 0, s0)),
+                ((off(y0) + r0 * c1, y0, r0 * s1), ((s + 1) / 4, y0 / 2), (c1, 0, s1)),
+                ((off(y1) + r1 * c1, y1, r1 * s1), ((s + 1) / 4, y1 / 2), (c1, 0, s1)),
+                ((off(y1) + r1 * c0, y1, r1 * s0), (s / 4, y1 / 2), (c0, 0, s0)),
+            )
     for y, r, droop, turn in whorls:
         centre = ((off(y), y, 0), top(0.5, 0.5), (0, 1, 0))
         for s in range(6):
             e = []
             for a in (turn + 2 * math.pi * s / 6, turn + 2 * math.pi * (s + 1) / 6):
                 c, sn = math.cos(a), math.sin(a)
-                e.append(((off(y) + r * c, y - droop, r * sn), top(0.5 + 0.5 * math.cos(a - turn), 0.5 + 0.5 * math.sin(a - turn)), tuple(unit((c, 0.9, sn)))))
+                e.append(
+                    (
+                        (off(y) + r * c, y - droop, r * sn),
+                        top(0.5 + 0.5 * math.cos(a - turn), 0.5 + 0.5 * math.sin(a - turn)),
+                        tuple(unit((c, 0.9, sn))),
+                    )
+                )
             o.tri(leaf, (centre, e[0], e[1]))
     y0, y1, w, n = cards
     for s in range(n):
         a = math.pi * s / n + 0.3
         c, sn = math.cos(a), math.sin(a)
         nm = tuple(unit((-sn, 0.35, c)))
-        o.quad(leaf, ((off(y0) - w * c, y0, -w * sn), side(0, 0), nm), ((off(y0) + w * c, y0, w * sn), side(1, 0), nm),
-               ((off(y1) + w * c, y1, w * sn), side(1, 1), nm), ((off(y1) - w * c, y1, -w * sn), side(0, 1), nm))
+        o.quad(
+            leaf,
+            ((off(y0) - w * c, y0, -w * sn), side(0, 0), nm),
+            ((off(y0) + w * c, y0, w * sn), side(1, 0), nm),
+            ((off(y1) + w * c, y1, w * sn), side(1, 1), nm),
+            ((off(y1) - w * c, y1, -w * sn), side(0, 1), nm),
+        )
     return o
 
 
@@ -369,11 +438,12 @@ def fir_whorls(height, n, lowest, radius, droop=0.45, power=0.8):
     for w in range(n):
         k = w / (n - 1)
         r = radius * (1 - k) ** power + 0.35
-        out.append((lowest + (height * 0.93 - lowest) * k ** 0.9, r, droop * r, w * 0.9))
+        out.append((lowest + (height * 0.93 - lowest) * k**0.9, r, droop * r, w * 0.9))
     return out
 
 
 # ---------------------------------------------------------------- a look at what was built
+
 
 def preview(o, tex, size=384, yaw=0.5, pitch=0.2):
     """the model drawn as the game would (cut-out textures, no light), seen a little from above"""
@@ -411,28 +481,54 @@ def preview(o, tex, size=384, yaw=0.5, pitch=0.2):
             u = (b0 * U[0, 0] + b1 * U[1, 0] + b2 * U[2, 0]) % 1
             v = (b0 * U[0, 1] + b1 * U[1, 1] + b2 * U[2, 1]) % 1
             s = t[np.clip(((1 - v) * th).astype(int), 0, th - 1), np.clip((u * tw).astype(int), 0, tw - 1)]
-            ok = (b0 >= 0) & (b1 >= 0) & (b2 >= 0) & (s[:, :, 3] > 0.4) & (zz > zb[y0:y1 + 1, x0:x1 + 1])
-            img[y0:y1 + 1, x0:x1 + 1][ok] = s[:, :, :3][ok]
-            zb[y0:y1 + 1, x0:x1 + 1][ok] = zz[ok]
+            ok = (b0 >= 0) & (b1 >= 0) & (b2 >= 0) & (s[:, :, 3] > 0.4) & (zz > zb[y0 : y1 + 1, x0 : x1 + 1])
+            img[y0 : y1 + 1, x0 : x1 + 1][ok] = s[:, :, :3][ok]
+            zb[y0 : y1 + 1, x0 : x1 + 1][ok] = zz[ok]
     return Image.fromarray((img * 255).astype(np.uint8), 'RGB')
 
 
 # ---------------------------------------------------------------- the kinds
 
-GRASS = ['eaton03_color_grass1_act', 'eaton03_color_grass2_act', 'trop01_color_grass1_act', 'trop01_color_grass2_act', 'trop01_color_grass3_act',
-         'trop01_color_grass4_act', 'trop01_color_grass5_act', 'trop01_color_grass6_act', 'trop01_color_grass7_act', 'training_lightgrass_active']
+GRASS = [
+    'eaton03_color_grass1_act',
+    'eaton03_color_grass2_act',
+    'trop01_color_grass1_act',
+    'trop01_color_grass2_act',
+    'trop01_color_grass3_act',
+    'trop01_color_grass4_act',
+    'trop01_color_grass5_act',
+    'trop01_color_grass6_act',
+    'trop01_color_grass7_act',
+    'training_lightgrass_active',
+]
 # (material, weight for the firs, weight for the broad-leaved)
-MIXED = [('arctic05_color_grass_active', 0.9, 0.2), ('alpine01_color_terraingrassshale_active', 0.8, 0.3), ('mountn03_color_terraingrassshale_active', 0.8, 0.3),
-         ('alpine02_color_terraingrassbush1_active', 0.8, 0.4), ('alpinenew_color_terraingrassbush1_active', 0.8, 0.4),
-         ('alpine03_color_rocksgreenshrub_active', 0.4, 0.15), ('alpine01_color_rockfacegreen_active', 0.4, 0.1), ('scrub01_color_grass_01', 0.3, 0.3),
-         ('eaton02_color_mowedgrass', 0.1, 0.15), ('newav01_color_mowedgrass', 0.1, 0.15), ('cityroad_color_median_*', 0.2, 0.3)]
+MIXED = [
+    ('arctic05_color_grass_active', 0.9, 0.2),
+    ('alpine01_color_terraingrassshale_active', 0.8, 0.3),
+    ('mountn03_color_terraingrassshale_active', 0.8, 0.3),
+    ('alpine02_color_terraingrassbush1_active', 0.8, 0.4),
+    ('alpinenew_color_terraingrassbush1_active', 0.8, 0.4),
+    ('alpine03_color_rocksgreenshrub_active', 0.4, 0.15),
+    ('alpine01_color_rockfacegreen_active', 0.4, 0.1),
+    ('scrub01_color_grass_01', 0.3, 0.3),
+    ('eaton02_color_mowedgrass', 0.1, 0.15),
+    ('newav01_color_mowedgrass', 0.1, 0.15),
+    ('cityroad_color_median_*', 0.2, 0.3),
+]
 
 
 # where the dry grass grows: the desert's and the steppe's plants
-DRY = [('desert01_color_grass02', 1), ('desert01_color_grass03', 1), ('desert01_color_grass04', 1), ('scrub01_color_browngrass_active', 1),
-       ('scrub01_color_grass_01', 0.7), ('hallor03_color_deadgrass_active', 1), ('arctic01_color_deadgrass_active', 0.3)]
+DRY = [
+    ('desert01_color_grass02', 1),
+    ('desert01_color_grass03', 1),
+    ('desert01_color_grass04', 1),
+    ('scrub01_color_browngrass_active', 1),
+    ('scrub01_color_grass_01', 0.7),
+    ('hallor03_color_deadgrass_active', 1),
+    ('arctic01_color_deadgrass_active', 0.3),
+]
 # the warm maps' grass alone (Exford, the jungle)
-WARM = [(m, 1) for m in GRASS if m.startswith('trop01') or m.startswith('eaton03')]
+WARM = [(m, 1) for m in GRASS if m.startswith(('trop01', 'eaton03'))]
 
 
 # Half the densities the kinds below name: a wood of cards fills the picture many times over, and in a headset
@@ -441,27 +537,64 @@ WARM = [(m, 1) for m in GRASS if m.startswith('trop01') or m.startswith('eaton03
 THIN, NEAR = 0.5, 14
 
 
-def kind_text(name, model, density, size, patch, seed, wind, conifer=False, grass=1.0, where='green', distance=1000, sink=(-0.4, -0.15)):
+def kind_text(
+    name,
+    model,
+    density,
+    size,
+    patch,
+    seed,
+    wind,
+    conifer=False,
+    grass=1.0,
+    where='green',
+    distance=1000,
+    sink=(-0.4, -0.15),
+):
     tree = distance >= 1000
-    t = ['[%s]' % name, 'enabled = 1', 'model = clutter\\mw4vr\\%s.obj' % model, 'density = %g' % (density * THIN), 'size = %g %g' % size, 'rotate = 0 360',
-         'sink = %g %g' % sink, 'jitter = 1', 'align = up', 'slope = 22 35', 'above_water = 0.5', 'distance = %d %d' % (NEAR if tree else 0, distance),
-         'grow = %s 0.1' % ('0.01' if tree else '0'),
-         'fade = dither', 'bands = auto', 'patch = %g %g' % patch, 'seed = %d' % seed, 'wind = %g %g' % wind, 'ground_tint = 0 1']
+    t = [
+        '[{}]'.format(name),
+        'enabled = 1',
+        'model = clutter\\mw4vr\\{}.obj'.format(model),
+        'density = %g' % (density * THIN),
+        'size = {:g} {:g}'.format(*size),
+        'rotate = 0 360',
+        'sink = {:g} {:g}'.format(*sink),
+        'jitter = 1',
+        'align = up',
+        'slope = 22 35',
+        'above_water = 0.5',
+        'distance = %d %d' % (NEAR if tree else 0, distance),
+        'grow = %s 0.1' % ('0.01' if tree else '0'),
+        'fade = dither',
+        'bands = auto',
+        'patch = {:g} {:g}'.format(*patch),
+        'seed = %d' % seed,
+        'wind = {:g} {:g}'.format(*wind),
+        'ground_tint = 0 1',
+    ]
     if where == 'green':
         for m in GRASS:
-            t.append('material = %s%s' % (m, '' if grass == 1 else ' %g' % grass))
+            t.append('material = {}{}'.format(m, '' if grass == 1 else ' {:g}'.format(grass)))
         for m, wc, wb in MIXED:
-            t.append('material = %s %g' % (m, wc if conifer else wb))
+            t.append('material = {} {:g}'.format(m, wc if conifer else wb))
     else:
-        for m, w in (DRY if where == 'dry' else WARM):
-            t.append('material = %s%s' % (m, '' if w == 1 else ' %g' % w))
+        for m, w in DRY if where == 'dry' else WARM:
+            t.append('material = {}{}'.format(m, '' if w == 1 else ' {:g}'.format(w)))
     return '\n'.join(t) + '\n'
 
 
 def card_tree(name, half, h, domes, cards=3, lean=0.0):
     """a tree all of cards for a model's pictures: upright cards over its whole height, and domes (height share,
     radius share, how far the rim hangs below the middle as a share of the radius) of the picture from above"""
-    return build(name, h, None, [(h * y, half * r, half * r * hang, 0.4 + 1.1 * i) for i, (y, r, hang) in enumerate(domes)], (0.0, h, half, cards), lean)
+    return build(
+        name,
+        h,
+        None,
+        [(h * y, half * r, half * r * hang, 0.4 + 1.1 * i) for i, (y, r, hang) in enumerate(domes)],
+        (0.0, h, half, cards),
+        lean,
+    )
 
 
 def main(src, out, ph=None):
@@ -470,8 +603,10 @@ def main(src, out, ph=None):
     P, C, N = points(parts, src)
     lo, hi = P.min(0), P.max(0)
     half = max(hi[0], -lo[0], hi[2], -lo[2])
-    fir = sheet_of(finish(view(P, C, N, 0, 1, 2, np.array([-half, lo[1]]), np.array([half, hi[1]]))),
-                   finish(view(P, C, N, 0, 2, 1, np.array([-half, -half]), np.array([half, half]))))
+    fir = sheet_of(
+        finish(view(P, C, N, 0, 1, 2, np.array([-half, lo[1]]), np.array([half, hi[1]]))),
+        finish(view(P, C, N, 0, 2, 1, np.array([-half, -half]), np.array([half, half]))),
+    )
     fir_bark = Image.open(os.path.join(src, 'fir_sapling_branches_diff_1k.png')).convert('RGB')
     dark_bark = Image.eval(fir_bark, lambda v: int(v * 0.7))
     brown, grey = (0.30, 0.22, 0.15), (0.34, 0.31, 0.27)
@@ -482,62 +617,367 @@ def main(src, out, ph=None):
         t = crown_view(Pl, size, col, boughs, rng, 0, 2, 1, (-half_w, -half_w), (half_w, half_w), bark)
         return sheet_of(s, t)
 
-    oak = grown(11, 6.4, 3.0, 14.2, brown, rx=5.0, ry=4.6, cy=8.9, clusters=230, leaves=34, spread=0.62, droop=0.15, leaf=0.19,
-                colour=(0.23, 0.36, 0.12), vary=0.16)
-    oak2 = grown(29, 5.4, 4.4, 17.4, brown, rx=4.0, ry=5.6, cy=11.2, clusters=210, leaves=34, spread=0.6, droop=0.2, leaf=0.19,
-                 colour=(0.27, 0.38, 0.13), vary=0.18)
-    birch = grown(17, 3.6, 3.6, 15.2, grey, rx=2.5, ry=5.2, cy=9.6, clusters=150, leaves=26, spread=0.5, droop=0.9, leaf=0.12,
-                  colour=(0.42, 0.55, 0.18), vary=0.2, bare=0.1)
-    bush = grown(41, 2.6, 0.0, 3.4, brown, rx=2.0, ry=1.6, cy=1.5, clusters=120, leaves=30, spread=0.36, droop=0.05, leaf=0.12,
-                 colour=(0.21, 0.33, 0.12), vary=0.18)
+    oak = grown(
+        11,
+        6.4,
+        3.0,
+        14.2,
+        brown,
+        rx=5.0,
+        ry=4.6,
+        cy=8.9,
+        clusters=230,
+        leaves=34,
+        spread=0.62,
+        droop=0.15,
+        leaf=0.19,
+        colour=(0.23, 0.36, 0.12),
+        vary=0.16,
+    )
+    oak2 = grown(
+        29,
+        5.4,
+        4.4,
+        17.4,
+        brown,
+        rx=4.0,
+        ry=5.6,
+        cy=11.2,
+        clusters=210,
+        leaves=34,
+        spread=0.6,
+        droop=0.2,
+        leaf=0.19,
+        colour=(0.27, 0.38, 0.13),
+        vary=0.18,
+    )
+    birch = grown(
+        17,
+        3.6,
+        3.6,
+        15.2,
+        grey,
+        rx=2.5,
+        ry=5.2,
+        cy=9.6,
+        clusters=150,
+        leaves=26,
+        spread=0.5,
+        droop=0.9,
+        leaf=0.12,
+        colour=(0.42, 0.55, 0.18),
+        vary=0.2,
+        bare=0.1,
+    )
+    bush = grown(
+        41,
+        2.6,
+        0.0,
+        3.4,
+        brown,
+        rx=2.0,
+        ry=1.6,
+        cy=1.5,
+        clusters=120,
+        leaves=30,
+        spread=0.36,
+        droop=0.05,
+        leaf=0.12,
+        colour=(0.21, 0.33, 0.12),
+        vary=0.18,
+    )
 
     # name: (model, cards picture, bark picture, clutter kind's values)
     trees = [
-        ('fir_01', build('fir_01', 14.0, (0.24, 13.6), fir_whorls(14.0, 13, 2.2, 3.3), (1.2, 14.0, 3.56, 3)), fir, fir_bark,
-         dict(density=0.0009, size=(0.8, 1.5), patch=(70, 0.5), seed=77, wind=(0.012, 0.35), conifer=True)),
-        ('fir_02', build('fir_02', 21.0, (0.34, 20.4), fir_whorls(21.0, 16, 6.5, 3.0, 0.5, 0.7), (5.4, 21.0, 3.3, 3), lean=0.5),
-         recolour(fir, (0.78, 0.9, 0.92)), dark_bark, dict(density=0.0006, size=(0.85, 1.3), patch=(70, 0.5), seed=78, wind=(0.01, 0.28), conifer=True)),
-        ('fir_03', build('fir_03', 7.5, (0.14, 7.2), fir_whorls(7.5, 9, 0.7, 2.5, 0.38, 0.9), (0.3, 7.5, 2.7, 3)),
-         recolour(fir, (1.06, 1.1, 0.9)), fir_bark, dict(density=0.0009, size=(0.6, 1.3), patch=(45, 0.55), seed=79, wind=(0.02, 0.5), conifer=True)),
-        ('fir_04', build('fir_04', 15.0, (0.26, 14.6), fir_whorls(15.0, 8, 4.0, 2.4, 0.5, 0.6), (3.0, 15.0, 2.6, 2), lean=1.1),
-         recolour(fir, (0.95, 0.74, 0.5), grey=0.75, thin=0.5), dark_bark,
-         dict(density=0.0002, size=(0.7, 1.3), patch=(70, 0.5), seed=80, wind=(0.006, 0.3), conifer=True)),
-        ('oak_01', build('oak_01', 14.0, (0.42, 9.5), [(7.6, 5.0, 1.7, 0.2), (10.6, 4.6, 1.7, 1.3), (12.9, 3.0, 1.2, 2.1)], (3.0, 14.2, 6.4, 3)),
-         oak, dark_bark, dict(density=0.0006, size=(0.8, 1.4), patch=(80, 0.45), seed=91, wind=(0.008, 0.3), conifer=False)),
-        ('oak_02', build('oak_02', 17.2, (0.38, 12.0), [(9.2, 3.9, 1.4, 0.5), (12.6, 4.0, 1.6, 1.7), (15.6, 2.6, 1.1, 2.6)], (4.4, 17.4, 5.4, 3), lean=0.4),
-         oak2, dark_bark, dict(density=0.0005, size=(0.75, 1.3), patch=(80, 0.45), seed=92, wind=(0.009, 0.3), conifer=False)),
-        ('birch_01', build('birch_01', 15.0, (0.2, 13.5), [(8.2, 2.4, 0.9, 0.4), (11.2, 2.3, 0.85, 1.5), (13.8, 1.5, 0.6, 2.4)], (3.6, 15.2, 3.6, 3), lean=0.6),
-         birch, birch_bark(), dict(density=0.0006, size=(0.7, 1.25), patch=(55, 0.4), seed=93, wind=(0.016, 0.45), conifer=False)),
-        ('bush_01', build('bush_01', 3.2, (0.1, 1.6), [(1.5, 2.0, 0.6, 0.3), (2.6, 1.5, 0.5, 1.4)], (0.0, 3.4, 2.6, 3), sides=5),
-         bush, fir_bark, dict(density=0.0016, size=(0.6, 1.5), patch=(40, 0.5), seed=94, wind=(0.03, 0.7), conifer=False)),
+        (
+            'fir_01',
+            build('fir_01', 14.0, (0.24, 13.6), fir_whorls(14.0, 13, 2.2, 3.3), (1.2, 14.0, 3.56, 3)),
+            fir,
+            fir_bark,
+            {
+                'density': 0.0009,
+                'size': (0.8, 1.5),
+                'patch': (70, 0.5),
+                'seed': 77,
+                'wind': (0.012, 0.35),
+                'conifer': True,
+            },
+        ),
+        (
+            'fir_02',
+            build(
+                'fir_02', 21.0, (0.34, 20.4), fir_whorls(21.0, 16, 6.5, 3.0, 0.5, 0.7), (5.4, 21.0, 3.3, 3), lean=0.5
+            ),
+            recolour(fir, (0.78, 0.9, 0.92)),
+            dark_bark,
+            {
+                'density': 0.0006,
+                'size': (0.85, 1.3),
+                'patch': (70, 0.5),
+                'seed': 78,
+                'wind': (0.01, 0.28),
+                'conifer': True,
+            },
+        ),
+        (
+            'fir_03',
+            build('fir_03', 7.5, (0.14, 7.2), fir_whorls(7.5, 9, 0.7, 2.5, 0.38, 0.9), (0.3, 7.5, 2.7, 3)),
+            recolour(fir, (1.06, 1.1, 0.9)),
+            fir_bark,
+            {
+                'density': 0.0009,
+                'size': (0.6, 1.3),
+                'patch': (45, 0.55),
+                'seed': 79,
+                'wind': (0.02, 0.5),
+                'conifer': True,
+            },
+        ),
+        (
+            'fir_04',
+            build('fir_04', 15.0, (0.26, 14.6), fir_whorls(15.0, 8, 4.0, 2.4, 0.5, 0.6), (3.0, 15.0, 2.6, 2), lean=1.1),
+            recolour(fir, (0.95, 0.74, 0.5), grey=0.75, thin=0.5),
+            dark_bark,
+            {
+                'density': 0.0002,
+                'size': (0.7, 1.3),
+                'patch': (70, 0.5),
+                'seed': 80,
+                'wind': (0.006, 0.3),
+                'conifer': True,
+            },
+        ),
+        (
+            'oak_01',
+            build(
+                'oak_01',
+                14.0,
+                (0.42, 9.5),
+                [(7.6, 5.0, 1.7, 0.2), (10.6, 4.6, 1.7, 1.3), (12.9, 3.0, 1.2, 2.1)],
+                (3.0, 14.2, 6.4, 3),
+            ),
+            oak,
+            dark_bark,
+            {
+                'density': 0.0006,
+                'size': (0.8, 1.4),
+                'patch': (80, 0.45),
+                'seed': 91,
+                'wind': (0.008, 0.3),
+                'conifer': False,
+            },
+        ),
+        (
+            'oak_02',
+            build(
+                'oak_02',
+                17.2,
+                (0.38, 12.0),
+                [(9.2, 3.9, 1.4, 0.5), (12.6, 4.0, 1.6, 1.7), (15.6, 2.6, 1.1, 2.6)],
+                (4.4, 17.4, 5.4, 3),
+                lean=0.4,
+            ),
+            oak2,
+            dark_bark,
+            {
+                'density': 0.0005,
+                'size': (0.75, 1.3),
+                'patch': (80, 0.45),
+                'seed': 92,
+                'wind': (0.009, 0.3),
+                'conifer': False,
+            },
+        ),
+        (
+            'birch_01',
+            build(
+                'birch_01',
+                15.0,
+                (0.2, 13.5),
+                [(8.2, 2.4, 0.9, 0.4), (11.2, 2.3, 0.85, 1.5), (13.8, 1.5, 0.6, 2.4)],
+                (3.6, 15.2, 3.6, 3),
+                lean=0.6,
+            ),
+            birch,
+            birch_bark(),
+            {
+                'density': 0.0006,
+                'size': (0.7, 1.25),
+                'patch': (55, 0.4),
+                'seed': 93,
+                'wind': (0.016, 0.45),
+                'conifer': False,
+            },
+        ),
+        (
+            'bush_01',
+            build(
+                'bush_01', 3.2, (0.1, 1.6), [(1.5, 2.0, 0.6, 0.3), (2.6, 1.5, 0.5, 1.4)], (0.0, 3.4, 2.6, 3), sides=5
+            ),
+            bush,
+            fir_bark,
+            {
+                'density': 0.0016,
+                'size': (0.6, 1.5),
+                'patch': (40, 0.5),
+                'seed': 94,
+                'wind': (0.03, 0.7),
+                'conifer': False,
+            },
+        ),
     ]
-    names = {'fir_01': 'tree_fir', 'fir_02': 'tree_fir_tall', 'fir_03': 'tree_fir_young', 'fir_04': 'tree_fir_dead', 'oak_01': 'tree_oak',
-             'oak_02': 'tree_oak_tall', 'birch_01': 'tree_birch', 'bush_01': 'tree_bush'}
+    names = {
+        'fir_01': 'tree_fir',
+        'fir_02': 'tree_fir_tall',
+        'fir_03': 'tree_fir_young',
+        'fir_04': 'tree_fir_dead',
+        'oak_01': 'tree_oak',
+        'oak_02': 'tree_oak_tall',
+        'birch_01': 'tree_birch',
+        'bush_01': 'tree_bush',
+    }
     if ph:
         # with Poly Haven's other plants at hand (fetch_polyhaven.py) the photographed ones take the drawn ones' places:
         # name, asset, which of its meshes, scale, domes, the clutter kind's name and values
         trees = [t for t in trees if t[0] not in ('oak_01', 'oak_02', 'birch_01', 'bush_01')]
         real = [
-            ('leaf_01', 'tree_small_02', None, 3.4, [(0.58, 0.95, 0.38), (0.78, 0.85, 0.4), (0.94, 0.5, 0.45)], 'tree_leaf',
-             dict(density=0.0006, size=(0.75, 1.25), patch=(80, 0.45), seed=108, wind=(0.008, 0.3))),
-            ('leaf_02', 'island_tree_01', None, 3.2, [(0.58, 0.95, 0.38), (0.78, 0.85, 0.4), (0.94, 0.5, 0.45)], 'tree_leaf_wide',
-             dict(density=0.0005, size=(0.75, 1.25), patch=(80, 0.45), seed=109, wind=(0.008, 0.3))),
-            ('leaf_03', 'island_tree_03', None, 3.4, [(0.68, 0.95, 0.38), (0.9, 0.7, 0.42)], 'tree_leaf_small',
-             dict(density=0.0006, size=(0.7, 1.3), patch=(55, 0.4), seed=110, wind=(0.012, 0.4))),
-            ('jacaranda_01', 'jacaranda_tree', None, 0.85, [(0.58, 0.95, 0.38), (0.78, 0.85, 0.4), (0.94, 0.5, 0.45)], 'tree_jacaranda',
-             dict(density=0.0005, size=(0.7, 1.1), patch=(80, 0.45), seed=101, wind=(0.006, 0.25))),
-            ('island_01', 'island_tree_02', None, 3.2, [(0.68, 0.95, 0.38), (0.9, 0.7, 0.42)], 'tree_island',
-             dict(density=0.0009, size=(0.75, 1.3), patch=(60, 0.5), seed=102, wind=(0.01, 0.35), where='warm')),
-            ('pine_01', 'pine_sapling_small', [1], 11.0, [(0.34, 0.95, 0.36), (0.5, 0.9, 0.36), (0.68, 0.7, 0.36), (0.83, 0.5, 0.36), (0.95, 0.25, 0.36)],
-             'tree_pine', dict(density=0.0007, size=(0.75, 1.35), patch=(70, 0.5), seed=103, wind=(0.012, 0.35), conifer=True)),
-            ('quiver_01', 'quiver_tree_02', None, 3.6, [(0.88, 0.95, 0.3)], 'tree_quiver',
-             dict(density=0.0005, size=(0.7, 1.4), patch=(70, 0.35), seed=104, wind=(0.002, 0.3), where='dry')),
-            ('searsia_01', 'searsia_lucida', [0], 1.6, [(0.75, 0.9, 0.4)], 'bush_searsia',
-             dict(density=0.002, size=(0.6, 1.4), patch=(40, 0.45), seed=105, wind=(0.02, 0.6), where='dry', distance=900, sink=(-0.1, 0))),
-            ('rooibos_01', 'wild_rooibos_bush', [0], 2.4, [(0.78, 0.9, 0.4)], 'bush_rooibos',
-             dict(density=0.006, size=(0.6, 1.5), patch=(25, 0.5), seed=106, wind=(0.03, 0.8), where='dry', distance=400, sink=(-0.05, 0))),
-            ('shrub_01', 'shrub_02', [0], 1.5, [(0.72, 0.9, 0.4)], 'bush_green',
-             dict(density=0.002, size=(0.6, 1.5), patch=(40, 0.5), seed=107, wind=(0.03, 0.7), distance=900, sink=(-0.1, 0))),
+            (
+                'leaf_01',
+                'tree_small_02',
+                None,
+                3.4,
+                [(0.58, 0.95, 0.38), (0.78, 0.85, 0.4), (0.94, 0.5, 0.45)],
+                'tree_leaf',
+                {'density': 0.0006, 'size': (0.75, 1.25), 'patch': (80, 0.45), 'seed': 108, 'wind': (0.008, 0.3)},
+            ),
+            (
+                'leaf_02',
+                'island_tree_01',
+                None,
+                3.2,
+                [(0.58, 0.95, 0.38), (0.78, 0.85, 0.4), (0.94, 0.5, 0.45)],
+                'tree_leaf_wide',
+                {'density': 0.0005, 'size': (0.75, 1.25), 'patch': (80, 0.45), 'seed': 109, 'wind': (0.008, 0.3)},
+            ),
+            (
+                'leaf_03',
+                'island_tree_03',
+                None,
+                3.4,
+                [(0.68, 0.95, 0.38), (0.9, 0.7, 0.42)],
+                'tree_leaf_small',
+                {'density': 0.0006, 'size': (0.7, 1.3), 'patch': (55, 0.4), 'seed': 110, 'wind': (0.012, 0.4)},
+            ),
+            (
+                'jacaranda_01',
+                'jacaranda_tree',
+                None,
+                0.85,
+                [(0.58, 0.95, 0.38), (0.78, 0.85, 0.4), (0.94, 0.5, 0.45)],
+                'tree_jacaranda',
+                {'density': 0.0005, 'size': (0.7, 1.1), 'patch': (80, 0.45), 'seed': 101, 'wind': (0.006, 0.25)},
+            ),
+            (
+                'island_01',
+                'island_tree_02',
+                None,
+                3.2,
+                [(0.68, 0.95, 0.38), (0.9, 0.7, 0.42)],
+                'tree_island',
+                {
+                    'density': 0.0009,
+                    'size': (0.75, 1.3),
+                    'patch': (60, 0.5),
+                    'seed': 102,
+                    'wind': (0.01, 0.35),
+                    'where': 'warm',
+                },
+            ),
+            (
+                'pine_01',
+                'pine_sapling_small',
+                [1],
+                11.0,
+                [(0.34, 0.95, 0.36), (0.5, 0.9, 0.36), (0.68, 0.7, 0.36), (0.83, 0.5, 0.36), (0.95, 0.25, 0.36)],
+                'tree_pine',
+                {
+                    'density': 0.0007,
+                    'size': (0.75, 1.35),
+                    'patch': (70, 0.5),
+                    'seed': 103,
+                    'wind': (0.012, 0.35),
+                    'conifer': True,
+                },
+            ),
+            (
+                'quiver_01',
+                'quiver_tree_02',
+                None,
+                3.6,
+                [(0.88, 0.95, 0.3)],
+                'tree_quiver',
+                {
+                    'density': 0.0005,
+                    'size': (0.7, 1.4),
+                    'patch': (70, 0.35),
+                    'seed': 104,
+                    'wind': (0.002, 0.3),
+                    'where': 'dry',
+                },
+            ),
+            (
+                'searsia_01',
+                'searsia_lucida',
+                [0],
+                1.6,
+                [(0.75, 0.9, 0.4)],
+                'bush_searsia',
+                {
+                    'density': 0.002,
+                    'size': (0.6, 1.4),
+                    'patch': (40, 0.45),
+                    'seed': 105,
+                    'wind': (0.02, 0.6),
+                    'where': 'dry',
+                    'distance': 900,
+                    'sink': (-0.1, 0),
+                },
+            ),
+            (
+                'rooibos_01',
+                'wild_rooibos_bush',
+                [0],
+                2.4,
+                [(0.78, 0.9, 0.4)],
+                'bush_rooibos',
+                {
+                    'density': 0.006,
+                    'size': (0.6, 1.5),
+                    'patch': (25, 0.5),
+                    'seed': 106,
+                    'wind': (0.03, 0.8),
+                    'where': 'dry',
+                    'distance': 400,
+                    'sink': (-0.05, 0),
+                },
+            ),
+            (
+                'shrub_01',
+                'shrub_02',
+                [0],
+                1.5,
+                [(0.72, 0.9, 0.4)],
+                'bush_green',
+                {
+                    'density': 0.002,
+                    'size': (0.6, 1.5),
+                    'patch': (40, 0.5),
+                    'seed': 107,
+                    'wind': (0.03, 0.7),
+                    'distance': 900,
+                    'sink': (-0.1, 0),
+                },
+            ),
         ]
         none = Image.new('RGB', (8, 8), (70, 55, 40))
         for name, asset, meshes, scale, domes, kind, k in real:
@@ -545,30 +985,43 @@ def main(src, out, ph=None):
             trees.append((name, card_tree(name, half, h, domes), cards, none, k))
             names[name] = kind
             print('%-12s %.1f m high, %.1f m across' % (name, h, 2 * half))
-    shots, kinds, total = [], [], 0
+    shots, kinds, total = [], [], 0.0
     for name, o, cards, bark, k in trees:
         cards.save(os.path.join(out, name + '_cards.png'))
         bark.save(os.path.join(out, name + '_bark.png'))
         o.write(os.path.join(out, name + '.obj'), name + '.mtl')
         with open(os.path.join(out, name + '.mtl'), 'w') as f:
-            f.write('newmtl %s_bark\nmap_Kd %s_bark.png\nnewmtl %s_cards\nmap_Kd %s_cards.png\nmap_d %s_cards.png\n' % ((name,) * 5))
+            f.write(
+                'newmtl %s_bark\nmap_Kd %s_bark.png\nnewmtl %s_cards\nmap_Kd %s_cards.png\nmap_d %s_cards.png\n'
+                % ((name,) * 5)
+            )
         with open(os.path.join(out, name + '.material'), 'w') as f:
-            f.write('; MW4VR tree, made by tools/trees/build_trees.py%s\n' % ('; pictures from Poly Haven CC0 fir_sapling (Rico Cilliers)' if name.startswith('fir') else '')
-                    + '[%s_bark]\nps = opaque\nalbedo = %s_bark.png\nroughness = 0.9\n\n' % (name, name)
-                    + '[%s_cards]\nps = foliage\nalbedo = %s_cards.png\nroughness = 0.85\ntransmission = 0.2\ntwo_sided = 1\nalpha_cutoff = 0.4\n' % (name, name))
+            f.write(
+                '; MW4VR tree, made by tools/trees/build_trees.py%s\n'
+                % ('; pictures from Poly Haven CC0 fir_sapling (Rico Cilliers)' if name.startswith('fir') else '')
+                + '[{}_bark]\nps = opaque\nalbedo = {}_bark.png\nroughness = 0.9\n\n'.format(name, name)
+                + '[{}_cards]\nps = foliage\nalbedo = {}_cards.png\nroughness = 0.85\n'.format(name, name)
+                + 'transmission = 0.2\ntwo_sided = 1\nalpha_cutoff = 0.4\n'
+            )
         p = preview(o, {name + '_bark': bark, name + '_cards': cards})
         p.save(os.path.join(out, name + '_preview.png'))
         shots.append(p)
         kinds.append(kind_text(names[name], name, grass=0.6 if name == 'fir_04' else 1.0, **k))
-        total += k['density']
+        density = k['density']
+        assert isinstance(density, float)
+        total += density
         print('%-9s %4d triangles' % (name, o.count()))
     sheet = Image.new('RGB', (384 * 5, 384 * ((len(shots) + 4) // 5)))
     for i, p in enumerate(shots):
         sheet.paste(p, (384 * (i % 5), 384 * (i // 5)))
     sheet.save(os.path.join(out, 'sheet.png'))
     with open(os.path.join(out, 'clutter_trees.txt'), 'w') as f:
-        f.write('; MW4VR trees (Content\\Models\\clutter\\mw4vr, built by MW4VR tools\\trees\\build_trees.py). A kind off: enabled = 0.\n'
-                '; All of them thinner or denser at once: [d3d11] clutter_density in mw4hook.ini, or the densities here.\n' + '\n'.join(kinds))
+        f.write(
+            '; MW4VR trees (Content\\Models\\clutter\\mw4vr, built by MW4VR tools\\trees\\build_trees.py). '
+            'A kind off: enabled = 0.\n'
+            '; All of them thinner or denser at once: [d3d11] clutter_density in mw4hook.ini, or the densities here.\n'
+            + '\n'.join(kinds)
+        )
     print('%d kinds, %.4f trees per square metre of grass at most' % (len(kinds), total))
 
 

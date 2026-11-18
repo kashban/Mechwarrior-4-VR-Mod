@@ -1,0 +1,50 @@
+# Style and static checks for the Python tools (the pipeline runs both: docs/PIPELINE.md).
+#   ruff format --check tools && ruff check tools      PEP 8 and the common pitfalls
+#   mypy                                                types
+# The tests (tests/) are not formatted or rewritten by these: they stay as they are while the code they hold
+# is being tidied, so that a change of behaviour shows.
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+extend-exclude = ["tests", "re", "mod", "release", "cockpits", "mw5export"]
+
+[tool.ruff.format]
+quote-style = "single"
+
+[tool.ruff.lint]
+select = [
+    "E", "W",  # pycodestyle
+    "F",       # pyflakes
+    "I",       # import order
+    "N",       # names (PEP 8)
+    "B",       # bugbear: likely bugs
+    "UP",      # newer Python idioms
+    "SIM",     # simpler forms
+    "C4",      # comprehensions
+    "PIE", "RUF", "BLE", "FURB",
+    "S",       # bandit's rules
+]
+ignore = [
+    "S101",  # assert: the tools check their own assumptions with it
+    "S603",  # subprocess with an argument list (never a shell) is what the tools are for
+    "S607",  # git and the compilers are found by their names
+    "E741",  # l, I as names: none here, and i / l are the usual counters in the mesh code
+    "UP031", "UP032",  # '%' formatting is used throughout, on purpose: one way of writing a number's format
+]
+
+[tool.ruff.lint.per-file-ignores]
+# numpy code: the short names are the formulas' own (P, C, N: points, colours, normals)
+"tools/trees/build_trees.py" = ["N803", "N806"]
+"tools/cockpit_convert.py" = ["N803", "N806"]
+"tools/faces/*.py" = ["N803", "N806"]
+"tools/monitor_sheet.py" = ["N803", "N806"]
+
+[tool.mypy]
+files = ["tools"]
+python_version = "3.10"
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+exclude = ["tools/ci/.*\\.mjs"]

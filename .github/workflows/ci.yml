@@ -109,6 +109,23 @@ jobs:
           echo "$(grep -c '\[' cppcheck.log || true) messages"
           if grep -F '[error/' cppcheck.log; then exit 1; fi
 
+  lint:
+    name: Style of the Python tools (ruff, mypy)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install ruff and mypy (pinned)
+        run: |
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install -q -r requirements-ci.txt
+      - name: Format (ruff format, pyproject.toml)
+        run: '"$RUNNER_TEMP/venv/bin/ruff" format --check tools'
+      - name: Lint (ruff check)
+        run: '"$RUNNER_TEMP/venv/bin/ruff" check tools'
+      - name: Types (mypy)
+        run: '"$RUNNER_TEMP/venv/bin/mypy"'
+
   guards:
     name: Guards (foreign assets, private data, secrets, dependencies)
     runs-on: ubuntu-24.04

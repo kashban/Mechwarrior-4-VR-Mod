@@ -5,8 +5,8 @@
 # PSSA:   the path of PSScriptAnalyzer.psd1 (the module from the PowerShell Gallery, unpacked); without it the
 #         module installed on the machine is used.
 # The logs go to mod\build\analyze\bandit.log and pssa.log.
-# Exit code: 1 when bandit names a finding of medium or high severity or PSScriptAnalyzer an error (the pipeline's
-# gate); its low ones and the analyser's warnings are listed in the logs.
+# Exit code: 1 when bandit names a finding of medium or high severity or PSScriptAnalyzer anything at all (the
+# pipeline's gate; its rules: PSScriptAnalyzerSettings.psd1); bandit's low ones are listed in the log.
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $out = Join-Path $root 'mod\build\analyze'
@@ -23,15 +23,16 @@ try {
     "bandit: {0} findings ({1} medium, {2} high)" -f @($b -match '^>> Issue').Count, @($b -match 'Severity: Medium').Count, @($b -match 'Severity: High').Count
 
     if ($env:PSSA) { Import-Module $env:PSSA } else { Import-Module PSScriptAnalyzer }
-    $r = @(Invoke-ScriptAnalyzer -Path tools -Recurse -Severity Error, Warning)
-    $r | ForEach-Object { "{0}:{1}: [{2}/{3}] {4}" -f (Resolve-Path -Relative $_.ScriptPath), $_.Line, $_.Severity, $_.RuleName, $_.Message } |
-        Set-Content (Join-Path $out 'pssa.log') -Encoding UTF8
-    $errors = @($r | Where-Object Severity -eq 'Error').Count
-    "PSScriptAnalyzer: {0} findings ({1} errors)" -f $r.Count, $errors
+    $r = @(Invoke-ScriptAnalyzer -Path tools -Recurse -Severity Error, Warning -Settings (Join-Path $root 'PSScriptAnalyzerSettings.psd1'))
+    # (also when there is none: an old run's log must not stay)
+    Set-Content (Join-Path $out 'pssa.log') -Encoding UTF8 -Value @($r | ForEach-Object {
+            "{0}:{1}: [{2}/{3}] {4}" -f (Resolve-Path -Relative $_.ScriptPath), $_.Line, $_.Severity, $_.RuleName, $_.Message })
+    $errors = $r.Count
+    "PSScriptAnalyzer: {0} findings" -f $r.Count
     $grave = @($b -match 'Severity: (Medium|High)').Count
     if ($grave -or $errors) {
         $b -match '^>> Issue|Severity: (Medium|High)|Location:' | Select-Object -First 30
-        Get-Content (Join-Path $out 'pssa.log') | Where-Object { $_ -match '\[Error/' } | Select-Object -First 30
+        Get-Content (Join-Path $out 'pssa.log') | Select-Object -First 30
         exit 1
     }
 } finally { Pop-Location }

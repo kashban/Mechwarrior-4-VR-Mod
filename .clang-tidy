@@ -1,0 +1,42 @@
+# clang-tidy for the mod (tools\security\tidy.bat runs it). The checks that find bugs are all on; of the style
+# checks those that fit a DLL of hooks - which casts pointers, patches vtables and fills constant buffers by index
+# on purpose, so the checks against exactly that are off, each with its reason.
+Checks: >
+  bugprone-*,
+  cert-*,
+  clang-analyzer-*,
+  performance-*,
+  portability-*,
+  modernize-use-nullptr,
+  modernize-use-override,
+  modernize-use-bool-literals,
+  modernize-redundant-void-arg,
+  modernize-deprecated-headers,
+  readability-braces-around-statements,
+  readability-else-after-return,
+  readability-redundant-control-flow,
+  readability-simplify-boolean-expr,
+  readability-inconsistent-declaration-parameter-name,
+  readability-misleading-indentation,
+  readability-duplicate-include,
+  misc-unused-parameters,
+  misc-redundant-expression,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-narrowing-conversions,
+  -bugprone-implicit-widening-of-multiplication-result,
+  -bugprone-suspicious-memory-comparison,
+  -cert-err33-c,
+  -cert-err58-cpp,
+  -cert-flp30-c,
+  -readability-braces-around-statements
+# Off, and why:
+#   easily-swappable-parameters   matrices and rectangles are rows of floats; every call would be named
+#   narrowing-conversions, implicit-widening   pixel and index arithmetic between float, int and UINT, checked by hand
+#   suspicious-memory-comparison  memcmp on floats means "has anything changed"
+#   err33-c                       swprintf's and fclose's results are not needed
+#   err58-cpp                     globals with constructors (std::mutex, std::wstring) cannot throw here
+#   flp30-c                       float loop counters in the grids of directions
+#   braces-around-statements      one-line bodies stay without braces (the project's style)
+WarningsAsErrors: ''
+HeaderFilterRegex: 'mod[\\/]src[\\/].*'
+FormatStyle: file

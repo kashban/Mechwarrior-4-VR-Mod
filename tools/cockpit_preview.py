@@ -1,5 +1,11 @@
-# Software preview of a cockpit exported by UE Viewer (glTF + PNG): python cockpit_preview.py <gltf> <export root> <out.png> ex ey ez [yaw_deg pitch_deg fov_deg]
-import json, struct, sys, os, glob, math
+# Software preview of a cockpit exported by UE Viewer (glTF + PNG):
+#   python cockpit_preview.py <gltf> <export root> <out.png> ex ey ez [yaw_deg pitch_deg fov_deg]
+import glob
+import json
+import math
+import os
+import sys
+
 import numpy as np
 from PIL import Image
 
@@ -10,8 +16,10 @@ pitch = math.radians(float(sys.argv[8])) if len(sys.argv) > 8 else 0
 fov = float(sys.argv[9]) if len(sys.argv) > 9 else 100
 W, H = 800, 600
 
-g = json.load(open(gltf))
-buf = open(os.path.join(os.path.dirname(gltf), g['buffers'][0]['uri']), 'rb').read()
+with open(gltf) as text:
+    g = json.load(text)
+with open(os.path.join(os.path.dirname(gltf), g['buffers'][0]['uri']), 'rb') as data:
+    buf = data.read()
 CT = {5120: 'b', 5121: 'B', 5122: 'h', 5123: 'H', 5125: 'I', 5126: 'f'}
 NC = {'SCALAR': 1, 'VEC2': 2, 'VEC3': 3, 'VEC4': 4}
 
@@ -24,7 +32,7 @@ def acc(i):
     off = v.get('byteOffset', 0) + a.get('byteOffset', 0)
     st = v.get('byteStride', 0)
     if st and st != dt.itemsize * n:
-        raw = np.frombuffer(buf, np.uint8, st * a['count'], off).reshape(a['count'], st)[:, :dt.itemsize * n]
+        raw = np.frombuffer(buf, np.uint8, st * a['count'], off).reshape(a['count'], st)[:, : dt.itemsize * n]
         arr = np.ascontiguousarray(raw).view(dt).reshape(a['count'], n)
     else:
         arr = np.frombuffer(buf, dt, a['count'] * n, off).reshape(a['count'], n)
@@ -36,7 +44,11 @@ def acc(i):
 def tex(name, suffix):
     base = name.replace('_MTI', '').replace('_cockpit', '')
     for cand in (name.replace('_MTI', '') + suffix, base + suffix):
-        hits = [p for p in glob.glob(os.path.join(root, '**', '*.png'), recursive=True) if os.path.basename(p).lower() == (cand + '.png').lower()]
+        hits = [
+            p
+            for p in glob.glob(os.path.join(root, '**', '*.png'), recursive=True)
+            if os.path.basename(p).lower() == (cand + '.png').lower()
+        ]
         if hits:
             return np.asarray(Image.open(hits[0]).convert('RGB').resize((512, 512)), np.float32) / 255
     return None
@@ -84,7 +96,7 @@ for prim in g['meshes'][0]['primitives']:
             continue
         iz = a / c[0, 2] + b / c[1, 2] + cc / c[2, 2]
         z = 1 / iz
-        sub = zb[y0:y1 + 1, x0:x1 + 1]
+        sub = zb[y0 : y1 + 1, x0 : x1 + 1]
         m &= z < sub
         if not m.any():
             continue
@@ -99,9 +111,9 @@ for prim in g['meshes'][0]['primitives']:
             if ems is not None:
                 col = col + ems[ty, tx] * 2
         else:
-            col = np.zeros(uv.shape[:2] + (3,), np.float32) + 0.3 * lam
+            col = np.zeros((*uv.shape[:2], 3), np.float32) + 0.3 * lam
         sub[m] = z[m]
-        img[y0:y1 + 1, x0:x1 + 1][m] = col[m]
+        img[y0 : y1 + 1, x0 : x1 + 1][m] = col[m]
 
 Image.fromarray((np.clip(img, 0, 1) ** (1 / 2.2) * 255).astype(np.uint8)).save(out)
 print('ok', out)

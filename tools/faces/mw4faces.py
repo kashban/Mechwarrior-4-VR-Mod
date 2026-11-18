@@ -1,6 +1,10 @@
 # Pictures of the MW4 mechs' torsos (mw4hook's model_dump): front and three-quarter view, textured.
 #   python mw4faces.py <model_dump\mechs> <texture_dump> <out folder>
-import os, sys, math
+import math
+import os
+import sys
+from pathlib import Path
+
 import numpy as np
 from PIL import Image, ImageDraw
 
@@ -11,7 +15,7 @@ def load(path):
     """lod 0 of an OBJ -> (positions n x 3, uvs n x 2, triangles [(i0, i1, i2, material)])"""
     P, T, F = [], [], []
     mtl, take = None, False
-    for line in open(path, encoding='latin-1'):
+    for line in Path(path).read_text(encoding='latin-1').splitlines(keepends=True):
         if line.startswith('o '):
             take = line.strip().endswith('lod0')
         elif line.startswith('v '):
@@ -27,10 +31,11 @@ def load(path):
 
 
 def materials(path, texroot):
-    out, cur = {}, None
+    out: dict = {}
+    cur = None
     if not os.path.exists(path):
         return out
-    for line in open(path, encoding='latin-1'):
+    for line in Path(path).read_text(encoding='latin-1').splitlines(keepends=True):
         if line.startswith('newmtl'):
             cur = line.split(None, 1)[1].strip()
         elif line.startswith('map_Kd') and cur:
@@ -50,7 +55,7 @@ def render(P, T, F, tex, yaw, pitch, lo, hi):
     Q = (P - mid) @ R.T
     img = np.full((S, S, 3), 46, np.float32)
     zb = np.full((S, S), -1e9, np.float32)
-    X = (0.5 - Q[:, 0] / (2 * ext)) * S      # the viewer stands in front (+z), the mech's left is on the viewer's right
+    X = (0.5 - Q[:, 0] / (2 * ext)) * S  # the viewer stands in front (+z), the mech's left is on the viewer's right
     Y = (0.5 - Q[:, 1] / (2 * ext)) * S
     Z = Q[:, 2]
     L = np.array([0.3, 0.5, 0.8])
@@ -69,7 +74,7 @@ def render(P, T, F, tex, yaw, pitch, lo, hi):
         b = ((y[2] - y[0]) * (gx - x[2]) + (x[0] - x[2]) * (gy - y[2])) / den
         c = 1 - a - b
         zz = a * z[0] + b * z[1] + c * z[2]
-        ok = (a >= -1e-4) & (b >= -1e-4) & (c >= -1e-4) & (zz > zb[y0:y1 + 1, x0:x1 + 1])
+        ok = (a >= -1e-4) & (b >= -1e-4) & (c >= -1e-4) & (zz > zb[y0 : y1 + 1, x0 : x1 + 1])
         if not ok.any():
             continue
         n = np.cross(Q[vi[1]] - Q[vi[0]], Q[vi[2]] - Q[vi[0]])
@@ -83,10 +88,10 @@ def render(P, T, F, tex, yaw, pitch, lo, hi):
             th, tw = t.shape[:2]
             col = t[((1 - v) % 1.0 * th).astype(int) % th, (u % 1.0 * tw).astype(int) % tw] * shade
         else:
-            col = np.full(gx.shape + (3,), 150.0) * shade
-        sub = img[y0:y1 + 1, x0:x1 + 1]
+            col = np.full((*gx.shape, 3), 150.0) * shade
+        sub = img[y0 : y1 + 1, x0 : x1 + 1]
         sub[ok] = col[ok]
-        zb[y0:y1 + 1, x0:x1 + 1][ok] = zz[ok]
+        zb[y0 : y1 + 1, x0 : x1 + 1][ok] = zz[ok]
     return Image.fromarray(np.clip(255 * (img / 255) ** 0.55, 0, 255).astype(np.uint8))  # the paint is dark: lifted
 
 
@@ -96,7 +101,11 @@ def main(root, texroot, out):
         d = os.path.join(root, mech)
         objs = [f for f in os.listdir(d) if f.endswith('.obj') and '_dam' not in f]
         # the torso, and what sits on it with a face of its own
-        pick = [f for f in objs if any(k in f.lower() for k in ('torso', 'head', 'cockpit', 'canopy', 'nose')) and 'cage' not in f]
+        pick = [
+            f
+            for f in objs
+            if any(k in f.lower() for k in ('torso', 'head', 'cockpit', 'canopy', 'nose')) and 'cage' not in f
+        ]
         if not pick:
             print(mech, 'no torso among', objs)
             continue
@@ -110,7 +119,9 @@ def main(root, texroot, out):
             lo, hi = P[used].min(0), P[used].max(0)
             for yaw, pitch in ((0, 0.12), (0.7, 0.25)):
                 im = render(P, T, F, tex, yaw, pitch, lo, hi)
-                ImageDraw.Draw(im).text((6, 4), '%s  %s%s' % (mech, f[:-4], '' if tex else '  (no texture)'), fill=(255, 255, 120))
+                ImageDraw.Draw(im).text(
+                    (6, 4), '{}  {}{}'.format(mech, f[:-4], '' if tex else '  (no texture)'), fill=(255, 255, 120)
+                )
                 tiles.append(im)
         sheet = Image.new('RGB', (S * len(tiles), S))
         for i, im in enumerate(tiles):

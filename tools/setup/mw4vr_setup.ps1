@@ -47,7 +47,7 @@ function Copy-Kept([string]$From, [string]$To) {
 # takes it along: the start script then asks "publisher could not be verified" at every start. The files the
 # player has just had installed lose the mark.
 function Clear-WebMark([string]$File) {
-    try { Unblock-File -LiteralPath $File -ErrorAction Stop } catch { }
+    try { Unblock-File -LiteralPath $File -ErrorAction Stop } catch { Write-Verbose "passed over: $($_.Exception.Message)" }
 }
 
 # 'v11.38' from a d3d11.dll of MW4VR's ('' = the file is not there or not MW4VR's)
@@ -129,7 +129,7 @@ function Merge-Ini([string]$From, [string]$To) {
 
 # mechs the package's mw4vr_mechs.ini knows by name (model=) and the player's does not are added to the player's
 # as new profiles; the player's own profiles stay as they are. -> how many
-function Merge-Mechs([string]$From, [string]$To) {
+function Merge-Mech([string]$From, [string]$To) {
     $enc = [Text.Encoding]::Default
     $read = {
         param($p)
@@ -194,7 +194,7 @@ function Install-Mod([string]$Game, [bool]$Dinput) {
     $mechs = Join-Path $Game 'mw4vr_mechs.ini'
     if (-not (Test-Path $mechs)) { Copy-Item (Join-Path $src 'mw4vr_mechs.ini') $mechs }
     else {
-        $m = Merge-Mechs (Join-Path $src 'mw4vr_mechs.ini') $mechs
+        $m = Merge-Mech (Join-Path $src 'mw4vr_mechs.ini') $mechs
         if ($m) { Say "mw4vr_mechs.ini: $m mechs new (the file as it was: mw4vr_mechs.ini.before_update)." }
     }
     $cp = Join-Path $Game 'mw4vr_cockpits'
@@ -234,7 +234,7 @@ function Set-HookIni([string]$Game) {
     return $true
 }
 
-function Install-Trees([string]$Game) {
+function Install-Tree([string]$Game) {
     $src = Join-Path $script:Pkg 'trees'
     if (-not (Test-Path (Join-Path $src 'clutter_trees.txt'))) { Say 'This package has no trees.'; return }
     $clutter = Join-Path $Game 'Content\Clutter\clutter.txt'
@@ -261,7 +261,7 @@ function New-StartShortcut([string]$Game) {
 }
 
 # where MechWarrior 5: Mercenaries keeps its paks ('' = not found): Epic's manifests, Steam's libraries
-function Find-Mw5Paks {
+function Find-Mw5Pak {
     $cand = @()
     $man = Join-Path $env:ProgramData 'Epic\EpicGamesLauncher\Data\Manifests'
     if (Test-Path $man) {
@@ -269,7 +269,7 @@ function Find-Mw5Paks {
             try {
                 $j = Get-Content $_.FullName -Raw | ConvertFrom-Json
                 if ("$($j.DisplayName)" -match 'MechWarrior 5' -and "$($j.DisplayName)" -notmatch 'Clans') { $cand += $j.InstallLocation }
-            } catch { }
+            } catch { Write-Verbose "passed over: $($_.Exception.Message)" }
         }
     }
     try {
@@ -278,7 +278,7 @@ function Find-Mw5Paks {
         $libs = @($steam)
         if (Test-Path $vdf) { $libs += [regex]::Matches((Get-Content $vdf -Raw), '"path"\s+"([^"]+)"') | ForEach-Object { $_.Groups[1].Value -replace '\\\\', '\' } }
         foreach ($l in $libs) { $cand += Join-Path $l 'steamapps\common\MechWarrior 5 Mercenaries' }
-    } catch { }
+    } catch { Write-Verbose "passed over: $($_.Exception.Message)" }
     foreach ($c in $cand) {
         if (-not $c) { continue }
         $p = Join-Path $c 'MW5Mercs\Content\Paks'
@@ -304,7 +304,7 @@ function Find-Python([ref]$Modules) {
                 & $cmd.Source @a -c 'import numpy, PIL' 2>$null | Out-Null
                 $Modules.Value = ($LASTEXITCODE -eq 0)
                 return @{ Exe = $cmd.Source; Arg = $c[1] }
-            } catch { }
+            } catch { Write-Verbose "passed over: $($_.Exception.Message)" }
         }
     }
     return $null
@@ -329,26 +329,26 @@ function Get-PythonToInstall {
             & winget show -e --id "Python.Python.3.$minor" --source winget --accept-source-agreements 2>$null | Out-Null
             if ($LASTEXITCODE -eq 0) { $best = "3.$minor"; break }
         }
-    } catch { }
+    } catch { Write-Verbose "passed over: $($_.Exception.Message)" }
     return $best
 }
 
 # The folders chosen in the window, kept for the next start of the setup (also of a later package's):
 # %APPDATA%\MW4VR\setup.txt, lines "name=path"
 function Get-PathsFile { return (Join-Path $env:APPDATA 'MW4VR\setup.txt') }
-function Read-Paths {
+function Read-PathList {
     $s = @{}
     $p = Get-PathsFile
     if (Test-Path $p) { foreach ($l in Get-Content $p -Encoding UTF8) { $i = $l.IndexOf('='); if ($i -gt 0) { $s[$l.Substring(0, $i)] = $l.Substring($i + 1) } } }
     return $s
 }
-function Write-Paths($Paths) {
+function Write-PathList($Paths) {
     try {
         $p = Get-PathsFile
         New-Item -ItemType Directory (Split-Path -Parent $p) -Force | Out-Null
         $lines = @($Paths.Keys | Sort-Object | Where-Object { $Paths[$_] } | ForEach-Object { "$_=$($Paths[$_])" })
         [IO.File]::WriteAllLines($p, [string[]]$lines, (New-Object Text.UTF8Encoding($false)))
-    } catch { }
+    } catch { Write-Verbose "passed over: $($_.Exception.Message)" }
 }
 
 if ($NoGui) { return }
@@ -383,7 +383,7 @@ function Add-Check([string]$t, [bool]$on, [int]$x = 14) {
     $c.Text = $t; $c.Checked = $on; $c.Location = New-Object Drawing.Point($x, $script:y); $c.Size = New-Object Drawing.Size(690, 20)
     $f.Controls.Add($c); $script:y += 22; return $c
 }
-function Pick-Folder([Windows.Forms.TextBox]$t, [string]$what) {
+function Select-Folder([Windows.Forms.TextBox]$t, [string]$what) {
     $d = New-Object Windows.Forms.FolderBrowserDialog
     $d.Description = $what
     if ($t.Text -and (Test-Path $t.Text)) { $d.SelectedPath = $t.Text }
@@ -393,7 +393,7 @@ function Pick-Folder([Windows.Forms.TextBox]$t, [string]$what) {
 [void](Add-Label '1. The game' 14 690 $true)
 [void](Add-Label "The folder of MechWarrior 4: Mercenaries (with MW4Mercs.exe and MW4Engine DX11's mw4hook.dll):")
 $guess = ''
-$saved = Read-Paths
+$saved = Read-PathList
 foreach ($g in @((Split-Path -Parent $script:Pkg), (Split-Path -Parent (Split-Path -Parent $script:Pkg)), $saved['game'])) { if ($g -and (Test-Game $g)) { $guess = $g } }
 $tGame, $bGame = Add-PathRow $guess
 $lGame = Add-Label ''
@@ -410,7 +410,7 @@ $script:y += 6
 $cMw5 = Add-Check 'Export my MechWarrior 5 cockpits and convert them for MW4VR (about 20 minutes, 6 GB while it runs)' $false
 $cMods = Add-Check 'Also the cockpits of the MechWarrior 5 mods installed there (some more minutes)' $false 32
 [void](Add-Label '...\MW5Mercs\Content\Paks of MechWarrior 5: Mercenaries:')
-$tPaks, $bPaks = Add-PathRow $(if ($saved['paks'] -and (Test-Path $saved['paks'])) { $saved['paks'] } else { Find-Mw5Paks })
+$tPaks, $bPaks = Add-PathRow $(if ($saved['paks'] -and (Test-Path $saved['paks'])) { $saved['paks'] } else { Find-Mw5Pak })
 $lMw5 = Add-Label ''
 $bEpic = New-Object Windows.Forms.Button
 $bEpic.Text = 'MechWarrior 5 in the Epic Games Store'; $bEpic.Location = New-Object Drawing.Point(14, $script:y); $bEpic.Size = New-Object Drawing.Size(250, 25)
@@ -520,8 +520,8 @@ $cMw5.Add_CheckedChanged({ Show-Mw5 })
 $bEpic.Add_Click({ Start-Process 'https://store.epicgames.com/p/mechwarrior-5' })
 $bSteam.Add_Click({ Start-Process 'https://store.steampowered.com/app/784080' })
 $tGame.Add_TextChanged({ Show-Game })
-$bGame.Add_Click({ Pick-Folder $tGame 'The folder of MechWarrior 4: Mercenaries' })
-$bPaks.Add_Click({ Pick-Folder $tPaks 'MW5Mercs\Content\Paks of MechWarrior 5: Mercenaries' })
+$bGame.Add_Click({ Select-Folder $tGame 'The folder of MechWarrior 4: Mercenaries' })
+$bPaks.Add_Click({ Select-Folder $tPaks 'MW5Mercs\Content\Paks of MechWarrior 5: Mercenaries' })
 $bUm.Add_Click({
     $d = New-Object Windows.Forms.OpenFileDialog
     $d.Filter = 'UE Viewer (umodel*.exe)|umodel*.exe'
@@ -530,15 +530,15 @@ $bUm.Add_Click({
 $bGet.Add_Click({ Start-Process 'https://www.gildor.org/en/projects/umodel' })
 $bClose.Add_Click({ $f.Close() })
 # what stands in the three fields is kept when the installation starts and when the window closes
-function Save-Fields {
+function Save-Field {
     if ($env:MW4VR_SETUP_TEST -and -not $env:MW4VR_SETUP_TEST_SAVE) { return } # (a test leaves the player's file alone)
-    $p = Read-Paths
+    $p = Read-PathList
     $g = $tGame.Text.Trim(); if (Test-Game $g) { $p['game'] = $g }
     $k = $tPaks.Text.Trim(); if ($k -and (Test-Path $k)) { $p['paks'] = $k }
     $u = $tUm.Text.Trim(); if ($u -and (Test-Path $u)) { $p['umodel'] = $u }
-    Write-Paths $p
+    Write-PathList $p
 }
-$f.Add_FormClosing({ Save-Fields })
+$f.Add_FormClosing({ Save-Field })
 
 $script:Job = $null
 $script:JobOut = ''
@@ -556,7 +556,7 @@ $timer.Add_Tick({
             $script:JobPos = $fs.Position
         } finally { $fs.Close() }
         if ($new) { $log.AppendText(($new -replace "(?<!`r)`n", "`r`n")) }
-    } catch { }
+    } catch { Write-Verbose "passed over: $($_.Exception.Message)" }
     if ($script:Job.HasExited) {
         $code = $script:Job.ExitCode
         $script:Job = $null
@@ -582,13 +582,13 @@ $bGo.Add_Click({
         if ($why) { [void][Windows.Forms.MessageBox]::Show($f, $why, 'MW4VR Setup'); return }
     }
     $bGo.Enabled = $false
-    Save-Fields
+    Save-Field
     try {
         Say "Installing into $g"
         if ($cMod.Checked) { Install-Mod $g $cDinput.Checked }
         elseif ($cDinput.Checked) { Copy-Kept (Join-Path $script:Pkg 'game\dinput.dll') (Join-Path $g 'dinput.dll'); Say 'dinput.dll installed.' }
         if ($cHook.Checked) { [void](Set-HookIni $g) }
-        if ($cTrees.Checked) { Install-Trees $g }
+        if ($cTrees.Checked) { Install-Tree $g }
         if ($cLink.Checked) { New-StartShortcut $g }
     } catch {
         Say "FAILED: $($_.Exception.Message)"
@@ -606,14 +606,14 @@ $bGo.Add_Click({
     $script:JobPos = 0
     # Each path between quotes. One typed with a \ at its end ("...\Paks\") would end in \" - which the program
     # started reads as a quote inside the argument, so that the arguments ran together: its last backslashes doubled.
-    function Quote-Arg([string]$s) { '"' + ($s -replace '(\\+)$', '$1$1') + '"' }
-    $a = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Quote-Arg (Join-Path $script:Pkg 'mw4vr_setup_cockpits.ps1')),
-        '-Tools', (Quote-Arg (Join-Path $script:Pkg 'cockpit_tools')), '-Paks', (Quote-Arg $tPaks.Text.Trim()), '-Umodel', (Quote-Arg $tUm.Text.Trim()),
-        '-Game', (Quote-Arg $g), '-Python', (Quote-Arg $script:Py.Exe), '-Log', (Quote-Arg $script:JobOut))
+    function Format-Argument([string]$s) { '"' + ($s -replace '(\\+)$', '$1$1') + '"' }
+    $a = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Format-Argument (Join-Path $script:Pkg 'mw4vr_setup_cockpits.ps1')),
+        '-Tools', (Format-Argument (Join-Path $script:Pkg 'cockpit_tools')), '-Paks', (Format-Argument $tPaks.Text.Trim()), '-Umodel', (Format-Argument $tUm.Text.Trim()),
+        '-Game', (Format-Argument $g), '-Python', (Format-Argument $script:Py.Exe), '-Log', (Format-Argument $script:JobOut))
     if ($script:Py.Arg) { $a += @('-PythonArg', $script:Py.Arg) }
     if (-not $script:PyMods) { $a += '-Pip' }
     if ($cKeep.Checked) { $a += '-DeleteExport' }
-    if ($cMods.Checked -and $script:ModsDir) { $a += @('-Mods', (Quote-Arg $script:ModsDir)) }
+    if ($cMods.Checked -and $script:ModsDir) { $a += @('-Mods', (Format-Argument $script:ModsDir)) }
     # (Windows' own PowerShell by its full path, not whatever is called powershell in the folder the setup runs in)
     $script:Job = Start-Process (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') -ArgumentList $a -WindowStyle Hidden -PassThru
     $timer.Start()

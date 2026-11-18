@@ -1,7 +1,11 @@
 # Fetches Poly Haven models (CC0, https://polyhaven.com) as 1k glTF: the .gltf, its .bin and the colour pictures -
 # what build_trees.py draws its trees from.
 #   python fetch_polyhaven.py <folder> <asset> [<asset> ...]      -> <folder>/<asset>/...
-import hashlib, json, os, sys, urllib.request
+import hashlib
+import json
+import os
+import sys
+import urllib.request
 
 AGENT = {'User-Agent': 'tree-card-builder'}
 
@@ -21,7 +25,7 @@ OPENER = urllib.request.build_opener(HttpsOnly)
 def get(url):
     if not url.startswith('https://'):  # (urllib would also open file: and the like)
         raise SystemExit('refused address ' + url)
-    return OPENER.open(urllib.request.Request(url, headers=AGENT))
+    return OPENER.open(urllib.request.Request(url, headers=AGENT))  # noqa: S310 - https alone: above, and HttpsOnly
 
 
 def main(folder, names):
@@ -40,7 +44,9 @@ def main(folder, names):
             if os.path.exists(path) and os.path.getsize(path) == size:
                 continue
             os.makedirs(os.path.dirname(path), exist_ok=True)
-            seen = hashlib.md5(usedforsecurity=False)  # (the site's own checksum of the file: against a broken download)
+            seen = hashlib.md5(
+                usedforsecurity=False
+            )  # (the site's own checksum of the file: against a broken download)
             with get(url) as r, open(path + '.part', 'wb') as f:
                 while True:
                     b = r.read(1 << 20)
@@ -49,9 +55,9 @@ def main(folder, names):
                     seen.update(b)
                     f.write(b)
             if os.path.getsize(path + '.part') != size:
-                raise SystemExit('%s: size differs' % rel)
+                raise SystemExit('{}: size differs'.format(rel))
             if md5 and seen.hexdigest() != md5.lower():
-                raise SystemExit('%s: checksum differs' % rel)
+                raise SystemExit('{}: checksum differs'.format(rel))
             os.replace(path + '.part', path)
         print('%s: %d files, %.1f MB' % (name, len(todo), sum(t[2] for t in todo) / 1e6))
 

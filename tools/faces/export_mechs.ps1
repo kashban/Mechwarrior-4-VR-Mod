@@ -2,6 +2,7 @@
 # battle draws, ends the game. The pilot's files and mw4hook.ini are put back at the end.
 #   export_mechs.ps1 -Game <the game's folder> -Pilot <pilot name> -Mechs 'Argus','Mad Cat',...
 # The models land in <game>\model_dump, the textures in <game>\texture_dump (mw4faces.py draws them).
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'Out', Justification = 'used by the function Say')]
 param([Parameter(Mandatory)][string]$Game, [Parameter(Mandatory)][string]$Pilot, [string[]]$Mechs, [string]$Extra = '', [int]$Wait = 100,
       [string]$Out = "$PSScriptRoot\export_mechs.log")
 $dir = $Game
@@ -15,7 +16,7 @@ function EndGame {
     for ($i = 0; $i -lt 120; $i++) {
         $left = @(Get-Process -Name MW4Mercs -ErrorAction SilentlyContinue)
         if ($left.Count -eq 0) { return }
-        foreach ($q in $left) { try { $q.Kill() } catch { } }
+        foreach ($q in $left) { try { $q.Kill() } catch { Write-Verbose "passed over: $($_.Exception.Message)" } }
         Start-Sleep -Milliseconds 500
     }
 }

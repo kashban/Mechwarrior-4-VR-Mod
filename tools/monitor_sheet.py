@@ -1,15 +1,27 @@
 # A picture of a cockpit's monitors as the pilot sees them, with what each shows: to check a <name>.ini.
 #   python tools/monitor_sheet.py <name>.mwc [<name>.mwc ...] <out.png>
 # The mesh as grey dots, each monitor filled, with its number and the part of the HUD its .ini gives it.
-import configparser, math, os, sys
+import configparser
+import math
+import os
+import sys
+
 import numpy as np
 from PIL import Image, ImageDraw
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import cockpit_convert as cc
 
 W, H, FOV, PITCH = 640, 480, 115.0, -22.0
 ROLE = {v: k for k, v in cc.HUD_PARTS.items()}
-COLOUR = {'radar': (60, 200, 60), 'target': (220, 170, 40), 'damage': (220, 80, 80), 'lance': (80, 160, 240), 'weapons': (200, 90, 220), None: (70, 70, 70)}
+COLOUR = {
+    'radar': (60, 200, 60),
+    'target': (220, 170, 40),
+    'damage': (220, 80, 80),
+    'lance': (80, 160, 240),
+    'weapons': (200, 90, 220),
+    None: (70, 70, 70),
+}
 
 
 def project(P, eye):
@@ -28,7 +40,10 @@ def sheet(path):
     name = os.path.splitext(os.path.basename(path))[0]
     ini = configparser.ConfigParser()
     ini.read(os.path.splitext(path)[0] + '.ini')
-    get = lambda k, d: ini.get('cockpit', k, fallback=d)
+
+    def get(k, d):
+        return ini.get('cockpit', k, fallback=d)
+
     eye = np.array([float(get('eye_right_m', 0)), float(get('eye_up_m', 0)), float(get('eye_forward_m', 0))])
     im = Image.new('RGB', (W, H), (12, 14, 18))
     d = ImageDraw.Draw(im)
@@ -37,7 +52,7 @@ def sheet(path):
         if g['name'].startswith('SCREEN:'):
             continue
         xy, ok = project(g['verts'][:, :3], eye)
-        for (x, y), o in zip(xy[::2], ok[::2]):
+        for (x, y), o in zip(xy[::2], ok[::2], strict=False):
             if o and 0 <= x < W and 0 <= y < H:
                 im.putpixel((int(x), int(y)), (95, 100, 110))
     n = 0

@@ -1,0 +1,16 @@
+# The C++ of mod/ and tests/core_test.cpp: LLVM's style with four spaces and 120 columns.
+#   clang-format -i mod/src/*.cpp mod/src/*.h mod/src/*.inc mod/dinput/*.cpp
+# (Visual Studio's Build Tools bring clang-format: VC\Tools\Llvm\bin.)
+BasedOnStyle: LLVM
+IndentWidth: 4
+ColumnLimit: 120
+AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowShortLoopsOnASingleLine: true
+AllowShortFunctionsOnASingleLine: All
+AllowShortBlocksOnASingleLine: Empty
+# the Windows and OpenXR headers come in an order that matters
+SortIncludes: Never
+# a comment after a member tells what it is: kept in one column within a block
+AlignTrailingComments:
+  Kind: Always
+  OverEmptyLines: 0

@@ -21,7 +21,7 @@ $IsMesh = '^\s+\d+\s+[0-9A-Fa-f]+\s+[0-9A-Fa-f]+\s+SkeletalMesh\s'
 # every package under $path, one a line, into a file (the list has millions of lines: too many to pass through
 # PowerShell one by one) -> the file
 function Get-PackageList([string]$path, [string]$file) {
-    $p = Start-Process -FilePath $Umodel -ArgumentList "`"-path=$path`"", '-game=ue4.26', '-list', '*' -NoNewWindow -Wait -PassThru `
+    Start-Process -FilePath $Umodel -ArgumentList "`"-path=$path`"", '-game=ue4.26', '-list', '*' -NoNewWindow -Wait `
         -RedirectStandardOutput $file -RedirectStandardError "$file.err"
     Remove-Item "$file.err" -ErrorAction SilentlyContinue
     return $file
@@ -31,7 +31,7 @@ function Test-Mesh([string]$path, [string]$pkg) {
     $objs = & $Umodel "-path=$path" '-game=ue4.26' '-list' $pkg 2>&1 | ForEach-Object { "$_" }
     return [bool]($objs -match $IsMesh)
 }
-function Export-Packages([string]$path, $pkgs, [string]$to) {
+function Export-Package([string]$path, $pkgs, [string]$to) {
     $i = 0
     while ($i -lt @($pkgs).Count) {
         $part = @($pkgs)[$i..([Math]::Min($i + 19, @($pkgs).Count - 1))]
@@ -68,7 +68,7 @@ foreach ($grp in ($inDirs | Where-Object { -not $known[$_.Dir.ToLower()] } | Gro
 $pkgs = @($pkgs | Sort-Object Pkg -Unique)
 if ($Only.Count) { $pkgs = @($pkgs | Where-Object { $Only -contains $_.Mech }) }
 "{0} cockpits" -f @($pkgs).Count
-Export-Packages $Paks $pkgs $Out
+Export-Package $Paks $pkgs $Out
 $rows = @($pkgs | ForEach-Object { "{0}`t{1}" -f $_.Mech, (Join-Path $Out (($_.Pkg -replace '^/', '') -replace '/', '\')) })
 
 # The mods' cockpits: skeletal meshes in a folder named Cockpit inside a mod (/MW5Mercs/Plugins/<mod>/Content/...).
@@ -115,7 +115,7 @@ if ($Mods) {
         }
         if ($Only.Count) { $modPkgs = @($modPkgs | Where-Object { $Only -contains $_.Mech }) }
         "{0} cockpits of mods" -f @($modPkgs).Count
-        Export-Packages $root $modPkgs $modOut
+        Export-Package $root $modPkgs $modOut
         $rows += @($modPkgs | ForEach-Object { "{0}`t{1}`t{2}" -f $_.Mech, (Join-Path $modOut (($_.Pkg -replace '^/', '') -replace '/', '\')), $modOut })
     }
 }

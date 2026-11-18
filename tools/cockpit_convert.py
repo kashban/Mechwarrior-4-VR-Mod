@@ -12,7 +12,12 @@
 # from the game's Projection_Hologram, and the canopy's glass - a sheet over the windows - is left out.
 # Beside the .mwc a <name>.ini is written once - which monitor shows which part of the HUD, the eye's place -
 # for the mod to read and for you to change.
-import json, struct, sys, os, re
+import json
+import os
+import re
+import struct
+import sys
+
 import numpy as np
 from PIL import Image
 
@@ -34,8 +39,13 @@ GRAIN = 3  # the grain's slopes are written this much steeper than the game's
 DETAIL_PATCHES = 'Game/Objects/_common/Materials/Textures/MacroVariation_CLR.png'
 DETAIL_GRAIN = 'Game/Objects/Mechs/_common/Material/Textures/CastMetal_NRM.png'
 # the parts of the game's HUD picture (u0 v0 u1 v1, 0..1 from the top left) a monitor can show
-HUD_PARTS = {'lance': '0.000 0.000 0.243 0.108', 'target': '0.000 0.772 0.180 1.000', 'radar': '0.320 0.770 0.690 0.990',
-             'damage': '0.820 0.772 1.005 1.000', 'weapons': '0.716 0.000 1.000 0.124'}
+HUD_PARTS = {
+    'lance': '0.000 0.000 0.243 0.108',
+    'target': '0.000 0.772 0.180 1.000',
+    'radar': '0.320 0.770 0.690 0.990',
+    'damage': '0.820 0.772 1.005 1.000',
+    'weapons': '0.716 0.000 1.000 0.124',
+}
 LANCE_ALT = '0.000 0.000 0.243 0.435 0.210 0.125'  # the lance list with the open orders menu, and where that menu shows
 
 
@@ -48,7 +58,7 @@ def acc(g, buf, i):
     off = v.get('byteOffset', 0) + a.get('byteOffset', 0)
     st = v.get('byteStride', 0)
     if st:  # a view shared by several accessors
-        raw = np.frombuffer(buf, np.uint8, st * a['count'], off).reshape(a['count'], st)[:, :dt.itemsize * n]
+        raw = np.frombuffer(buf, np.uint8, st * a['count'], off).reshape(a['count'], st)[:, : dt.itemsize * n]
         return np.ascontiguousarray(raw).view(dt).reshape(a['count'], n)
     return np.frombuffer(buf, dt, a['count'] * n, off).reshape(a['count'], n)
 
@@ -59,7 +69,7 @@ def find_props(root):
     for dp, _, fs in os.walk(root):
         for f in fs:
             if f.endswith('.props.txt'):
-                props[f[:-len('.props.txt')].lower()] = os.path.join(dp, f)
+                props[f[: -len('.props.txt')].lower()] = os.path.join(dp, f)
     return props
 
 
@@ -68,15 +78,18 @@ def parse_props(text):
     tex, strength = {}, 1.0
     for m in re.finditer(r"Name=([\w ]+?) \}\s*ParameterValue = Texture2D'([^'.]+)", text):
         tex[m.group(1).strip().lower()] = m.group(2)
-    m = re.search(r"Name=Emissive Strength \}\s*ParameterValue = ([-\d.eE]+)", text)
-    if m:
-        strength = float(m.group(1))
+    found = re.search(r'Name=Emissive Strength \}\s*ParameterValue = ([-\d.eE]+)', text)
+    if found:
+        strength = float(found.group(1))
     return tex, strength
 
 
 def paint_light(text, which='Primary'):
-    """one of the material's paint colours (PaintColorPrimary, Secondary, Tertiary) in linear light, (r, g, b) 0..1, or None"""
-    m = re.search(r"Name=PaintColor%s \}\s*ParameterValue = \{ R=([-\d.eE]+), G=([-\d.eE]+), B=([-\d.eE]+)" % which, text)
+    """one of the material's paint colours (PaintColorPrimary, Secondary, Tertiary) in linear light, (r, g, b) 0..1,
+    or None"""
+    m = re.search(
+        r'Name=PaintColor{} \}}\s*ParameterValue = \{{ R=([-\d.eE]+), G=([-\d.eE]+), B=([-\d.eE]+)'.format(which), text
+    )
     if not m:
         return None
     return tuple(min(1.0, max(0.0, float(v))) for v in m.groups())
@@ -84,7 +97,7 @@ def paint_light(text, which='Primary'):
 
 def to_screen(light):
     """linear light 0..1 -> 0..255 for the screen"""
-    return tuple(int(round(255 * v ** (1 / 2.2))) for v in light)
+    return tuple(round(255 * v ** (1 / 2.2)) for v in light)
 
 
 def paint_colour(text):
@@ -101,7 +114,7 @@ def masked_paint(mask, paints):
     out = np.zeros(m.shape) + METAL
     for k in range(3):
         if paints[k] is not None:
-            out = out + m[..., k:k + 1] * (np.array(paints[k]) - out)
+            out = out + m[..., k : k + 1] * (np.array(paints[k]) - out)
     out = np.round(255 * out ** (1 / 2.2)).astype(np.uint8)
     return Image.fromarray(out, 'RGB').convert('RGBA')
 
@@ -115,10 +128,15 @@ def is_paint(text):
 
 def detail_map(root, size=DETAIL):
     """the picture the mod draws painted metal with, from the game's own two under the export root: red and green
-    the fine grain's slope to the right and up (steeper, see GRAIN), blue the patches' lightness; None while the export has them not"""
+    the fine grain's slope to the right and up (steeper, see GRAIN), blue the patches' lightness; None while the
+    export has them not"""
     try:
-        patches = Image.open(os.path.join(root, *DETAIL_PATCHES.split('/'))).convert('L').resize((size, size), Image.LANCZOS)
-        grain = Image.open(os.path.join(root, *DETAIL_GRAIN.split('/'))).convert('RGB').resize((size, size), Image.LANCZOS)
+        patches = (
+            Image.open(os.path.join(root, *DETAIL_PATCHES.split('/'))).convert('L').resize((size, size), Image.LANCZOS)
+        )
+        grain = (
+            Image.open(os.path.join(root, *DETAIL_GRAIN.split('/'))).convert('RGB').resize((size, size), Image.LANCZOS)
+        )
     except OSError:
         return None
     slope = np.asarray(grain, np.float64)[..., :2]  # faint, and not about the middle: about it, GRAIN times as steep
@@ -134,8 +152,8 @@ def write_detail(path, im):
 
 def is_hologram(text):
     """is the material made from one of the game's that show a picture (a monitor)?"""
-    m = re.search(r"^Parent = \w+'([^']*)'", text, re.M)
-    return bool(m) and any(k in m.group(1).lower() for k in DISPLAYS)
+    m = re.search(r"^Parent = \w+'([^']*)'", text, re.MULTILINE)
+    return m is not None and any(k in m.group(1).lower() for k in DISPLAYS)
 
 
 def is_display(name):
@@ -164,9 +182,10 @@ def material(props, root, name, log=print):
         f = os.path.join(root, t.lstrip('/').replace('/', os.sep) + '.png')
         try:
             return Image.open(f).convert('RGBA')
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - any picture that cannot be read is told, not fatal
             log('   texture not usable:', f, e)
             return None
+
     clr = load('basecolor')
     if clr is None:
         mask = load('rgbpaintmask')
@@ -193,7 +212,8 @@ def mips(im, size):
 
 def parts(P, I):
     """the triangles' connected parts (vertices at one place are one): a list of arrays of triangle numbers"""
-    key, w = {}, np.zeros(len(P), int)
+    key: dict[tuple, int] = {}
+    w = np.zeros(len(P), int)
     for i, p in enumerate(P):
         w[i] = key.setdefault(tuple(np.round(p, 4)), len(key))
     par = list(range(len(key)))
@@ -203,13 +223,14 @@ def parts(P, I):
             par[x] = par[par[x]]
             x = par[x]
         return x
+
     T = I.reshape(len(I) // 3, 3)
     for a, b, c in w[T]:  # the triangles' corners as welded places
         r = find(a)
         par[find(b)] = r
         par[find(c)] = r
-    comps = {}
-    for ti, (a, b, c) in enumerate(w[T]):
+    comps: dict[int, list[int]] = {}
+    for ti, (a, _b, _c) in enumerate(w[T]):
         comps.setdefault(find(a), []).append(ti)
     return [np.array(ts) for ts in comps.values()]
 
@@ -252,7 +273,7 @@ def painted(P, N, I, VC, base, share):
         size *= 2
     px = np.zeros((size * size, 4), np.uint8)
     px[:, 3] = 255
-    px[:len(pal), :3] = pal
+    px[: len(pal), :3] = pal
     key = T.astype(np.int64) * len(pal) + which[:, None]
     uniq, index = np.unique(key.ravel(), return_inverse=True)
     v, k = uniq // len(pal), uniq % len(pal)
@@ -317,7 +338,7 @@ def assign(places):
     c = min(range(len(ahead)), key=lambda j: abs(places[ahead[j]][0]))
     c = min(max(c, 1), len(ahead) - 2)
     res = {'radar': ahead[c], 'target': ahead[c - 1], 'damage': ahead[c + 1]}
-    for part, rest in (('lance', ahead[:c - 1]), ('weapons', ahead[c + 2:])):
+    for part, rest in (('lance', ahead[: c - 1]), ('weapons', ahead[c + 2 :])):
         if rest:
             res[part] = max(rest, key=lambda k: places[k][2])
     return res
@@ -326,17 +347,23 @@ def assign(places):
 def ini_text(places):
     """the text of a cockpit's .ini for monitors at places (see assign)"""
     roles = assign(places)
-    lines = ['; Settings of this cockpit for MW4VR. Written once by cockpit_convert.py; change it as you like.',
-             '[cockpit]',
-             '; the eye in the mesh (metres) and the size of the mesh; in a battle: Ctrl+Alt+arrows, Ctrl+Alt+PgUp / PgDn',
-             'scale=1.000', 'eye_right_m=0.000', 'eye_up_m=0.000', 'eye_forward_m=0.000',
-             '; 1 = the monitors show the HUD; 0 = they stay dark. What no monitor shows is on the glass (glass_<part>)',
-             'screens=%d' % bool(roles),
-             '; screen_<n> = u0 v0 u1 v1: the part of the HUD picture monitor n shows (none: dark). The monitors, left to right:']
+    lines = [
+        '; Settings of this cockpit for MW4VR. Written once by cockpit_convert.py; change it as you like.',
+        '[cockpit]',
+        '; the eye in the mesh (metres) and the size of the mesh; in a battle: Ctrl+Alt+arrows, Ctrl+Alt+PgUp / PgDn',
+        'scale=1.000',
+        'eye_right_m=0.000',
+        'eye_up_m=0.000',
+        'eye_forward_m=0.000',
+        '; 1 = the monitors show the HUD; 0 = they stay dark. What no monitor shows is on the glass (glass_<part>)',
+        'screens=%d' % bool(roles),
+        '; screen_<n> = u0 v0 u1 v1: the part of the HUD picture monitor n shows (none: dark). '
+        'The monitors, left to right:',
+    ]
     for k, (x, z, area) in enumerate(places):
         lines.append(';   %d: %.2f m to the right, %.2f m ahead, %.0f cm2' % (k, x, z, area * 10000))
     for part, k in sorted(roles.items(), key=lambda r: r[1]):
-        lines.append('; %s' % part)
+        lines.append('; {}'.format(part))
         lines.append('screen_%d=%s' % (k, HUD_PARTS[part]))
         if part == 'lance':
             lines.append('screen_%d_alt=%s' % (k, LANCE_ALT))
@@ -361,13 +388,14 @@ def is_canopy_glass(name):
 def build_groups(g, buf, props, root, log=print, shade=False):
     """-> (groups, lo, hi, places); a group: (name, P, N, UV, I, colour image, emissive image or None, emissive
     strength - for a screen its width / height); places: the monitors' (x, z, area)"""
-    groups, places = [], []
+    groups: list = []
+    places: list = []
     lo, hi = np.full(3, 1e9), np.full(3, -1e9)
     names = [g['materials'][prim['material']]['name'] for prim in g['meshes'][0]['primitives']]
     panels = any(is_screen_material(n) for n in names)  # the game's way of naming monitors; else: the holograms
-    for prim, name in zip(g['meshes'][0]['primitives'], names):
+    for prim, name in zip(g['meshes'][0]['primitives'], names):  # noqa: B905 - one name for each primitive, made above
         if is_canopy_glass(name):
-            log('  %s: the glass of the canopy, left out' % name)
+            log('  {}: the glass of the canopy, left out'.format(name))
             continue
         P = acc(g, buf, prim['attributes']['POSITION']).astype(np.float32).copy()
         N = acc(g, buf, prim['attributes']['NORMAL']).astype(np.float32).copy()
@@ -377,11 +405,13 @@ def build_groups(g, buf, props, root, log=print, shade=False):
         N[:, 2] = -N[:, 2]
         lo, hi = np.minimum(lo, P.min(0)), np.maximum(hi, P.max(0))
         text = props_text(props, name)
-        if is_screen_material(name) or (not panels and (is_hologram(text) or is_display(name))):  # the monitors: one group each
+        if is_screen_material(name) or (
+            not panels and (is_hologram(text) or is_display(name))
+        ):  # the monitors: one group each
             found, I = monitors(P, N, I)
             for p, n, uv, i, asp, (w, h) in found:
                 c = p.mean(0)
-                log('  screen %d: centre %.2f %.2f %.2f m, %.0f x %.0f cm' % (len(places), c[0], c[1], c[2], 100 * w, 100 * h))
+                log('  screen %d: centre %.2f %.2f %.2f m, %.0f x %.0f cm' % (len(places), *c, 100 * w, 100 * h))
                 groups.append(('SCREEN:%d' % len(places), p, n, uv, i, flat(0, 0, 0), None, float(asp)))
                 places.append((float(c[0]), float(c[2]), w * h))
             if not len(I):
@@ -424,7 +454,8 @@ def write_mwc(out, groups, tmax=TMAX, log=print):
             o.write(mips(clr, cs))
             if es:
                 o.write(mips(ems, es))
-            log('  %-34s %6d verts %6d tris, colour %d, emissive %d x %.2f' % (name, len(P), len(I) // 3, cs, es, strength))
+            # (on one line: the mutation tests leave a log line alone, not a log call's later lines)
+            log('  %-34s %6d verts %6d tris, colour %d, emissive %d x %.2f' % (name, len(P), len(I) // 3, cs, es, strength))  # fmt: skip  # noqa: E501
 
 
 def mip_bytes(size):
@@ -448,7 +479,16 @@ def read_mwc(path):
             V = np.frombuffer(f.read(nv * 32), '<f4').reshape(nv, 8)
             I = np.frombuffer(f.read(ni * 4), '<u4')
             f.seek(mip_bytes(cs) + mip_bytes(es), 1)
-            res.append({'name': name.split(b'\0')[0].decode(), 'verts': V, 'indices': I, 'colour_size': cs, 'emissive_size': es, 'strength': k})
+            res.append(
+                {
+                    'name': name.split(b'\0')[0].decode(),
+                    'verts': V,
+                    'indices': I,
+                    'colour_size': cs,
+                    'emissive_size': es,
+                    'strength': k,
+                }
+            )
         if f.read():
             raise ValueError('bytes after the last group')
         return res
@@ -467,7 +507,9 @@ def convert(gltf, root, out, tmax=TMAX, log=print, shade=False):
     if not os.path.exists(ini):  # yours once it is there
         with open(ini, 'w') as f:
             f.write(ini_text(places))
-    log('bounds x %.2f..%.2f  y %.2f..%.2f  z %.2f..%.2f m' % (lo[0], hi[0], lo[1], hi[1], lo[2], hi[2]))
+    log(
+        'bounds x {:.2f}..{:.2f}  y {:.2f}..{:.2f}  z {:.2f}..{:.2f} m'.format(lo[0], hi[0], lo[1], hi[1], lo[2], hi[2])
+    )
     log('written', out, os.path.getsize(out) // 1024, 'KB')
     return groups
 

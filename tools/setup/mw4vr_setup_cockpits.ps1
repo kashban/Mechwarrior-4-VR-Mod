@@ -1,6 +1,7 @@
 # The long part of the setup, run in the background by mw4vr_setup.ps1: exports the cockpits of the player's own
 # MechWarrior 5: Mercenaries with UE Viewer and converts them for MW4VR. Everything it says goes into -Log.
 # Exit code: 0 done, 1 the Python packages, 2 the export, 3 the conversion.
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'Log', Justification = 'used by the function Say')]
 param([string]$Tools, [string]$Paks, [string]$Umodel, [string]$Game, [string]$Python, [string]$PythonArg = '', [string]$Log,
       [switch]$Pip, [switch]$DeleteExport, [string]$Mods = '')
 $ErrorActionPreference = 'Continue'

@@ -26,8 +26,10 @@ Five workflows on GitHub Actions (`.github/workflows`). What a workflow checks, 
 | No known vulnerabilities in the converter's libraries (pip-audit) | CI | `pip-audit -r requirements.txt` |
 | SAST (Semgrep: Python, the workflows) | CI | `semgrep scan --error --config p/python --config p/security-audit --config p/github-actions tools tests docs .github` |
 | The DLLs' hardening (BinSkim, pinned and checksum-verified) | CI, Release | `tools\securityinskim.bat` - an error fails; warnings are listed |
-| The scripts (bandit: Python; PSScriptAnalyzer: PowerShell) | CI | `tools\security\scripts.ps1` - bandit's medium or high findings and the analyser's errors fail |
+| The scripts (bandit: Python; PSScriptAnalyzer: PowerShell) | CI | `tools\security\scripts.ps1` - bandit's medium or high findings fail |
 | cppcheck on the mod's C++ | CI | a finding of the severity "error" fails |
+| The Python tools' style (ruff: format and lint; mypy: types; `pyproject.toml`) | CI | `ruff format --check tools`, `ruff check tools`, `mypy` - any finding fails |
+| The PowerShell scripts' style (PSScriptAnalyzer, `PSScriptAnalyzerSettings.psd1`) | CI | part of `tools\security\scripts.ps1` - any finding fails |
 | The compiler's analyser (`cl /analyze`) | CI | `tools\securitynalyze.bat` - a report in the run's `security-logs`, no gate |
 | The AI review's script works (mock model server, mock GitHub) | CI | `node --test tools/ci/ai-review.test.mjs` |
 | The tag is the version the mod logs | Release | - |

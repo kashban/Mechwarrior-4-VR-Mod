@@ -162,6 +162,8 @@ drawing - is not covered by tests.
 
 ## Layout
 
+How the code works: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Working on it: [CONTRIBUTING.md](CONTRIBUTING.md).
+
 - `mod/src/main.cpp` - the proxy, hooks, shader tracking
 - `mod/src/mw4hook_abi.inc` - everything known about the insides of `mw4hook.dll` and `MW4Mercs.exe`
   (addresses, offsets, shader hashes, label names). A new build of either means changes here only.
