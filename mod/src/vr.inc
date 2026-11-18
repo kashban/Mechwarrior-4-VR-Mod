@@ -593,6 +593,7 @@ static unsigned g_fadeCopyFrame = ~0u; // the frame whose HUD image waits to be 
 static unsigned g_fadeKnownFrame = ~0u; // the frame the last answer came in; none lately: the HUD is not shown yet
 static float g_fadeA;  // the sheet's alpha, 0: none
 static bool g_fadeMenu; // the sheet is a paused battle's (blue): its menu is up
+static unsigned g_sheetCleanFrame = ~0u; // the frame whose HUD image holds the sheet and the menu alone (main.cpp: hudSheetPost)
 static int g_fadePt;   // the point showing the sheet alone
 static void fadeProbe(ID3D11DeviceContext *ctx, ID3D11Texture2D *hud) {
     D3D11_TEXTURE2D_DESC d;
@@ -1122,8 +1123,17 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
             rc[0][3] = g_fadePts[g_fadePt][1] + dv, rc[0][4] = 5;
             nr = 1;
         } else if (g_fadeMenu) { // a paused battle's menu: the whole HUD image, one screen
-            rc[0][0] = 0, rc[0][1] = 0, rc[0][2] = 1, rc[0][3] = 1, rc[0][4] = 6;
-            nr = 1;
+            // Not an image that still has the HUD under the sheet (the menu's first frames, before the sheet's draw is
+            // found): the cross-hair and its marks stood there, blue, for a moment. Nothing is shown for those frames -
+            // but the menu is not held back for ever where the sheet's draw cannot be found.
+            static unsigned since = ~0u, lastMenu = ~0u;
+            if (lastMenu == ~0u || g_frame - lastMenu > 1) since = g_frame;
+            lastMenu = g_frame;
+            nr = 0;
+            if (g_sheetCleanFrame == g_hudDrawnFrame || g_frame - since > 12) {
+                rc[0][0] = 0, rc[0][1] = 0, rc[0][2] = 1, rc[0][3] = 1, rc[0][4] = 6;
+                nr = 1;
+            }
         }
         bool crossNow = g_crossShown && g_crossSc != XR_NULL_HANDLE && nr > 0 && !(g_fadeA > 0) && !g_fadeMenu;
         for (int i = 0; i < nr; ++i) {

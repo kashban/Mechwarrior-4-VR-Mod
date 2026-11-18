@@ -1387,11 +1387,12 @@ static bool smallCamBackdrop(ID3D11DeviceContext *c) {
 // rest then show through behind the menu. While the menu is up (vr.inc tells: g_fadeMenu) the HUD's image is
 // emptied right before the sheet is drawn, so it holds the sheet and the menu alone.
 // Which draw is the sheet? The HUD's quads are indirect draws (their vertices are made on the GPU, nothing of them
-// can be read here). So it is found by its effect, once for a menu: a point of the HUD image that is empty
-// otherwise is read back after every indirect draw of one frame - the draw that fills it is the sheet, and it is
-// the same one in the frames after (the paused HUD does not change). Checked in each of them by reading the point
-// once more; when it does not hold, the search begins again.
-static int g_sheetIdx = -1; // the sheet is this indirect draw into the HUD's image of a frame (from 1; -1: not known)
+// can be read here). So it is found by its effect: a point of the HUD image that is empty otherwise is read back
+// after a draw - the draw that fills it is the sheet. In every frame anew: how many things the HUD draws before the
+// sheet changes from frame to frame (a mark that blinks), and with one number kept for all frames the cross-hair
+// flickered through the menu. The image is emptied before each draw from a little before where the sheet was last
+// (before every draw, the first time) until the point is filled; that is a few read-backs a frame.
+static int g_sheetFrom = -1; // the indirect draw of the HUD pass (from 1) the emptying begins with; -1: not known, from the first
 // the point's alpha, 0..255; -1: cannot be read
 static int hudSheetPixel(ID3D11DeviceContext *c) {
     static ID3D11Texture2D *stage;
@@ -1419,12 +1420,12 @@ static int hudSheetPixel(ID3D11DeviceContext *c) {
     return a;
 }
 static unsigned g_sheetFrame = ~0u;
-static int g_sheetN, g_sheetTries; // indirect draws into the HUD's image in this frame; searches in this menu
-static bool g_sheetSearch;         // this frame is searched
-// before an indirect draw. true: it goes into the HUD's image while the menu is up - hudSheetPost after it
+static int g_sheetN, g_sheetTries; // indirect draws into the HUD's image in this frame; searches from the first draw in this menu
+static bool g_sheetLook, g_sheetFound; // this frame: the sheet is looked for; it was found (the image is clean)
+// before an indirect draw. true: the image was emptied before it - hudSheetPost after it
 static bool hudSheetPre(ID3D11DeviceContext *c) {
     if (!g_fadeMenu) {
-        g_sheetIdx = -1, g_sheetTries = 0;
+        g_sheetFrom = -1, g_sheetTries = 0;
         return false;
     }
     if (!g_hudFrameRtv || !g_hudRtv) return false;
@@ -1434,36 +1435,32 @@ static bool hudSheetPre(ID3D11DeviceContext *c) {
     if (rt) rt->Release();
     if (!ours) return false;
     if (g_sheetFrame != g_frame) {
-        g_sheetFrame = g_frame, g_sheetN = 0;
-        // (a point that is filled before any of them tells nothing; some tries for a menu, not one in every frame)
-        g_sheetSearch = g_sheetIdx < 0 && g_sheetTries < 8 && hudSheetPixel(c) == 0;
-        if (g_sheetSearch) ++g_sheetTries;
+        static int fails;
+        // not found in the frame before: the sheet came earlier than looked for (or it fades out) - from the first draw again
+        fails = g_sheetLook && !g_sheetFound ? fails + 1 : 0;
+        if (fails >= 2) g_sheetFrom = -1, fails = 0;
+        g_sheetFrame = g_frame, g_sheetN = 0, g_sheetFound = false;
+        g_sheetLook = g_sheetFrom > 0 || g_sheetTries < 8; // (a search from the first draw reads back after every draw: some a menu, not for ever)
+        if (g_sheetLook && g_sheetFrom < 0) ++g_sheetTries;
     }
     ++g_sheetN;
-    if (g_sheetN == g_sheetIdx) {
-        const float zero[4] = {0, 0, 0, 0};
-        c->ClearRenderTargetView(g_hudRtv, zero);
-    }
+    if (!g_sheetLook || g_sheetFound || g_sheetN < g_sheetFrom) return false;
+    const float zero[4] = {0, 0, 0, 0};
+    c->ClearRenderTargetView(g_hudRtv, zero);
     return true;
 }
 static void hudSheetPost(ID3D11DeviceContext *c) {
-    if (g_sheetSearch) {
-        if (hudSheetPixel(c) > 0) {
-            g_sheetSearch = false;
-            g_sheetIdx = g_sheetN;
-            logf("hud: the paused battle's sheet is indirect draw %d of the HUD pass (frame %u) - the HUD's image is emptied before it from now on", g_sheetN, g_frame);
-        }
-    } else if (g_sheetN == g_sheetIdx) {
-        // Not the sheet any more (the HUD draws another number of things)? Not at once: a sheet fading out with the
-        // menu's end leaves the point empty too, and the HUD would come back under it for those moments.
-        static int misses;
-        misses = hudSheetPixel(c) == 0 ? misses + 1 : 0;
-        if (misses >= 45) {
-            misses = 0;
-            logf("hud: indirect draw %d is not the paused battle's sheet any more (frame %u) - looked for again", g_sheetN, g_frame);
-            g_sheetIdx = -1;
-        }
+    if (hudSheetPixel(c) <= 0) return; // not the sheet: the next draw empties the image again
+    g_sheetFound = true;
+    g_sheetCleanFrame = g_frame;
+    int from = g_sheetN > 4 ? g_sheetN - 4 : 1;
+    static bool told;
+    if (!told) {
+        told = true;
+        logf("hud: the paused battle's sheet is indirect draw %d of the HUD pass (frame %u) - the HUD's image is emptied before it, found anew in every frame",
+             g_sheetN, g_frame);
     }
+    if (g_sheetFrom < 0 || from < g_sheetFrom) g_sheetFrom = from;
 }
 
 template <int V> static void STDMETHODCALLTYPE HP_Draw(ID3D11DeviceContext *c, UINT a, UINT b) {
@@ -2337,7 +2334,7 @@ BOOL WINAPI DllMain(HINSTANCE h, DWORD reason, LPVOID) {
         if (g_dbg) g_shlog = _wfsopen((g_dir + L"mw4vr_shaders.txt").c_str(), L"w", _SH_DENYNO);
         wchar_t exe[MAX_PATH];
         GetModuleFileNameW(nullptr, exe, MAX_PATH);
-        logf("MW4VR v11.67 (debug level %d) loaded into %s", g_dbg, narrow(exe).c_str());
+        logf("MW4VR v11.68 (debug level %d) loaded into %s", g_dbg, narrow(exe).c_str());
         if (!loadReal()) logf("ERROR: the system d3d11.dll could not be loaded");
     }
     return TRUE;
