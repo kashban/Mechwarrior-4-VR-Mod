@@ -13,12 +13,12 @@ def frames(n=900, fps=60.0, own=1, cockpit='atlas', bright=80.0):
     out = []
     for i in range(n):
         out.append({'frame': 1000.0 + i, 'ms': i * 1000.0 / fps, 't': i / fps, 'seated': 1.0, 'own': float(own), 'yaw': 0.0,
-                    'left': bright, 'right': bright + 1, 'sx': 0.0, 'sy': 0.0, 'sz': 0.0, 'outside': 0.0, 'menu': 0.0, 'draws': 600.0, 'flat': 0.0,
+                    'left': bright, 'right': bright + 1, 'sx': 0.0, 'sy': 0.0, 'sz': 0.0, 'outside': 0.0, 'menu': 0.0, 'draws': 600.0, 'flat': 0.0, 'clean': 0.0,
                     'cockpit': cockpit})
     return out
 
 
-def acted(walk=True, fire=True, outside=True, menu=True, back=True, menu_at=6.05):
+def acted(walk=True, fire=True, outside=True, menu=True, back=True, menu_at=6.05, flicker=False):
     """15 s: the mech walks from second 1 to 3, fires from 4 to 5, the camera is outside from 6 to 8, the menu up from 10 to 12."""
     f = frames()
     for x in f:
@@ -31,6 +31,7 @@ def acted(walk=True, fire=True, outside=True, menu=True, back=True, menu_at=6.05
             x['outside'], x['own'], x['seated'] = 1.0, 0.0, 0.0
         if menu and menu_at + 4 <= t <= 12.1:
             x['menu'] = 1.0
+            x['clean'] = 0.0 if flicker and int(t * 60) % 9 == 0 else 1.0
     return f
 
 
@@ -67,8 +68,13 @@ class Acting(unittest.TestCase):
 
     def test_no_menu(self):
         failed = self.failed(menu=False)
-        self.assertEqual(len(failed), 2)
+        self.assertEqual(len(failed), 3)
         self.assertIn('menu is shown as one screen', failed[0])
+
+    def test_the_hud_flickers_through_the_menu(self):
+        failed = self.failed(flicker=True)
+        self.assertEqual(len(failed), 1)
+        self.assertIn('nothing of the HUD under it', failed[0])
 
     def test_a_menu_that_comes_late(self):
         failed = self.failed(menu_at=6.7)

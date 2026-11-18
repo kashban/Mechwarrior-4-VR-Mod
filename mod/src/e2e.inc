@@ -35,7 +35,8 @@ static std::vector<E2eKey> g_e2eKeys;
 static int e2eCockpit(wchar_t *name, int n); // main.cpp, after mw5.inc: 1 - a cockpit of our own is drawn
 static void e2ePass(int e, int *v);          // an eye's pass: CPU-path draws, at which ours was drawn, the game's cockpit's triangles there
 static void e2eState(int *v);                // main.cpp: 1 - a paused battle's menu is up; the draws of the frame; of those, the
-                                             // indirect ones into the HUD's image while the menu is up (how much the menu shows)
+                                             // indirect ones into the HUD's image while the menu is up (how much the menu shows);
+                                             // 1 - the menu's picture of this frame has no HUD under the sheet
 
 static int e2eVk(const wchar_t *s, size_t n) {
     if (n == 1 && iswalnum(s[0])) return towupper(s[0]);
@@ -146,7 +147,7 @@ static void e2eInit() {
         logf("e2e: mw4vr_e2e.csv cannot be written - no test");
         return;
     }
-    fprintf(g_e2eCsv, "frame,ms,t,seated,own,yaw,lr,lg,lb,rr,rg,rb,sx,sy,sz,ld,lo,lk,rd,ro,rk,outside,menu,draws,hud,flat,cockpit\n");
+    fprintf(g_e2eCsv, "frame,ms,t,seated,own,yaw,lr,lg,lb,rr,rg,rb,sx,sy,sz,ld,lo,lk,rd,ro,rk,outside,menu,draws,hud,flat,clean,cockpit\n");
     g_e2eStart = GetTickCount64();
     g_e2eOn = true;
     logf("e2e: test run - plan %ls, %u turns of the head, %u pictures, %u keys", plan, (unsigned)g_e2eYaw.size(), (unsigned)g_e2eShots.size(),
@@ -220,11 +221,11 @@ static void e2eFrame(ID3D11DeviceContext *ctx, ID3D11Texture2D *l, ID3D11Texture
     e2eMean(ctx, r, b);
     wchar_t name[64] = L"";
     int own = e2eCockpit(name, 64);
-    int pl[3], pr[3], st[3];
+    int pl[3], pr[3], st[4];
     e2ePass(0, pl), e2ePass(1, pr), e2eState(st);
-    fprintf(g_e2eCsv, "%u,%llu,%.3f,%d,%d,%.2f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%.4f,%.4f,%.4f,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%ls\n", g_frame, GetTickCount64() - g_e2eStart, t,
+    fprintf(g_e2eCsv, "%u,%llu,%.3f,%d,%d,%.2f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%.4f,%.4f,%.4f,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%ls\n", g_frame, GetTickCount64() - g_e2eStart, t,
             in ? 1 : 0, own, e2eYawNow(), a[0], a[1], a[2], b[0], b[1], b[2], g_swayValid ? g_swayT[0] : 0.0f,
             g_swayValid ? g_swayT[1] : 0.0f, g_swayValid ? g_swayT[2] : 0.0f, pl[0], pl[1], pl[2], pr[0], pr[1], pr[2],
-            g_mechSeat.outside ? 1 : 0, st[0], st[1], st[2], flat ? 1 : 0, name);
+            g_mechSeat.outside ? 1 : 0, st[0], st[1], st[2], flat ? 1 : 0, st[3], name);
     if ((g_frame & 31) == 0) fflush(g_e2eCsv);
 }

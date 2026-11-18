@@ -148,6 +148,9 @@ def judge(frames, log_text, cockpit=None, seconds=10.0, walk=None, fire=None, ou
         part = within(timed, menu[0] + SETTLE, menu[1])
         up = [f for f in part if f['menu']]
         check(bool(part) and len(up) >= SHARE * len(part), "the paused battle's menu is shown as one screen (%d of %d frames)" % (len(up), len(part)))
+        # (every frame but a few: one frame with the HUD under the menu is a cross-hair flickering through it)
+        clean = [f for f in up if f['clean']]
+        check(bool(up) and len(up) - len(clean) <= 2, 'with nothing of the HUD under it (%d of %d frames)' % (len(clean), len(up)))
         first = within(timed, menu[0], menu[0] + SETTLE)
         late = [f for f in first if f['menu']]
         check(bool(late) and late[0]['t'] - menu[0] <= 0.5, 'it comes up within half a second' +

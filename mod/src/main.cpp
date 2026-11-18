@@ -1488,6 +1488,7 @@ static void e2eState(int *v) {
     last = g_m5AllDraws;
     if (g_sheetFrame != lastFrame) lastFrame = g_sheetFrame, hud = g_sheetN; // (counted in the frame before: this one's HUD is still to come)
     v[2] = g_fadeMenu ? hud : 0;
+    v[3] = g_fadeMenu && !g_menuMode && g_sheetCleanFrame == g_frame ? 1 : 0;
 }
 
 template <int V> static void STDMETHODCALLTYPE HP_Draw(ID3D11DeviceContext *c, UINT a, UINT b) {
