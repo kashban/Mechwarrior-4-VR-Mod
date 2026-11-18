@@ -1239,6 +1239,10 @@ static int e2eCockpit(wchar_t *name, int n) {
     name[n - 1] = 0;
     return mw5Active() ? 1 : 0;
 }
+static void e2ePass(int e, int *v) {
+    bool now = g_m5PassFrame[e] == g_frame;
+    v[0] = now ? g_m5PassDraws[e] : 0, v[1] = now ? g_m5PassOrd[e] : 0, v[2] = now ? g_m5PassCk[e] : 0;
+}
 
 // CPU path: while in "3D" and an eye is active, draws with VS ad8cee09 run our replacement shader
 // (same work + clip.x offset), its offset in our own constant buffer at b12; both restored after.
@@ -1482,7 +1486,7 @@ template <int V> static void STDMETHODCALLTYPE HP_Draw(ID3D11DeviceContext *c, U
     if (smallCamBackdrop(c)) return;
     bool sw = eyeTlPre(c);
     int ck = sw && mechMeasuring() ? mechDraw(c, false, a, b, 0, g_camPassEye == 0) : 0;
-    if (sw && g_mw5On) mw5Draw(c, (Mw5PFN_DrawIdx)g_tr[SL_DRAWIDX][V], ck >= 10);
+    if (sw && g_mw5On) mw5Draw(c, (Mw5PFN_DrawIdx)g_tr[SL_DRAWIDX][V], ck);
     bool hw = hudWidePre(c);
     ((PFN_U2)g_tr[SL_DRAW][V])(c, a, b);
     if (hw) hudWidePost(c);
@@ -1493,7 +1497,7 @@ template <int V> static void STDMETHODCALLTYPE HP_DrawIndexed(ID3D11DeviceContex
     if (eyeHidden(c)) return;
     bool sw = eyeTlPre(c);
     int ck = sw && mechMeasuring() ? mechDraw(c, true, a, b, d, g_camPassEye == 0) : 0;
-    if (sw && g_mw5On) mw5Draw(c, (Mw5PFN_DrawIdx)g_tr[SL_DRAWIDX][V], ck >= 10);
+    if (sw && g_mw5On) mw5Draw(c, (Mw5PFN_DrawIdx)g_tr[SL_DRAWIDX][V], ck);
     bool hw = hudWidePre(c);
     ((PFN_U2I)g_tr[SL_DRAWIDX][V])(c, a, b, d);
     if (hw) hudWidePost(c);

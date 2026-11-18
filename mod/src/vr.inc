@@ -935,7 +935,9 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
     ID3D11Texture2D *bb = nullptr;
     ID3D11DeviceContext *ctx = nullptr;
     g_dev->GetImmediateContext(&ctx);
-    if (fs.shouldRender && SUCCEEDED(swap->GetBuffer(0, __uuidof(ID3D11Texture2D), (void **)&bb)) && bb && ctx) {
+    // (a test run, e2e.inc, looks at the eyes' images also while the runtime wants none: a headset on nobody's head
+    // loses the focus after some seconds, and the run stood still until somebody touched it)
+    if ((fs.shouldRender || g_e2eOn) && SUCCEEDED(swap->GetBuffer(0, __uuidof(ID3D11Texture2D), (void **)&bb)) && bb && ctx) {
         D3D11_TEXTURE2D_DESC bd;
         bb->GetDesc(&bd);
         D3D11_BOX box = {0, 0, 0, min(bd.Width, g_vr.w), min(bd.Height, g_vr.h), 1};

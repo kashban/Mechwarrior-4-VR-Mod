@@ -638,12 +638,38 @@ static void mw5HudCopy(ID3D11DeviceContext *c, ID3D11Texture2D *hud) {
 
 // at a CPU-path draw of the main camera's pass for an eye (our replacement shader is bound): once per pass
 // gameCockpit: this draw is one of the game's own cockpit
-static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw, bool gameCockpit) {
+// for a test run's record (e2e.inc): an eye's pass of this frame - its CPU-path draws so far, at which of them our
+// cockpit was drawn (0: not), and how many of the game's cockpit's triangles that draw had
+static unsigned g_m5PassFrame[2] = {~0u, ~0u};
+static int g_m5PassDraws[2], g_m5PassOrd[2], g_m5PassCk[2];
+static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw, int ckTris) {
+    const bool gameCockpit = ckTris >= 10;
     int e = g_camPassEye;
     if (e < 0 || e > 1 || !g_camInMain || !g_kTlOnly || mw5Waiting()) return;
-    static unsigned done[2] = {~0u, ~0u}; // the frame ours was drawn in for this eye
-    static int others[2], again[2];       // CPU-path draws not of the game's cockpit since then; times ours was drawn again
-    if (done[e] == g_frame && !gameCockpit) ++others[e];
+    // A pass that went by without our cockpit (one eye bright for a frame): told with what its draws were.
+    static unsigned trFrame[2] = {~0u, ~0u};
+    static int trDraws[2], trCk[2][8];
+    static bool trDrew[2];
+    if (trFrame[e] != g_frame) {
+        static int toldMiss;
+        if (trFrame[e] != ~0u && !trDrew[e] && g_mw5State == 1 && toldMiss < 40) {
+            ++toldMiss;
+            const int *k = trCk[e];
+            logf("mw5: frame %u, eye %d: OUR COCKPIT WAS NOT DRAWN - %d CPU-path draws in the pass, cockpit triangles in the first 8: %d %d %d %d %d %d %d %d (next pass seen %u frames later)",
+                 trFrame[e], e, trDraws[e], k[0], k[1], k[2], k[3], k[4], k[5], k[6], k[7], g_frame - trFrame[e]);
+        }
+        if (trFrame[e] != ~0u && g_frame - trFrame[e] > 1 && g_frame - trFrame[e] < 30 && toldMiss < 40) {
+            ++toldMiss;
+            logf("mw5: eye %d: no CPU-path draw at all in its passes of the %u frames before frame %u - our cockpit was not drawn in them", e,
+                 g_frame - trFrame[e] - 1, g_frame);
+        }
+        trFrame[e] = g_frame, trDraws[e] = 0, trDrew[e] = false;
+        memset(trCk[e], 0, sizeof trCk[e]);
+    }
+    if (trDraws[e] < 8) trCk[e][trDraws[e]] = ckTris;
+    ++trDraws[e];
+    if (g_m5PassFrame[e] != g_frame) g_m5PassFrame[e] = g_frame, g_m5PassOrd[e] = 0, g_m5PassCk[e] = 0;
+    g_m5PassDraws[e] = trDraws[e];
     // Where in the pass? Where the game draws its own cockpit: it puts that in the right place among its other
     // draws, and a CPU-path draw that comes earlier in some frames is not taken for it. (It is the pass's first
     // CPU-path draw as a rule - the log of a test.) The first CPU-path draw only while no cockpit of the game's
@@ -665,22 +691,8 @@ static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw, bool gameCockpi
             return;
         }
     }
-    // Once a pass - or again: in some frames the game draws a first part of its cockpit, then other things on the CPU
-    // path (17 draws, measured in a test run; they cover the whole picture), and only then its cockpit. Ours, drawn
-    // at the first of them, was painted over: one eye showed the world without a cockpit for a frame. So when the
-    // game's cockpit comes again after other CPU-path draws, ours is drawn again there (same depths: it passes).
-    if (done[e] == g_frame) {
-        if (!gameCockpit || !others[e] || again[e] >= 2) return;
-        ++again[e];
-        static int toldAgain;
-        if (toldAgain < 6) {
-            ++toldAgain;
-            logf("mw5: frame %u, eye %d: the game's cockpit comes again after %d other CPU-path draws - ours is drawn again", g_frame, e, others[e]);
-        }
-    } else {
-        again[e] = 0;
-    }
-    others[e] = 0;
+    static unsigned done[2] = {~0u, ~0u};
+    if (done[e] == g_frame) return;
     { // a small camera (the target's view) drawn inside the main camera's pass: not there
         D3D11_VIEWPORT vp[1] = {};
         UINT nvp = 1;
@@ -690,6 +702,8 @@ static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw, bool gameCockpi
     done[e] = g_frame;
     if (g_mw5State == 0 && g_mw5Name[0]) mw5Load();
     if (g_mw5State != 1 || !g_vrPoseOk[e] || g_P00 <= 0 || g_P11 <= 0 || g_near <= 0) return;
+    trDrew[e] = true;
+    g_m5PassOrd[e] = trDraws[e], g_m5PassCk[e] = ckTris;
 
     // what is bound now
     ID3D11InputLayout *oIL = nullptr;

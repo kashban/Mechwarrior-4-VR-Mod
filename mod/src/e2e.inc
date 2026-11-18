@@ -18,6 +18,7 @@ static std::vector<float> g_e2eShots;
 static size_t g_e2eShotNext;
 
 static int e2eCockpit(wchar_t *name, int n); // main.cpp, after mw5.inc: 1 - a cockpit of our own is drawn
+static void e2ePass(int e, int *v);          // an eye's pass: CPU-path draws, at which ours was drawn, the game's cockpit's triangles there
 
 static void e2eInit() {
     static bool done;
@@ -51,7 +52,7 @@ static void e2eInit() {
         logf("e2e: mw4vr_e2e.csv cannot be written - no test");
         return;
     }
-    fprintf(g_e2eCsv, "frame,ms,t,seated,own,yaw,lr,lg,lb,rr,rg,rb,sx,sy,sz,cockpit\n");
+    fprintf(g_e2eCsv, "frame,ms,t,seated,own,yaw,lr,lg,lb,rr,rg,rb,sx,sy,sz,ld,lo,lk,rd,ro,rk,cockpit\n");
     g_e2eStart = GetTickCount64();
     g_e2eOn = true;
     logf("e2e: test run - plan %ls, %u turns of the head, %u pictures", plan, (unsigned)g_e2eYaw.size(), (unsigned)g_e2eShots.size());
@@ -92,7 +93,12 @@ static bool e2eMean(ID3D11DeviceContext *ctx, ID3D11Texture2D *tex, float *rgb) 
 static void e2eFrame(ID3D11DeviceContext *ctx, ID3D11Texture2D *l, ID3D11Texture2D *r) {
     e2eInit();
     if (!g_e2eOn || !ctx || !l || !r) return;
-    if (g_mechSeated && !g_e2eSeat) {
+    // In the mech: the game draws its cockpit and the camera is not outside - for half a second without a break. (A
+    // battle begins with a flight around the mech; its very first frame has the cockpit, and started the clock.)
+    static int inside;
+    const bool in = g_mechSeated && !g_mechSeat.outside;
+    inside = in ? inside + 1 : 0;
+    if (inside >= 45 && !g_e2eSeat) {
         g_e2eSeat = GetTickCount64();
         logf("e2e: the camera sits in the mech at frame %u - the plan's clock starts", g_frame);
     }
@@ -106,8 +112,10 @@ static void e2eFrame(ID3D11DeviceContext *ctx, ID3D11Texture2D *l, ID3D11Texture
     e2eMean(ctx, r, b);
     wchar_t name[64] = L"";
     int own = e2eCockpit(name, 64);
-    fprintf(g_e2eCsv, "%u,%llu,%.3f,%d,%d,%.2f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%.4f,%.4f,%.4f,%ls\n", g_frame, GetTickCount64() - g_e2eStart, t,
-            g_mechSeated ? 1 : 0, own, e2eYawNow(), a[0], a[1], a[2], b[0], b[1], b[2], g_swayValid ? g_swayT[0] : 0.0f,
-            g_swayValid ? g_swayT[1] : 0.0f, g_swayValid ? g_swayT[2] : 0.0f, name);
+    int pl[3], pr[3];
+    e2ePass(0, pl), e2ePass(1, pr);
+    fprintf(g_e2eCsv, "%u,%llu,%.3f,%d,%d,%.2f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%.4f,%.4f,%.4f,%d,%d,%d,%d,%d,%d,%ls\n", g_frame, GetTickCount64() - g_e2eStart, t,
+            in ? 1 : 0, own, e2eYawNow(), a[0], a[1], a[2], b[0], b[1], b[2], g_swayValid ? g_swayT[0] : 0.0f,
+            g_swayValid ? g_swayT[1] : 0.0f, g_swayValid ? g_swayT[2] : 0.0f, pl[0], pl[1], pl[2], pr[0], pr[1], pr[2], name);
     if ((g_frame & 31) == 0) fflush(g_e2eCsv);
 }
