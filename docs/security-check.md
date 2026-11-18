@@ -15,8 +15,18 @@ State: v11.59 (`cc3f5b0`), branch `security-check`. Findings only - nothing in `
 | cppcheck 2.22.0 | `tools/security/cppcheck.bat` | 106 messages, none of severity "error" |
 | Installer, start script, tools | by hand (PowerShell, cmd), a second reader for Python, Node and the workflows | see "The installer and the tools" below |
 
-Not run: fuzzing (the loader cannot be called without the game yet); PSScriptAnalyzer and bandit (not on this
-machine; Semgrep with `p/python`, `p/security-audit`, `p/github-actions` runs in the pipeline and passes).
+| bandit 1.9.4 | `tools/security/scripts.ps1` (Python in `tools`, `tests`) | 16 messages: 1 medium (known, see T6), 15 low, none a finding |
+| PSScriptAnalyzer 1.25.0 | `tools/security/scripts.ps1` (PowerShell in `tools`) | 26 warnings, no error, none about security |
+
+Not run: fuzzing (the loader cannot be called without the game yet). Semgrep with `p/python`, `p/security-audit`,
+`p/github-actions` runs in the pipeline and passes.
+
+bandit's medium one is `urlopen` in `fetch_polyhaven.py:13` (the address is checked for https before; what is left
+is the redirect of T6). Its low ones: `subprocess` with argument lists in the tests and `guard.py`, `assert` in
+tools. PSScriptAnalyzer: empty `catch` blocks (9, meant - "this may fail"), names and verbs of functions (8),
+functions without `ShouldProcess` (4), `Write-Host` (2), two parameters "not used" (one is used inside a function,
+one - `-Out` of `export_mechs.ps1` - is used by `Say`). None of its security rules (`Invoke-Expression`, passwords
+in plain text, ...) fired. `scripts.ps1` takes the tools' places from `BANDIT` and `PSSA`.
 
 Both scripts take the tool's place from a variable (`BINSKIM`, `CPPCHECK`): BinSkim is the NuGet package
 `Microsoft.CodeAnalysis.BinSkim` (signed by Microsoft), cppcheck the project's release on GitHub (its installer is
