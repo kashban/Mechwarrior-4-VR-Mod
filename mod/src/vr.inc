@@ -619,6 +619,11 @@ static void fadeProbe(ID3D11DeviceContext *ctx, ID3D11Texture2D *hud) {
             ORIG(MechPFN_Unmap, ctx, VT_Ctx_Unmap)(ctx, g_fadeStage, 0);
             float a = kind == MC_SHEET_FADE ? lo / 255.0f : 0;
             bool menu = kind == MC_SHEET_MENU && g_vr.menuScale > 0;
+            { // (not off for a single frame without the sheet: the picture would jump to the HUD's parts and back)
+                static int off;
+                if (menu) off = 0;
+                else if (g_fadeMenu && ++off < 3) menu = true;
+            }
             if (g_frame - g_fadeCopyFrame <= 3 && (a > 0) != (g_fadeA > 0)) logf("hud: the game's fade sheet %s (alpha %.2f, frame %u)", a > 0 ? "begins" : "is gone", a, g_frame);
             if (g_frame - g_fadeCopyFrame <= 3 && menu != g_fadeMenu)
                 logf(menu ? "hud: a paused battle's sheet (blue, alpha %.2f, frame %u) - the HUD image as one flat screen for its menu"

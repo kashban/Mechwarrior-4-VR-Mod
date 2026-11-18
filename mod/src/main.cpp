@@ -1383,64 +1383,84 @@ static bool smallCamBackdrop(ID3D11DeviceContext *c) {
 
 // A paused battle's menu: the game lays its blue sheet over the HUD it has drawn - the cross-hair and all the
 // rest then show through behind the menu. While the menu is up (vr.inc tells: g_fadeMenu) the HUD's image is
-// emptied right before the sheet is drawn, so it holds the sheet and the menu alone. The sheet: a draw of the HUD
-// pass of at most six vertices that spans the whole picture (vertices in pixels, read from the buffer's memory).
-static void hudSheetDraw(ID3D11DeviceContext *c, bool indexed, UINT count, UINT start, INT baseV) {
-    static unsigned doneFrame = ~0u;
-    if (!g_fadeMenu || !g_inHud || !g_hudFrameRtv || !g_hudRtv || count < 3 || count > 6 || doneFrame == g_frame) return;
-    ID3D11Buffer *vb = nullptr, *ib = nullptr;
-    UINT stride = 0, voff = 0, ioff = 0;
-    DXGI_FORMAT ifmt = DXGI_FORMAT_UNKNOWN;
-    c->IAGetVertexBuffers(0, 1, &vb, &stride, &voff);
-    if (indexed) c->IAGetIndexBuffer(&ib, &ifmt, &ioff);
-    D3D11_BUFFER_DESC vd = {}, id = {};
-    if (vb) vb->GetDesc(&vd);
-    if (ib) ib->GetDesc(&id);
-    bool ok = vb && stride >= 8 && vd.Usage == D3D11_USAGE_DYNAMIC && (vd.CPUAccessFlags & D3D11_CPU_ACCESS_WRITE) &&
-              (!indexed || (ib && id.Usage == D3D11_USAGE_DYNAMIC && (id.CPUAccessFlags & D3D11_CPU_ACCESS_WRITE) &&
-                            (ifmt == DXGI_FORMAT_R16_UINT || ifmt == DXGI_FORMAT_R32_UINT)));
-    bool whole = false;
-    if (ok) {
-        D3D11_MAPPED_SUBRESOURCE mv = {}, mi = {};
-        bool mvOk = SUCCEEDED(ORIG(MechPFN_Map, c, VT_Ctx_Map)(c, vb, 0, D3D11_MAP_WRITE_NO_OVERWRITE, 0, &mv)) && mv.pData;
-        bool miOk = !indexed || (SUCCEEDED(ORIG(MechPFN_Map, c, VT_Ctx_Map)(c, ib, 0, D3D11_MAP_WRITE_NO_OVERWRITE, 0, &mi)) && mi.pData);
-        if (mvOk && miOk) {
-            float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f;
-            bool read = true;
-            for (UINT k = 0; k < count && read; ++k) {
-                long long vi = (long long)start + k;
-                if (indexed) {
-                    UINT io = ioff + (start + k) * (ifmt == DXGI_FORMAT_R32_UINT ? 4u : 2u);
-                    if (io + 4 > id.ByteWidth) read = false;
-                    else vi = (ifmt == DXGI_FORMAT_R32_UINT ? *(const uint32_t *)((const uint8_t *)mi.pData + io) : *(const uint16_t *)((const uint8_t *)mi.pData + io)) + (long long)baseV;
-                }
-                long long vo = (long long)voff + vi * stride;
-                if (!read || vi < 0 || vo + 8 > (long long)vd.ByteWidth) {
-                    read = false;
-                    break;
-                }
-                const float *p = (const float *)((const uint8_t *)mv.pData + vo);
-                if (!(fabsf(p[0]) < 1e6f) || !(fabsf(p[1]) < 1e6f)) {
-                    read = false;
-                    break;
-                }
-                x0 = min(x0, p[0]), x1 = max(x1, p[0]), y0 = min(y0, p[1]), y1 = max(y1, p[1]);
-            }
-            whole = read && x0 <= 1.0f && y0 <= 1.0f && x1 >= (float)g_hudW - 1.0f && y1 >= (float)g_hudH - 1.0f;
-        }
-        if (indexed && miOk && mi.pData) ORIG(MechPFN_Unmap, c, VT_Ctx_Unmap)(c, ib, 0);
-        if (mvOk) ORIG(MechPFN_Unmap, c, VT_Ctx_Unmap)(c, vb, 0);
+// emptied right before the sheet is drawn, so it holds the sheet and the menu alone.
+// Which draw is the sheet? The HUD's quads are indirect draws (their vertices are made on the GPU, nothing of them
+// can be read here). So it is found by its effect, once for a menu: a point of the HUD image that is empty
+// otherwise is read back after every indirect draw of one frame - the draw that fills it is the sheet, and it is
+// the same one in the frames after (the paused HUD does not change). Checked in each of them by reading the point
+// once more; when it does not hold, the search begins again.
+static int g_sheetIdx = -1; // the sheet is this indirect draw into the HUD's image of a frame (from 1; -1: not known)
+// the point's alpha, 0..255; -1: cannot be read
+static int hudSheetPixel(ID3D11DeviceContext *c) {
+    static ID3D11Texture2D *stage;
+    static DXGI_FORMAT fmt;
+    if (!g_hudTex || !g_hudW || !g_hudH) return -1;
+    D3D11_TEXTURE2D_DESC d;
+    g_hudTex->GetDesc(&d);
+    int f = (int)d.Format;
+    if (d.SampleDesc.Count != 1 || !((f >= 27 && f <= 31) || (f >= 87 && f <= 88) || (f >= 90 && f <= 93))) return -1;
+    if (!stage || fmt != d.Format) {
+        if (stage) stage->Release();
+        stage = nullptr, fmt = d.Format;
+        D3D11_TEXTURE2D_DESC n = d;
+        n.Width = 1, n.Height = 1, n.MipLevels = 1, n.ArraySize = 1;
+        n.Usage = D3D11_USAGE_STAGING, n.BindFlags = 0, n.CPUAccessFlags = D3D11_CPU_ACCESS_READ, n.MiscFlags = 0;
+        if (FAILED(g_dev->CreateTexture2D(&n, nullptr, &stage)) || !stage) return -1;
     }
-    if (vb) vb->Release();
-    if (ib) ib->Release();
-    if (!whole) return;
-    doneFrame = g_frame;
-    const float zero[4] = {0, 0, 0, 0};
-    c->ClearRenderTargetView(g_hudRtv, zero);
-    static bool told;
-    if (!told) {
-        told = true;
-        logf("hud: the paused battle's sheet is a draw of %u vertices over the whole picture - the HUD's image is emptied before it (frame %u)", count, g_frame);
+    UINT x = (UINT)(g_fadePts[0][0] * g_hudW), y = (UINT)(g_fadePts[0][1] * g_hudH);
+    D3D11_BOX b = {x, y, 0, x + 1, y + 1, 1};
+    c->CopySubresourceRegion(stage, 0, 0, 0, 0, g_hudTex, 0, &b);
+    D3D11_MAPPED_SUBRESOURCE m;
+    if (FAILED(ORIG(MechPFN_Map, c, VT_Ctx_Map)(c, stage, 0, D3D11_MAP_READ, 0, &m)) || !m.pData) return -1;
+    int a = ((const uint8_t *)m.pData)[3];
+    ORIG(MechPFN_Unmap, c, VT_Ctx_Unmap)(c, stage, 0);
+    return a;
+}
+static unsigned g_sheetFrame = ~0u;
+static int g_sheetN, g_sheetTries; // indirect draws into the HUD's image in this frame; searches in this menu
+static bool g_sheetSearch;         // this frame is searched
+// before an indirect draw. true: it goes into the HUD's image while the menu is up - hudSheetPost after it
+static bool hudSheetPre(ID3D11DeviceContext *c) {
+    if (!g_fadeMenu) {
+        g_sheetIdx = -1, g_sheetTries = 0;
+        return false;
+    }
+    if (!g_hudFrameRtv || !g_hudRtv) return false;
+    ID3D11RenderTargetView *rt = nullptr;
+    c->OMGetRenderTargets(1, &rt, nullptr);
+    bool ours = rt == g_hudRtv;
+    if (rt) rt->Release();
+    if (!ours) return false;
+    if (g_sheetFrame != g_frame) {
+        g_sheetFrame = g_frame, g_sheetN = 0;
+        // (a point that is filled before any of them tells nothing; some tries for a menu, not one in every frame)
+        g_sheetSearch = g_sheetIdx < 0 && g_sheetTries < 8 && hudSheetPixel(c) == 0;
+        if (g_sheetSearch) ++g_sheetTries;
+    }
+    ++g_sheetN;
+    if (g_sheetN == g_sheetIdx) {
+        const float zero[4] = {0, 0, 0, 0};
+        c->ClearRenderTargetView(g_hudRtv, zero);
+    }
+    return true;
+}
+static void hudSheetPost(ID3D11DeviceContext *c) {
+    if (g_sheetSearch) {
+        if (hudSheetPixel(c) > 0) {
+            g_sheetSearch = false;
+            g_sheetIdx = g_sheetN;
+            logf("hud: the paused battle's sheet is indirect draw %d of the HUD pass (frame %u) - the HUD's image is emptied before it from now on", g_sheetN, g_frame);
+        }
+    } else if (g_sheetN == g_sheetIdx) {
+        // Not the sheet any more (the HUD draws another number of things)? Not at once: a sheet fading out with the
+        // menu's end leaves the point empty too, and the HUD would come back under it for those moments.
+        static int misses;
+        misses = hudSheetPixel(c) == 0 ? misses + 1 : 0;
+        if (misses >= 45) {
+            misses = 0;
+            logf("hud: indirect draw %d is not the paused battle's sheet any more (frame %u) - looked for again", g_sheetN, g_frame);
+            g_sheetIdx = -1;
+        }
     }
 }
 
@@ -1448,7 +1468,6 @@ template <int V> static void STDMETHODCALLTYPE HP_Draw(ID3D11DeviceContext *c, U
     onWork(c, "Draw", false);
     if (eyeHidden(c)) return;
     if (smallCamBackdrop(c)) return;
-    hudSheetDraw(c, false, a, b, 0);
     bool sw = eyeTlPre(c);
     int ck = sw && mechMeasuring() ? mechDraw(c, false, a, b, 0, g_camPassEye == 0) : 0;
     if (sw && g_mw5On) mw5Draw(c, (Mw5PFN_DrawIdx)g_tr[SL_DRAWIDX][V], ck >= 10);
@@ -1460,7 +1479,6 @@ template <int V> static void STDMETHODCALLTYPE HP_Draw(ID3D11DeviceContext *c, U
 template <int V> static void STDMETHODCALLTYPE HP_DrawIndexed(ID3D11DeviceContext *c, UINT a, UINT b, INT d) {
     onWork(c, "DrawIndexed", false);
     if (eyeHidden(c)) return;
-    hudSheetDraw(c, true, a, b, d);
     bool sw = eyeTlPre(c);
     int ck = sw && mechMeasuring() ? mechDraw(c, true, a, b, d, g_camPassEye == 0) : 0;
     if (sw && g_mw5On) mw5Draw(c, (Mw5PFN_DrawIdx)g_tr[SL_DRAWIDX][V], ck >= 10);
@@ -1491,9 +1509,11 @@ static void STDMETHODCALLTYPE HP_DrawIndexedInstanced(ID3D11DeviceContext *c, UI
 template <int V> static void STDMETHODCALLTYPE HP_DrawInstancedIndirect(ID3D11DeviceContext *c, ID3D11Buffer *b, UINT o) {
     onWork(c, "DrawInstancedIndirect", false);
     if (eyeHidden(c)) return;
+    bool sheet = hudSheetPre(c);
     bool hw = hudWidePre(c);
     ((PFN_BU)g_tr[SL_DRAWINSTIND][V])(c, b, o);
     if (hw) hudWidePost(c);
+    if (sheet) hudSheetPost(c);
 }
 template <int V>
 static void STDMETHODCALLTYPE HP_DrawIndexedInstancedIndirect(ID3D11DeviceContext *c, ID3D11Buffer *b, UINT o) {
