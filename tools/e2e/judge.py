@@ -1,10 +1,10 @@
 """Judges an end-to-end test run of the mod in the game.
 
     python tools/e2e/judge.py <mw4vr_e2e.csv> <mw4vr.log> [--cockpit NAME] [--seconds N]
-        [--walk A:B] [--fire A:B] [--outside A:B] [--menu A:B]
+        [--walk A:B] [--fire A:B] [--outside A:B] [--menu A:B] [--off A:B]
 
-The four windows (seconds of the plan, from a key going down to the next thing) say what the plan's keys were to
-do there: the mech walks, it fires, the camera is outside, the paused battle's menu is up.
+The windows (seconds of the plan, from a key going down to the next thing) say what the plan's keys were to do
+there: the mech walks, it fires, the camera is outside, the paused battle's menu is up, our cockpit is switched off.
 
 The mod writes a line for every frame to mw4vr_e2e.csv while a test runs (mod/src/e2e.inc): the time, both eyes'
 mean colours, whether the camera sits in the mech, whether a cockpit of ours is drawn, the head's turn the plan
@@ -76,7 +76,7 @@ def flashes(frames, eye, limit=FLASH):
     return found
 
 
-def judge(frames, log_text, cockpit=None, seconds=10.0, walk=None, fire=None, outside=None, menu=None):
+def judge(frames, log_text, cockpit=None, seconds=10.0, walk=None, fire=None, outside=None, menu=None, off=None):
     """-> (passed, failed): lists of lines saying what was checked."""
     passed, failed = [], []
 
@@ -154,6 +154,14 @@ def judge(frames, log_text, cockpit=None, seconds=10.0, walk=None, fire=None, ou
         after = within(timed, menu[1] + SETTLE, menu[1] + SETTLE + 2.0)
         gone = [f for f in after if not f['menu']]
         check(bool(after) and len(gone) >= SHARE * len(after), 'and is gone afterwards (%d of %d frames)' % (len(gone), len(after)))
+    if off:
+        part = within(timed, off[0] + SETTLE, off[1])
+        none = [f for f in part if f['seated'] and not f['own']]
+        check(bool(part) and len(none) >= SHARE * len(part),
+              "our cockpit switched off: the game's is shown, both eyes go on (%d of %d frames)" % (len(none), len(part)))
+        back = within(timed, off[1] + SETTLE, off[1] + SETTLE + 2.0)
+        ours = [f for f in back if f['seated'] and f['own']]
+        check(bool(back) and len(ours) >= SHARE * len(back), 'and switched on again (%d of %d frames)' % (len(ours), len(back)))
     return passed, failed
 
 
@@ -163,7 +171,8 @@ def main(argv=None):
     parser.add_argument('log')
     parser.add_argument('--cockpit', help="the cockpit file's name that must be drawn")
     parser.add_argument('--seconds', type=float, default=10.0, help='how long the battle must have run')
-    for name, what in (('walk', 'the mech walks'), ('fire', 'it fires'), ('outside', 'the camera is outside'), ('menu', "the menu is up")):
+    for name, what in (('walk', 'the mech walks'), ('fire', 'it fires'), ('outside', 'the camera is outside'), ('menu', "the menu is up"),
+                       ('off', 'our cockpit is switched off')):
         parser.add_argument('--' + name, metavar='A:B', help='seconds of the plan in which ' + what)
     args = parser.parse_args(argv)
     try:
@@ -174,7 +183,7 @@ def main(argv=None):
         print('cannot read: %s' % e)
         return 2
     passed, failed = judge(frames, log_text, args.cockpit, args.seconds, window(args.walk), window(args.fire), window(args.outside),
-                           window(args.menu))
+                           window(args.menu), window(args.off))
     for line in passed:
         print('ok    ' + line)
     for line in failed:

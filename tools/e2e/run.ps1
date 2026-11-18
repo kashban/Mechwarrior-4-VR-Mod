@@ -1,10 +1,11 @@
 # An end-to-end test of the mod in the game, without a headset on anybody's head:
 #   powershell -File tools\e2e\run.ps1 -Game <the game's folder> -Pilot <pilot> [-Mech 'Mad Cat'] [-Cockpit madcat]
-#       [-Runtime steamvr-null|active] [-Seconds 51] [-Yaw '7:0 10:45 14:45 17:0'] [-Shots '1 19.2 26 35 44'] [-KeepDll]
-#       [-Keys '19:LMB:0.4 20.5:LMB:0.4 23:W:5 33:V:0.1 37:V:0.1 37.5:V:0.1 38:V:0.1 42:ESC:0.1 46:ESC:0.1']
-#       [-Walk 23:31] [-Fire 19:22] [-Outside 33:38] [-Menu 42:46]      (what the keys are to do, for the judge; the
+#       [-Runtime steamvr-null|active] [-Seconds 57] [-Yaw '7:0 10:45 14:45 17:0'] [-Shots '1 19.2 26 35 44'] [-KeepDll]
+#       [-Keys '19:LMB:0.4 20.5:LMB:0.4 23:W:5 33:V:0.1 37:V:0.1 37.5:V:0.1 38:V:0.1 42:ESC:0.1 46:ESC:0.1 48.5:CTRL:0.6 48.7:F7:0.1 50:CTRL:0.6 50.2:F11:0.1 53:CTRL:0.6 53.2:F11:0.1']
+#       [-Walk 23:31] [-Fire 19:22] [-Outside 33:38] [-Menu 42:46] [-Off 50.2:53.2]      (what the keys are to do, for the judge; the
 #       view key steps through four views, three of them outside;
-#       '' leaves a check out. The keys are the game's own defaults - another pilot's keys need another -Keys.)
+#       '' leaves a check out. Ctrl+F7 at 48.7 s is a key for diagnosis that must do nothing: with it the eyes go off and the
+#       run ends short. The keys are the game's own defaults - another pilot's keys need another -Keys.)
 # What it does:
 #   1. puts mod\build\d3d11.dll into the game's folder (the one that was there comes back at the end);
 #   2. -Runtime steamvr-null: switches SteamVR to its "null" driver (no headset) and has the mod use SteamVR's
@@ -21,14 +22,15 @@ param(
     [string]$Mech = 'Mad Cat',
     [string]$Cockpit = '',
     [ValidateSet('steamvr-null', 'active')][string]$Runtime = 'steamvr-null',
-    [int]$Seconds = 51,
+    [int]$Seconds = 57,
     [string]$Yaw = '7:0 10:45 14:45 17:0',
     [string]$Shots = '1 19.2 26 35 44',
-    [string]$Keys = '19:LMB:0.4 20.5:LMB:0.4 23:W:5 33:V:0.1 37:V:0.1 37.5:V:0.1 38:V:0.1 42:ESC:0.1 46:ESC:0.1',
+    [string]$Keys = '19:LMB:0.4 20.5:LMB:0.4 23:W:5 33:V:0.1 37:V:0.1 37.5:V:0.1 38:V:0.1 42:ESC:0.1 46:ESC:0.1 48.5:CTRL:0.6 48.7:F7:0.1 50:CTRL:0.6 50.2:F11:0.1 53:CTRL:0.6 53.2:F11:0.1',
     [string]$Walk = '23:31',
     [string]$Fire = '19:22',
     [string]$Outside = '33:38',
     [string]$Menu = '42:46',
+    [string]$Off = '50.2:53.2',
     [int]$TimeoutSec = 240,
     [switch]$KeepDll
 )
@@ -133,6 +135,7 @@ try {
             if ($Fire) { $a += @('--fire', $Fire) }
             if ($Outside) { $a += @('--outside', $Outside) }
             if ($Menu) { $a += @('--menu', $Menu) }
+            if ($Off) { $a += @('--off', $Off) }
         }
         & python @a | Tee-Object -FilePath (Join-Path $out 'verdict.txt')
         $code = $LASTEXITCODE

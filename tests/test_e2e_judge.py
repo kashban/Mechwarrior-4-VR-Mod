@@ -75,6 +75,22 @@ class Acting(unittest.TestCase):
         self.assertEqual(len(failed), 1)
         self.assertIn('within half a second', failed[0])
 
+    def test_cockpit_off_and_on(self):
+        f = frames()
+        for x in f:
+            if 12.2 <= x['t'] <= 13.1:
+                x['own'] = 0.0
+        self.assertEqual(judge.judge(f, LOG, cockpit='Atlas', off=(12, 13))[1], [])
+        failed = judge.judge(frames(), LOG, cockpit='Atlas', off=(12, 13))[1]  # it never went off
+        self.assertEqual(len(failed), 1)
+        self.assertIn('switched off', failed[0])
+        for x in f:
+            if x['t'] > 13.1:
+                x['own'] = 0.0
+        failed = judge.judge(f, LOG, off=(12, 13))[1]  # it never came back
+        self.assertEqual(len(failed), 1)
+        self.assertIn('switched on again', failed[0])
+
     def test_windows(self):
         self.assertEqual(judge.window('13:18.5'), (13.0, 18.5))
         self.assertIsNone(judge.window(None))

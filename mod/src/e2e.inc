@@ -10,7 +10,8 @@
 // The plan, an .ini:   [e2e]  yaw=2:0 6:45 10:45 14:0     seconds:degrees to the right, straight lines between
 //                             shots=5 12                  seconds
 //                             keys=13:LMB:0.3 18:W:5      seconds:key:seconds held - a letter or digit, ESC, SPACE,
-//                                                         ENTER, TAB, F1..F12, LMB / RMB (the mouse's buttons)
+//                                                         ENTER, TAB, F1..F12, CTRL, ALT, SHIFT, LMB / RMB (the
+//                                                         mouse's buttons)
 // Seconds count from the frame the camera first sits in the mech. Without MW4VR_E2E none of this does anything.
 // Included into main.cpp after shot.inc, before vr.inc.
 
@@ -38,6 +39,9 @@ static int e2eVk(const wchar_t *s, size_t n) {
     if (n == 5 && !_wcsnicmp(s, L"SPACE", 5)) return VK_SPACE;
     if (n == 5 && !_wcsnicmp(s, L"ENTER", 5)) return VK_RETURN;
     if (n == 3 && !_wcsnicmp(s, L"TAB", 3)) return VK_TAB;
+    if (n == 4 && !_wcsnicmp(s, L"CTRL", 4)) return VK_CONTROL; // (held over another key's time: Ctrl+F11)
+    if (n == 3 && !_wcsnicmp(s, L"ALT", 3)) return VK_MENU;
+    if (n == 5 && !_wcsnicmp(s, L"SHIFT", 5)) return VK_SHIFT;
     if (n == 3 && !_wcsnicmp(s, L"LMB", 3)) return -1;
     if (n == 3 && !_wcsnicmp(s, L"RMB", 3)) return -2;
     if ((n == 2 || n == 3) && towupper(s[0]) == L'F') {
