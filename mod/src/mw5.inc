@@ -245,7 +245,13 @@ static float mw5GetF(const wchar_t *key, float def) {
 }
 static void mw5ReadIni() {
     std::wstring ini = g_dir + L"mw4vr.ini";
-    if (!g_mw5IniRead) GetPrivateProfileStringW(L"vr", L"mw5_cockpit", L"", g_mw5Name, 64, ini.c_str());
+    if (!g_mw5IniRead) {
+        GetPrivateProfileStringW(L"vr", L"mw5_cockpit", L"", g_mw5Name, 64, ini.c_str());
+        if (g_mw5Name[0] && !mcNameOk(g_mw5Name)) { // (it goes into paths)
+            logf("mw5: [vr] mw5_cockpit '%ls' is not a cockpit's name (a file's name alone, no path) - no cockpit", g_mw5Name);
+            g_mw5Name[0] = 0;
+        }
+    }
     g_mw5Own = g_mw5Name[0] && GetFileAttributesW(mw5OwnIni().c_str()) != INVALID_FILE_ATTRIBUTES;
     g_mw5Scale = mw5CockpitF(L"scale", 1);
     if (!(g_mw5Scale > 0.05f)) g_mw5Scale = 1;
@@ -272,12 +278,12 @@ static void mw5ReadIni() {
         swprintf(k, 32, L"screen_%d", i);
         mw5CockpitStr(k, b, 96);
         float *r = g_m5Rect[i];
-        if (swscanf(b, L"%f %f %f %f", r, r + 1, r + 2, r + 3) != 4) r[0] = r[1] = r[2] = r[3] = 0;
+        if (swscanf_s(b, L"%f %f %f %f", r, r + 1, r + 2, r + 3) != 4) r[0] = r[1] = r[2] = r[3] = 0;
         // mw5_screen_<n>_alt = u0 v0 u1 v1 pu pv: this part instead, while something is drawn at pu pv (an open menu)
         swprintf(k, 32, L"screen_%d_alt", i);
         mw5CockpitStr(k, b, 96);
         float *a = g_m5Alt[i];
-        if (swscanf(b, L"%f %f %f %f %f %f", a, a + 1, a + 2, a + 3, a + 4, a + 5) != 6) a[0] = a[1] = a[2] = a[3] = a[4] = a[5] = 0;
+        if (swscanf_s(b, L"%f %f %f %f %f %f", a, a + 1, a + 2, a + 3, a + 4, a + 5) != 6) a[0] = a[1] = a[2] = a[3] = a[4] = a[5] = 0;
         // screen_<n>_turn = degrees: the picture turned clockwise within the monitor (a monitor that hangs askew)
         swprintf(k, 32, L"screen_%d_turn", i);
         mw5CockpitStr(k, b, 96);
@@ -292,7 +298,7 @@ static void mw5ReadIni() {
         mw5CockpitStr(k, b, 96);
         float *g = g_m5Glass[i];
         g[3] = g_m5GlassDistDef;
-        g_m5GlassSaved[i] = swscanf(b, L"%f %f %f %f", g, g + 1, g + 2, g + 3) >= 3;
+        g_m5GlassSaved[i] = swscanf_s(b, L"%f %f %f %f", g, g + 1, g + 2, g + 3) >= 3;
         if (!g_m5GlassSaved[i]) memcpy(g, g_m5GlassDef[i], sizeof g_m5GlassDef[i]), g[3] = g_m5GlassDistDef;
         if (!(g[2] <= 120)) g[2] = g_m5GlassDef[i][2];
         if (!(g[3] >= 0.3f && g[3] <= 20)) g[3] = g_m5GlassDistDef;
@@ -309,7 +315,7 @@ static void mw5ReadIni() {
         float *g = g_m5Plain[i];
         memcpy(g, g_m5PlainDef[i], sizeof g_m5PlainDef[i]);
         float v[4];
-        int n = swscanf(b, L"%f %f %f %f", v, v + 1, v + 2, v + 3);
+        int n = swscanf_s(b, L"%f %f %f %f", v, v + 1, v + 2, v + 3);
         if (n >= 3) g[0] = v[0], g[1] = v[1], g[2] = v[2];
         if (n >= 4) g[3] = v[3];
         if (!(g[2] <= 120)) g[2] = g_m5PlainDef[i][2];
@@ -319,7 +325,7 @@ static void mw5ReadIni() {
         GetPrivateProfileStringW(L"vr", k, L"", b, 96, ini.c_str());
         float *o = g_m5Out[i];
         memcpy(o, g_m5PlainDef[i], sizeof g_m5PlainDef[i]);
-        n = swscanf(b, L"%f %f %f %f", v, v + 1, v + 2, v + 3);
+        n = swscanf_s(b, L"%f %f %f %f", v, v + 1, v + 2, v + 3);
         if (n >= 3) o[0] = v[0], o[1] = v[1], o[2] = v[2];
         if (n >= 4) o[3] = v[3];
         if (!(o[2] <= 120)) o[2] = g_m5PlainDef[i][2];
@@ -333,7 +339,7 @@ static void mw5ReadIni() {
     }
     static wchar_t told[64];
     if (wcscmp(told, g_mw5Name)) {
-        wcscpy(told, g_mw5Name);
+        wcscpy_s(told, g_mw5Name);
         logf("mw5: cockpit '%ls' (%s), settings from %s, size %.2f, eye %.2f m right %.2f m up %.2f m forward", g_mw5Name,
              g_mw5On ? "on" : "off - Ctrl+F11", g_mw5Own ? "its own file" : "mw4vr.ini", g_mw5Scale, g_mw5Eye[0], g_mw5Eye[1], g_mw5Eye[2]);
     }
@@ -366,7 +372,7 @@ static void mw5LoadDetail() {
     if (g_m5DetailTried) return;
     g_m5DetailTried = true;
     std::wstring path = g_dir + L"mw4vr_cockpits\\mw4vr_paint.mwd";
-    FILE *f = _wfopen(path.c_str(), L"rb");
+    FILE *f = fileOpen(path.c_str(), L"rb");
     char magic[4];
     uint32_t size = 0;
     if (f && fread(magic, 1, 4, f) == 4 && !memcmp(magic, "MWD1", 4) && fread(&size, 4, 1, f) == 1 && size >= 4 && size <= 4096 && !(size & (size - 1)))
@@ -375,23 +381,40 @@ static void mw5LoadDetail() {
     logf(g_m5Detail ? "mw5: painted metal from mw4vr_paint.mwd (%u)" : "mw5: no mw4vr_paint.mwd - painted metal stays plainly coloured", size);
 }
 
-static bool mw5LoadFile() {
-    mw5LoadDetail();
-    std::wstring path = g_dir + L"mw4vr_cockpits\\" + g_mw5Name + L".mwc";
-    FILE *f = _wfopen(path.c_str(), L"rb");
-    if (!f) {
-        logf("mw5: %ls not found", path.c_str());
-        return false;
+// what is loaded goes
+static void mw5Free() {
+    for (int i = 0; i < MW5_GROUPS; ++i) {
+        IUnknown *rel[] = {g_m5[i].vb, g_m5[i].ib, g_m5[i].clr, g_m5[i].ems};
+        for (IUnknown *u : rel)
+            if (u) u->Release();
+        g_m5[i] = {};
     }
+    g_m5N = g_m5Screens = 0;
+    g_m5Pos.clear(), g_m5Tri.clear();
+}
+
+// The file is not trusted (core.h: mcGroupBytes, mcScreen): every part's sizes are checked, and all parts together
+// may take MW5_FILE_BYTES at most - a 32-bit process has little room, and a file asking for gigabytes left the
+// game short of memory long after the cockpit had failed to load.
+static const unsigned MW5_FILE_BYTES = 640u << 20;
+static bool mw5ReadFile(FILE *f, const std::wstring &path) {
     bool ok = false;
     char magic[4];
     uint32_t n = 0;
+    unsigned total = 0;
     if (fread(magic, 1, 4, f) == 4 && !memcmp(magic, "MWC1", 4) && fread(&n, 4, 1, f) == 1 && n >= 1 && n <= MW5_GROUPS) {
         ok = true;
         for (uint32_t i = 0; i < n && ok; ++i) {
             struct { char name[48]; uint32_t nv, ni, cs, es; float k; } h;
-            ok = fread(&h, sizeof h, 1, f) == 1 && h.nv && h.nv < 4000000 && h.ni && h.ni < 12000000 && h.cs && h.cs <= 4096 && h.es <= 4096;
+            ok = fread(&h, sizeof h, 1, f) == 1;
+            unsigned bytes = ok ? mcGroupBytes(h.nv, h.ni, h.cs, h.es) : 0;
+            if (ok && (!bytes || bytes > MW5_FILE_BYTES - total)) {
+                h.name[47] = 0;
+                logf("mw5:   part %u '%s' is refused: %u vertices, %u indices, pictures %u / %u (%u MB so far)", i, h.name, h.nv, h.ni, h.cs, h.es, total >> 20);
+                ok = false;
+            }
             if (!ok) break;
+            total += bytes;
             std::vector<uint8_t> v((size_t)h.nv * 32), ix((size_t)h.ni * 4);
             ok = fread(v.data(), 1, v.size(), f) == v.size() && fread(ix.data(), 1, ix.size(), f) == ix.size();
             if (!ok) break;
@@ -417,9 +440,8 @@ static bool mw5LoadFile() {
             h.name[47] = 0;
             g.paint = !strncmp(h.name, "PAINT:", 6);
             if (!strncmp(h.name, "SCREEN:", 7)) {
-                g.screen = atoi(h.name + 7) + 1;
+                g.screen = mcScreen(h.name + 7, MW5_SCREENS); // (0: none of the cockpit's monitors - a part like any other)
                 g.aspect = h.k > 0.05f ? h.k : 1;
-                if (g.screen > MW5_SCREENS) g.screen = 0;
                 if (g.screen) ++g_m5Screens;
             }
             g.clr = mw5Texture(f, h.cs);
@@ -432,8 +454,30 @@ static bool mw5LoadFile() {
     } else {
         logf("mw5: %ls is not a cockpit file", path.c_str());
     }
-    fclose(f);
     return ok && g_m5N > 0;
+}
+
+static bool mw5LoadFile() {
+    mw5LoadDetail();
+    if (!mcNameOk(g_mw5Name)) {
+        logf("mw5: '%ls' is not a cockpit's name (a file's name alone, no path) - not loaded", g_mw5Name);
+        return false;
+    }
+    std::wstring path = g_dir + L"mw4vr_cockpits\\" + g_mw5Name + L".mwc";
+    FILE *f = fileOpen(path.c_str(), L"rb");
+    if (!f) {
+        logf("mw5: %ls not found", path.c_str());
+        return false;
+    }
+    bool ok = false;
+    try {
+        ok = mw5ReadFile(f, path);
+    } catch (const std::bad_alloc &) { // (not left to mw5Load's __except: the file would stay open, the parts stay)
+        logf("mw5: no memory for %ls", path.c_str());
+    }
+    fclose(f);
+    if (!ok) mw5Free(); // nothing of a file that failed half way stays
+    return ok;
 }
 
 static bool mw5CreateStates() {
@@ -694,7 +738,7 @@ static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw, bool gameCockpi
             if (rt[i]) {
                 D3D11_RENDER_TARGET_VIEW_DESC d;
                 rt[i]->GetDesc(&d);
-                sprintf(s + strlen(s), " %d:fmt%d", i, (int)d.Format);
+                snprintf(s + strlen(s), sizeof s - strlen(s), " %d:fmt%d", i, (int)d.Format);
                 rt[i]->Release();
             }
         D3D11_VIEWPORT vp[1] = {};
@@ -825,16 +869,14 @@ static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw, bool gameCockpi
 // another cockpit file: what is loaded goes, the new one is loaded at its first use
 static void mw5Switch(const wchar_t *name) {
     if (!_wcsicmp(name, g_mw5Name) && g_mw5State >= 0) return;
-    for (int i = 0; i < g_m5N; ++i) {
-        IUnknown *rel[] = {g_m5[i].vb, g_m5[i].ib, g_m5[i].clr, g_m5[i].ems};
-        for (IUnknown *u : rel)
-            if (u) u->Release();
-        g_m5[i] = {};
+    if (!mcNameOk(name)) { // (it goes into paths: the cockpit's file, its settings)
+        static int told;
+        if (told++ < 5) logf("mw5: '%ls' is not a cockpit's name (a file's name alone, no path) - the cockpit stays as it is", name);
+        return;
     }
-    g_m5N = g_m5Screens = 0;
-    g_m5Pos.clear(), g_m5Tri.clear();
+    mw5Free();
     g_mw5State = 0;
-    wcsncpy(g_mw5Name, name, 63);
+    wcsncpy_s(g_mw5Name, name, _TRUNCATE);
     g_mw5Name[63] = 0;
     mw5ReadIni();
 }
@@ -864,7 +906,7 @@ static void mw5ForMech() {
         wchar_t model[32], name[64] = L"", list[256] = L"";
         if (!early[0] && gmPlayerMech(mech, 32)) {
             swprintf(model, 32, L"%hs", mech);
-            wcscpy(early, model);
+            wcscpy_s(early, model);
             GetPrivateProfileStringW(L"mechs", model, L"", list, 256, (g_dir + L"mw4vr_cockpit_map.ini").c_str());
             for (wchar_t *p = list; *p && !name[0];) {
                 wchar_t *e = wcschr(p, L',');
@@ -872,7 +914,7 @@ static void mw5ForMech() {
                 while (*p == L' ') ++p;
                 size_t n = wcslen(p);
                 while (n && p[n - 1] == L' ') p[--n] = 0;
-                if (n && n < 64 && GetFileAttributesW((g_dir + L"mw4vr_cockpits\\" + p + L".mwc").c_str()) != INVALID_FILE_ATTRIBUTES) wcscpy(name, p);
+                if (n && n < 64 && mcNameOk(p) && GetFileAttributesW((g_dir + L"mw4vr_cockpits\\" + p + L".mwc").c_str()) != INVALID_FILE_ATTRIBUTES) wcscpy_s(name, 64, p);
                 if (!e) break;
                 p = e + 1;
             }
@@ -904,7 +946,7 @@ static void mw5ForMech() {
             while (*p == L' ') ++p;
             size_t n = wcslen(p);
             while (n && p[n - 1] == L' ') p[--n] = 0;
-            if (n && n < 64 && GetFileAttributesW((g_dir + L"mw4vr_cockpits\\" + p + L".mwc").c_str()) != INVALID_FILE_ATTRIBUTES) wcscpy(name, p);
+            if (n && n < 64 && mcNameOk(p) && GetFileAttributesW((g_dir + L"mw4vr_cockpits\\" + p + L".mwc").c_str()) != INVALID_FILE_ATTRIBUTES) wcscpy_s(name, 64, p);
             if (!e) break;
             p = e + 1;
         }
@@ -1027,7 +1069,7 @@ static void mw5GlassFit() {
     static wchar_t told[64];
     static int toldN = -1;
     if (wcscmp(told, g_mw5Name) || toldN != fitted * 16 + failed) {
-        wcscpy(told, g_mw5Name);
+        wcscpy_s(told, g_mw5Name);
         toldN = fitted * 16 + failed;
         logf("mw5: cockpit '%ls': %d parts of the HUD placed in its windows, %d found no open place (left where they usually are)", g_mw5Name, fitted, failed);
         for (int p = 0; p < M5_PARTS; ++p)

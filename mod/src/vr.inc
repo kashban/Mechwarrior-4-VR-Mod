@@ -269,12 +269,12 @@ static void vrReadIni() {
     if (!(g_vr.hudLeft >= 0 && g_vr.hudLeft < g_vr.hudRight && g_vr.hudRight <= 1)) g_vr.hudLeft = 0.25f, g_vr.hudRight = 0.72f;
     // the cross-hair with its range, pitch scale and weapon groups: a part about the picture's middle, shown smaller
     GetPrivateProfileStringW(L"vr", L"hud_cross_rect", L"0.39 0.415 0.61 0.585", b, 64, p.c_str());
-    if (swscanf(b, L"%f %f %f %f", g_vr.cross, g_vr.cross + 1, g_vr.cross + 2, g_vr.cross + 3) != 4) g_vr.cross[0] = g_vr.cross[2] = 0;
+    if (swscanf_s(b, L"%f %f %f %f", g_vr.cross, g_vr.cross + 1, g_vr.cross + 2, g_vr.cross + 3) != 4) g_vr.cross[0] = g_vr.cross[2] = 0;
     GetPrivateProfileStringW(L"vr", L"hud_cross_scale", L"0.25", b, 64, p.c_str());
     g_vr.crossScale = (float)_wtof(b);
     if (!(g_vr.crossScale >= 0.1f && g_vr.crossScale <= 1.0f)) g_vr.crossScale = 0.25f;
     GetPrivateProfileStringW(L"vr", L"hud_twist_rect", L"0.42 0.585 0.58 0.665", b, 64, p.c_str());
-    if (swscanf(b, L"%f %f %f %f", g_vr.twist, g_vr.twist + 1, g_vr.twist + 2, g_vr.twist + 3) != 4) g_vr.twist[0] = g_vr.twist[2] = 0;
+    if (swscanf_s(b, L"%f %f %f %f", g_vr.twist, g_vr.twist + 1, g_vr.twist + 2, g_vr.twist + 3) != 4) g_vr.twist[0] = g_vr.twist[2] = 0;
     GetPrivateProfileStringW(L"vr", L"hud_twist_shift", L"-0.045", b, 64, p.c_str());
     g_vr.twistDv = (float)_wtof(b);
     // this cockpit's own values (mech.inc) over the [vr] ones

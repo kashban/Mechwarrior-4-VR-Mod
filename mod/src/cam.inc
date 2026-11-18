@@ -107,7 +107,7 @@ static void lblWrite() {
         a.swap(g_lblBuf[0]);
         b.swap(g_lblBuf[1]);
     }
-    FILE *f = _wfopen((g_dir + L"mw4vr_labels.txt").c_str(), L"ab");
+    FILE *f = fileOpen((g_dir + L"mw4vr_labels.txt").c_str(), L"ab");
     if (!f) return;
     fprintf(f, "==== frame %u, left eye's pass ====\n%s==== frame %u, right eye's pass ====\n%s\n", g_frame, a.c_str(), g_frame, b.c_str());
     fclose(f);
@@ -137,7 +137,7 @@ static void camDump(uint8_t *cam) {
         IMAGE_NT_HEADERS32 nh;
         if (camRead(base, &dh, sizeof dh) && camRead(base + dh.e_lfanew, &nh, sizeof nh)) {
             DWORD size = nh.OptionalHeader.SizeOfImage;
-            FILE *f = _wfopen((g_dir + L"mw4vr_dump_exe.bin").c_str(), L"wb");
+            FILE *f = fileOpen((g_dir + L"mw4vr_dump_exe.bin").c_str(), L"wb");
             if (f) {
                 std::vector<uint8_t> page(0x1000);
                 DWORD ok = 0;
@@ -153,7 +153,7 @@ static void camDump(uint8_t *cam) {
     }
     wchar_t name[64];
     swprintf(name, 64, L"mw4vr_dump_cam_%d.txt", done);
-    FILE *f = _wfopen((g_dir + name).c_str(), L"wb");
+    FILE *f = fileOpen((g_dir + name).c_str(), L"wb");
     if (f) {
         uint8_t *e = cam;
         for (int lvl = 0; e && lvl < 8; ++lvl) {

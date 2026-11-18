@@ -1082,6 +1082,62 @@ static void testSheet() {
     CHECK(mcSheet(255, 0, 20, 20) == MC_SHEET_NONE);
 }
 
+static void testCockpitFile() {
+    // a monitor's number: n + 1 for 0 .. screens - 1
+    CHECK(mcScreen("0", 8) == 1);
+    CHECK(mcScreen("7", 8) == 8);
+    CHECK(mcScreen("9", 12) == 10);
+    CHECK(mcScreen("12", 20) == 13);
+    CHECK(mcScreen("5", 5) == 0); // (from `screens` on: none)
+    CHECK(mcScreen("8", 8) == 0);
+    // no number, or a sign before it - the number below zero that read before the table
+    CHECK(mcScreen("", 8) == 0);
+    CHECK(mcScreen("-5", 8) == 0);
+    CHECK(mcScreen("+1", 8) == 0);
+    CHECK(mcScreen("x", 8) == 0);
+    CHECK(mcScreen("/", 8) == 0); // (the letters beside the digits)
+    CHECK(mcScreen(":", 8) == 0);
+    CHECK(mcScreen(":", 20) == 0); // (the letter after '9' is no ten)
+    // what follows the digits does not count; of many digits the first three (so the number cannot run over)
+    CHECK(mcScreen("3 left", 8) == 4);
+    CHECK(mcScreen("1234", 2000) == 124);
+    CHECK(mcScreen("99999999999999999999", 8) == 0);
+
+    // a cockpit's name
+    CHECK(mcNameOk(L"a"));
+    CHECK(mcNameOk(L"madcat"));
+    CHECK(mcNameOk(L"mad cat"));
+    CHECK(mcNameOk(L"mad.cat_2-b"));
+    CHECK(!mcNameOk(L""));
+    CHECK(!mcNameOk(L"/"));
+    CHECK(!mcNameOk(L"..\\..\\Windows\\win"));
+    CHECK(!mcNameOk(L".."));
+    CHECK(!mcNameOk(L"a..b"));
+    CHECK(mcNameOk(L".a.b.")); // (single dots are a name's)
+    const wchar_t *bad[] = {L"a\\b", L"a/b", L"c:a", L"a*", L"a?", L"a\"b", L"a<b", L"a>b", L"a|b", L"a\x1f" L"b", L"a\tb"};
+    for (const wchar_t *b : bad) CHECK(!mcNameOk(b));
+    wchar_t n63[65];
+    for (int i = 0; i < 64; ++i) n63[i] = L'x';
+    n63[64] = 0;
+    CHECK(!mcNameOk(n63)); // 64 letters
+    n63[63] = 0;
+    CHECK(mcNameOk(n63)); // 63
+
+    // a part's size
+    CHECK(mcGroupBytes(10, 30, 4, 2) == 10 * 32 + 30 * 4 + 4 * 4 * 6 + 2 * 2 * 6);
+    CHECK(mcGroupBytes(10, 30, 4, 0) == 320 + 120 + 96); // (no second picture)
+    CHECK(mcGroupBytes(1, 3, 1, 0) == 32 + 12 + 6);      // the least
+    CHECK(mcGroupBytes(MC_GROUP_VERTS, MC_GROUP_INDICES, MC_GROUP_TEX, MC_GROUP_TEX) ==
+          MC_GROUP_VERTS * 32u + MC_GROUP_INDICES * 4u + 2u * MC_GROUP_TEX * MC_GROUP_TEX * 6u); // the most
+    CHECK(mcGroupBytes(0, 30, 4, 2) == 0);
+    CHECK(mcGroupBytes(MC_GROUP_VERTS + 1, 30, 4, 2) == 0);
+    CHECK(mcGroupBytes(10, 2, 4, 2) == 0);
+    CHECK(mcGroupBytes(10, MC_GROUP_INDICES + 1, 4, 2) == 0);
+    CHECK(mcGroupBytes(10, 30, 0, 2) == 0);
+    CHECK(mcGroupBytes(10, 30, MC_GROUP_TEX + 1, 2) == 0);
+    CHECK(mcGroupBytes(10, 30, 4, MC_GROUP_TEX + 1) == 0);
+}
+
 int main() {
     testHolds(), testTurnNorm(), testTurnFit(), testEyeInMesh(), testHudCross(), testHudGlass(), testGlassPose(), testGlassScale(), testGlassAim();
     testGridMark(), testGridPlace(), testGridTri(), testGridCells(), testGridFree(), testGridRim(), testGridFit();
@@ -1092,6 +1148,7 @@ int main() {
     testHudPlain(), testHudZoom(), testHudZoomEdges(), testHudScreens(), testHudScreensZoom();
     testSeat();
     testSheet();
+    testCockpitFile();
     printf("%d checks, %d failed\n", g_checks, g_fail);
     return g_fail ? 1 : 0;
 }

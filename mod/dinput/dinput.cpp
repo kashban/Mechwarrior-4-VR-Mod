@@ -14,6 +14,7 @@
 #include <dinput.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <share.h>
 
 static HMODULE g_real;
 static char g_log[MAX_PATH];
@@ -21,7 +22,7 @@ static int g_lines;
 
 static void say(const char *fmt, ...) {
     if (!g_log[0] || g_lines >= 200) return; // a game that asks every frame must not fill the disk
-    FILE *f = fopen(g_log, g_lines++ ? "a" : "w");
+    FILE *f = _fsopen(g_log, g_lines++ ? "a" : "w", _SH_DENYNO);
     if (!f) return;
     SYSTEMTIME t;
     GetLocalTime(&t);

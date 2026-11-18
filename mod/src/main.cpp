@@ -244,6 +244,12 @@ typedef HRESULT(WINAPI *PFN_D3DCompile)(LPCVOID, SIZE_T, LPCSTR, const void *, v
                                         ID3DBlob **, ID3DBlob **);
 static PFN_D3DCompile g_compile;
 static ID3D11Device *g_dev;
+// a file opened (the checked form of the C library's function; null: it could not be)
+static FILE *fileOpen(const wchar_t *path, const wchar_t *mode) {
+    FILE *f = nullptr;
+    return _wfopen_s(&f, path, mode) == 0 ? f : nullptr;
+}
+
 #include "mw4hook_abi.inc"
 
 static ID3D11VertexShader *g_eyeVS; // replacement for the CPU path's screen-space vertex shader
@@ -1796,7 +1802,7 @@ static INT STDMETHODCALLTYPE H_BeginEvent(ID3DUserDefinedAnnotation *a, LPCWSTR 
         if (smallCam) { // "... a camera at twice the resolution, 225x170 at 0,1188": where its window lies
             const wchar_t *v = wcsstr(name, HK_LBL_SSAA_SIZE);
             int x = 0, y = 0, w = 0, hh = 0;
-            if (v && swscanf(v + 12, L"%dx%d at %d,%d", &w, &hh, &x, &y) == 4 && w > 0) {
+            if (v && swscanf_s(v + 12, L"%dx%d at %d,%d", &w, &hh, &x, &y) == 4 && w > 0) {
                 float cu = (x + 0.5f * w) / g_hudW;
                 g_smallCamSide = cu < 0.3f || cu > 0.7f;
             }
@@ -1804,7 +1810,7 @@ static INT STDMETHODCALLTYPE H_BeginEvent(ID3DUserDefinedAnnotation *a, LPCWSTR 
         if (!smallCam && wcsncmp(name, HK_LBL_CAMERA, 7) == 0) {
             const wchar_t *v = wcsstr(name, HK_LBL_VIEWPORT);
             int x = 0, y = 0, w = 0, hh = 0;
-            if (v && swscanf(v, L"viewport %d,%d %dx%d", &x, &y, &w, &hh) == 4 && w > 0 && (UINT)w * 10 < g_hudW * 7) {
+            if (v && swscanf_s(v, L"viewport %d,%d %dx%d", &x, &y, &w, &hh) == 4 && w > 0 && (UINT)w * 10 < g_hudW * 7) {
                 smallCam = true;
                 hudCamRect(x, y, w, hh);
             }

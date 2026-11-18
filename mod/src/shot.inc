@@ -82,7 +82,7 @@ static bool shotRead(ID3D11DeviceContext *ctx, ID3D11Texture2D *src, UINT step, 
 }
 
 static bool shotWriteBmp(const wchar_t *path, const uint8_t *bgr, UINT w, UINT h) {
-    FILE *f = _wfopen(path, L"wb");
+    FILE *f = fileOpen(path, L"wb");
     if (!f) return false;
     UINT pitch = (w * 3 + 3) & ~3u, size = pitch * h;
 #pragma pack(push, 1)

@@ -425,3 +425,41 @@ static inline int mcSheet(int a, int r, int g, int b) {
     if (!coloured) return MC_SHEET_FADE;
     return MC_SHEET_NONE;
 }
+
+// ---- what a cockpit file and a cockpit's name may hold --------------------------------------------------------------
+// A cockpit file may come from a stranger (somebody passes a converted cockpit on), and a cockpit's name comes from
+// settings anybody can write: neither is trusted.
+
+// The monitor a part named "SCREEN:<n>" is (digits: the text after the colon): n + 1, or 0 when it is none of the
+// cockpit's - no number, a sign before it, or a number from `screens` on. (A number below zero read before the
+// monitors' table.)
+static inline int mcScreen(const char *digits, int screens) {
+    int n = 0, len = 0;
+    for (; len < 3 && digits[len] >= '0' && digits[len] <= '9'; ++len) n = n * 10 + (digits[len] - '0');
+    if (len == 0) return 0;
+    return n < screens ? n + 1 : 0;
+}
+
+// A cockpit's name as it goes between "mw4vr_cockpits\" and ".mwc": a file's name alone - nothing that leaves the
+// folder (a separator, a drive's colon, two dots), nothing a file's name cannot hold, no control character, not
+// empty and at most 63 letters.
+static inline bool mcNameOk(const wchar_t *s) {
+    int n = 0;
+    wchar_t before = L' ';
+    for (; s[n]; ++n) {
+        wchar_t c = s[n];
+        if (n >= 63 || c < 32 || c == L'\\' || c == L'/' || c == L':' || c == L'*' || c == L'?' || c == L'"' || c == L'<' || c == L'>' || c == L'|') return false;
+        if (c == L'.' && before == L'.') return false;
+        before = c;
+    }
+    return n > 0;
+}
+
+// A part of a cockpit file by its header: the bytes it takes here (vertices of 32 bytes, indices of 4, two square
+// pictures with their smaller copies - six bytes a pixel is above what those take), or 0 when it is not one this
+// loader reads. The largest real cockpit has some 13,000 vertices in a part and pictures of 1024.
+enum { MC_GROUP_VERTS = 500000, MC_GROUP_INDICES = 3000000, MC_GROUP_TEX = 4096 };
+static inline unsigned mcGroupBytes(unsigned nv, unsigned ni, unsigned cs, unsigned es) {
+    if (nv < 1 || nv > MC_GROUP_VERTS || ni < 3 || ni > MC_GROUP_INDICES || cs < 1 || cs > MC_GROUP_TEX || es > MC_GROUP_TEX) return 0;
+    return nv * 32 + ni * 4 + cs * cs * 6 + es * es * 6;
+}
