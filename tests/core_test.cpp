@@ -1051,7 +1051,14 @@ static void testSheet() {
     // hardly there: no sheet, whatever its colour
     CHECK(mcSheet(0, 0, 0, 0) == MC_SHEET_NONE);
     CHECK(mcSheet(MC_SHEET_ALPHA - 1, 0, 0, 0) == MC_SHEET_NONE);
-    CHECK(mcSheet(MC_SHEET_ALPHA - 1, 0, 0, 7) == MC_SHEET_NONE); // (the menu's sheet fading in)
+    CHECK(mcSheet(MC_SHEET_ALPHA - 1, 7, 0, 0) == MC_SHEET_NONE);
+    // the menu's sheet is told while it fades in, from the least alpha a point can show
+    CHECK(mcSheet(MC_SHEET_ALPHA - 1, 0, 0, 7) == MC_SHEET_MENU);
+    CHECK(mcSheet(MC_SHEET_MIN, 0, 0, 1) == MC_SHEET_MENU);
+    CHECK(mcSheet(MC_SHEET_MIN - 1, 0, 0, 1) == MC_SHEET_NONE);
+    // blue, but not alone: no sheet of ours - and no fade, though red and green are black against the alpha
+    CHECK(mcSheet(255, 5, 0, 17) == MC_SHEET_NONE);
+    CHECK(mcSheet(32, 1, 0, 2) == MC_SHEET_FADE); // (blue at a sixteenth of the alpha is still black)
     // black: a fade, from the least alpha that counts
     CHECK(mcSheet(MC_SHEET_ALPHA, 0, 0, 0) == MC_SHEET_FADE);
     CHECK(mcSheet(255, 0, 0, 0) == MC_SHEET_FADE);

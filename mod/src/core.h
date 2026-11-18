@@ -411,15 +411,17 @@ static inline void mcSeatStep(McSeat &s, int tris, bool ahead) {
 // ---- a sheet over the whole HUD image ------------------------------------------------------------------------------
 // The game lays a sheet over its whole picture, drawn with the HUD: a black one fades a scene in and out, a blue one
 // lies behind the menu of a paused battle. Some points of the HUD image that are empty otherwise are read back; the
-// one with the least alpha shows the sheet alone. A sheet hardly there yet (one fading in) is none: taken for a
-// fade, it switched the HUD off for the moments a menu opened and closed. Black: every colour below a sixteenth of
-// the alpha. Blue alone: the menu's. Any other colour (light amplification) stays with the HUD as it is.
-enum { MC_SHEET_NONE, MC_SHEET_FADE, MC_SHEET_MENU, MC_SHEET_ALPHA = 16 };
+// one with the least alpha shows the sheet alone. Blue alone: the menu's - from its first trace, while it still
+// fades in (told only once it was well there, the menu showed in the HUD's parts first and jumped). A black sheet
+// hardly there yet is none: taken for a fade, it switched the HUD off for a moment. Black: every colour below a
+// sixteenth of the alpha. Any other colour (light amplification) stays with the HUD as it is.
+enum { MC_SHEET_NONE, MC_SHEET_FADE, MC_SHEET_MENU, MC_SHEET_MIN = 2, MC_SHEET_ALPHA = 16 };
 // a: the point's alpha, r g b: its colour (all 0..255)
 static inline int mcSheet(int a, int r, int g, int b) {
+    if (a < MC_SHEET_MIN) return MC_SHEET_NONE;
+    if (b * 16 > a && r * 4 <= b && g * 4 <= b) return MC_SHEET_MENU;
     if (a < MC_SHEET_ALPHA) return MC_SHEET_NONE;
     bool coloured = r * 16 > a || g * 16 > a || b * 16 > a;
     if (!coloured) return MC_SHEET_FADE;
-    if (r * 4 <= b && g * 4 <= b) return MC_SHEET_MENU;
     return MC_SHEET_NONE;
 }

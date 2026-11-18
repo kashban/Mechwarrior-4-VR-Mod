@@ -1381,10 +1381,74 @@ static bool smallCamBackdrop(ID3D11DeviceContext *c) {
     return true;
 }
 
+// A paused battle's menu: the game lays its blue sheet over the HUD it has drawn - the cross-hair and all the
+// rest then show through behind the menu. While the menu is up (vr.inc tells: g_fadeMenu) the HUD's image is
+// emptied right before the sheet is drawn, so it holds the sheet and the menu alone. The sheet: a draw of the HUD
+// pass of at most six vertices that spans the whole picture (vertices in pixels, read from the buffer's memory).
+static void hudSheetDraw(ID3D11DeviceContext *c, bool indexed, UINT count, UINT start, INT baseV) {
+    static unsigned doneFrame = ~0u;
+    if (!g_fadeMenu || !g_inHud || !g_hudFrameRtv || !g_hudRtv || count < 3 || count > 6 || doneFrame == g_frame) return;
+    ID3D11Buffer *vb = nullptr, *ib = nullptr;
+    UINT stride = 0, voff = 0, ioff = 0;
+    DXGI_FORMAT ifmt = DXGI_FORMAT_UNKNOWN;
+    c->IAGetVertexBuffers(0, 1, &vb, &stride, &voff);
+    if (indexed) c->IAGetIndexBuffer(&ib, &ifmt, &ioff);
+    D3D11_BUFFER_DESC vd = {}, id = {};
+    if (vb) vb->GetDesc(&vd);
+    if (ib) ib->GetDesc(&id);
+    bool ok = vb && stride >= 8 && vd.Usage == D3D11_USAGE_DYNAMIC && (vd.CPUAccessFlags & D3D11_CPU_ACCESS_WRITE) &&
+              (!indexed || (ib && id.Usage == D3D11_USAGE_DYNAMIC && (id.CPUAccessFlags & D3D11_CPU_ACCESS_WRITE) &&
+                            (ifmt == DXGI_FORMAT_R16_UINT || ifmt == DXGI_FORMAT_R32_UINT)));
+    bool whole = false;
+    if (ok) {
+        D3D11_MAPPED_SUBRESOURCE mv = {}, mi = {};
+        bool mvOk = SUCCEEDED(ORIG(MechPFN_Map, c, VT_Ctx_Map)(c, vb, 0, D3D11_MAP_WRITE_NO_OVERWRITE, 0, &mv)) && mv.pData;
+        bool miOk = !indexed || (SUCCEEDED(ORIG(MechPFN_Map, c, VT_Ctx_Map)(c, ib, 0, D3D11_MAP_WRITE_NO_OVERWRITE, 0, &mi)) && mi.pData);
+        if (mvOk && miOk) {
+            float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f;
+            bool read = true;
+            for (UINT k = 0; k < count && read; ++k) {
+                long long vi = (long long)start + k;
+                if (indexed) {
+                    UINT io = ioff + (start + k) * (ifmt == DXGI_FORMAT_R32_UINT ? 4u : 2u);
+                    if (io + 4 > id.ByteWidth) read = false;
+                    else vi = (ifmt == DXGI_FORMAT_R32_UINT ? *(const uint32_t *)((const uint8_t *)mi.pData + io) : *(const uint16_t *)((const uint8_t *)mi.pData + io)) + (long long)baseV;
+                }
+                long long vo = (long long)voff + vi * stride;
+                if (!read || vi < 0 || vo + 8 > (long long)vd.ByteWidth) {
+                    read = false;
+                    break;
+                }
+                const float *p = (const float *)((const uint8_t *)mv.pData + vo);
+                if (!(fabsf(p[0]) < 1e6f) || !(fabsf(p[1]) < 1e6f)) {
+                    read = false;
+                    break;
+                }
+                x0 = min(x0, p[0]), x1 = max(x1, p[0]), y0 = min(y0, p[1]), y1 = max(y1, p[1]);
+            }
+            whole = read && x0 <= 1.0f && y0 <= 1.0f && x1 >= (float)g_hudW - 1.0f && y1 >= (float)g_hudH - 1.0f;
+        }
+        if (indexed && miOk && mi.pData) ORIG(MechPFN_Unmap, c, VT_Ctx_Unmap)(c, ib, 0);
+        if (mvOk) ORIG(MechPFN_Unmap, c, VT_Ctx_Unmap)(c, vb, 0);
+    }
+    if (vb) vb->Release();
+    if (ib) ib->Release();
+    if (!whole) return;
+    doneFrame = g_frame;
+    const float zero[4] = {0, 0, 0, 0};
+    c->ClearRenderTargetView(g_hudRtv, zero);
+    static bool told;
+    if (!told) {
+        told = true;
+        logf("hud: the paused battle's sheet is a draw of %u vertices over the whole picture - the HUD's image is emptied before it (frame %u)", count, g_frame);
+    }
+}
+
 template <int V> static void STDMETHODCALLTYPE HP_Draw(ID3D11DeviceContext *c, UINT a, UINT b) {
     onWork(c, "Draw", false);
     if (eyeHidden(c)) return;
     if (smallCamBackdrop(c)) return;
+    hudSheetDraw(c, false, a, b, 0);
     bool sw = eyeTlPre(c);
     int ck = sw && mechMeasuring() ? mechDraw(c, false, a, b, 0, g_camPassEye == 0) : 0;
     if (sw && g_mw5On) mw5Draw(c, (Mw5PFN_DrawIdx)g_tr[SL_DRAWIDX][V], ck >= 10);
@@ -1396,6 +1460,7 @@ template <int V> static void STDMETHODCALLTYPE HP_Draw(ID3D11DeviceContext *c, U
 template <int V> static void STDMETHODCALLTYPE HP_DrawIndexed(ID3D11DeviceContext *c, UINT a, UINT b, INT d) {
     onWork(c, "DrawIndexed", false);
     if (eyeHidden(c)) return;
+    hudSheetDraw(c, true, a, b, d);
     bool sw = eyeTlPre(c);
     int ck = sw && mechMeasuring() ? mechDraw(c, true, a, b, d, g_camPassEye == 0) : 0;
     if (sw && g_mw5On) mw5Draw(c, (Mw5PFN_DrawIdx)g_tr[SL_DRAWIDX][V], ck >= 10);
@@ -2250,7 +2315,7 @@ BOOL WINAPI DllMain(HINSTANCE h, DWORD reason, LPVOID) {
         if (g_dbg) g_shlog = _wfsopen((g_dir + L"mw4vr_shaders.txt").c_str(), L"w", _SH_DENYNO);
         wchar_t exe[MAX_PATH];
         GetModuleFileNameW(nullptr, exe, MAX_PATH);
-        logf("MW4VR v11.63 (debug level %d) loaded into %s", g_dbg, narrow(exe).c_str());
+        logf("MW4VR v11.64 (debug level %d) loaded into %s", g_dbg, narrow(exe).c_str());
         if (!loadReal()) logf("ERROR: the system d3d11.dll could not be loaded");
     }
     return TRUE;
