@@ -156,8 +156,8 @@ static void camDump(uint8_t *cam) {
     FILE *f = fileOpen((g_dir + name).c_str(), L"wb");
     if (f) {
         uint8_t *e = cam;
+        uint8_t buf[0x400]; // (outside the loop: an older cppcheck takes the next element's address, read from it, for a pointer into it)
         for (int lvl = 0; e && lvl < 8; ++lvl) {
-            uint8_t buf[0x400];
             if (!camRead(e, buf, sizeof buf)) {
                 fprintf(f, "element %d at %p: not readable\n", lvl, e);
                 break;

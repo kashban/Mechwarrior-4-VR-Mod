@@ -35,3 +35,4 @@ try {
         exit 1
     }
 } finally { Pop-Location }
+exit 0 # (not bandit's own code: it ends with 1 for its low findings too)
