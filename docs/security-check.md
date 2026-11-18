@@ -11,8 +11,16 @@ State: v11.59 (`cc3f5b0`), branch `security-check`. Findings only - nothing in `
 | Hardening of the built DLLs | `dumpbin /headers /loadconfig /imports` on `d3d11.dll`, `dinput.dll` | ASLR, DEP, stack cookie, SafeSEH present; Control Flow Guard missing |
 | By hand | load paths, hooks, reading of files and of the game's memory, string functions, paths made from settings | 3 findings in the cockpit loader, 1 in the build |
 
-Not run: BinSkim and cppcheck (downloads, not approved yet), fuzzing (the loader cannot be called without the game
-yet), the Python tools and the workflows (not part of this check).
+| BinSkim 4.4.9.14 | `tools/security/binskim.bat` (a build with a PDB in `mod/build/analyze/bin`) | per DLL: 1 error (no Control Flow Guard), 4 warnings (Spectre switches, `/sdl`, SourceLink, LTCG) |
+| cppcheck 2.22.0 | `tools/security/cppcheck.bat` | 106 messages, none of severity "error" |
+| Installer, start script, tools | by hand (PowerShell, cmd), a second reader for Python, Node and the workflows | see "The installer and the tools" below |
+
+Not run: fuzzing (the loader cannot be called without the game yet); PSScriptAnalyzer and bandit (not on this
+machine; Semgrep with `p/python`, `p/security-audit`, `p/github-actions` runs in the pipeline and passes).
+
+Both scripts take the tool's place from a variable (`BINSKIM`, `CPPCHECK`): BinSkim is the NuGet package
+`Microsoft.CodeAnalysis.BinSkim` (signed by Microsoft), cppcheck the project's release on GitHub (its installer is
+not signed; it was unpacked with `msiexec /a`, not installed).
 
 ## What an attacker could reach
 
@@ -61,7 +69,103 @@ Missing: `/guard:cf` (compiler and linker), `/sdl`. The game itself has none of 
 it costs nothing to switch on, apart from a check that the many calls through saved function pointers (every draw)
 do not get slower.
 
-## Notes (no action needed, or a matter of taste)
+BinSkim's list for both DLLs: BA2008 no Control Flow Guard (error); BA2024 no `/Qspectre` (needs the Spectre
+libraries of the Build Tools; of little worth in a game); BA2026 no `/sdl`; BA2027 no SourceLink in the PDB and
+BA6006 no `/LTCG` (not about security). Everything else it checks passes.
+
+## The installer and the tools
+
+### T1 - the start and setup scripts call `powershell` by its name only (low)
+
+`tools/setup/MW4VR_Setup.cmd:3`, `tools/start/mw4vr_start.cmd:3`, `tools/setup/mw4vr_setup.ps1:614`,
+`tools/setup/mw4vr_setup_cockpits.ps1:21`. `cmd` looks in the current folder first: a `powershell.exe`, `.cmd` or
+`.bat` lying in the game's folder (the shortcut's working folder) or in the unpacked package would be started
+instead of Windows' own. Whoever can put a file there can as well replace `d3d11.dll`, so this opens no new door -
+but the full path costs nothing.
+
+Fix: `"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"` in the two `.cmd`, the same from
+`$env:SystemRoot` in the scripts.
+
+### T2 - the setup installs Python packages without a version or a hash (low)
+
+`tools/setup/mw4vr_setup_cockpits.ps1:18` (`pip install --user numpy pillow`), and Python itself by `winget`
+(`mw4vr_setup.ps1:510`). The newest packages of the day are taken, into the user's own Python. Usual for such a
+tool, and only on the player's click - but a bad release of one of them would be installed unseen.
+
+Fix (a matter of taste): versions known to work as lower and upper bounds, and a line in the readme saying what is
+installed.
+
+### T3 - arguments for the background step are quoted by hand (low, a bug in function)
+
+`tools/setup/mw4vr_setup.ps1:607`. Each path is put between `"`. A path typed with a `\` at its end (`...\Paks\`)
+ends in `\"`, which the next program reads as a quote inside the argument: the arguments run together and the
+export fails with a confusing message. No way in for somebody else - the paths are the player's own.
+
+Fix: trim a trailing `\` (as `Show-Mw5` does already for one use), or double it before the closing quote.
+
+### T4 - AI review: file names are taken from any line of the diff that looks like a header (medium)
+
+`tools/ci/ai-review.mjs:222, 226`. `changedPaths` matches `+++ b/<path>` anywhere in the diff, and `readText` reads
+what it names without checking that it lies inside the checkout. A pull request that adds the line
+`++ b/../../<file>` to a reviewed file makes the script read that file from the self-hosted runner's disk into the
+prompt; text in the same diff can ask the model to quote it, and the answer is posted as a comment. Needs the right
+to push a branch to the repository (forks are left out), so today only the owner - it matters once there are
+collaborators. Found by reading, not tried.
+
+Fix: the names from `git diff --name-only -z`; refuse absolute paths, `..` and links; check that the real path
+stays inside the checkout.
+
+### T5 - AI review: verdict comments count whoever wrote them (medium once the repository is public)
+
+`tools/ci/ai-review.mjs:266, 276, 520`. A comment holding the verdicts marker goes into the prompt as the author's
+word, one holding the review marker is taken for the bot's own last review (and is the one that gets edited). On a
+public repository anybody may comment.
+
+Fix: verdicts only from `author_association` OWNER / MEMBER / COLLABORATOR, the review marker only from
+`github-actions[bot]`. To be done before the repository is made public.
+
+### T6 - smaller ones in the pipeline and the tools (low)
+
+- `tools/ci/ai-review.mjs:427, 445`: the model server's error text goes into the message as it is; if that message
+  reaches the comment, host names or paths of the server could be published. Fix: status code and a fixed phrase.
+- `tools/ci/ai-review.mjs:188`: `defang` leaves links and @mentions in the model's answer. Fix: neutralise both
+  outside code.
+- `.github/workflows/release.yml:11, 22`: the write token is in the environment of every step (build, tests, pip,
+  a third-party action). Fix: `GH_TOKEN` only on the steps that call `gh`, or a job of its own for publishing.
+- `.github/workflows/publish.yml:40`: the package's hash is only compared when the notes hold one. Fix: fail when
+  there is none.
+- `.github/workflows/release.yml:50`: `trees.zip` comes from a release asset that can be replaced, without a hash.
+  Fix: its SHA-256 in the workflow.
+- `tools/trees/fetch_polyhaven.py:13, 38`: only the first address is checked for https (a redirect is followed),
+  and a download is checked by its size only. Fix: refuse other redirects, compare the hash the API gives.
+- `tools/convert_all.py:24`: the mech's name from `cockpits.txt` goes into the output path unchecked. The list is
+  written by our own export script from names matching `\w+`, so only a hand-made list could leave the folder.
+  Fix: refuse names with separators or `..`.
+- `ai-review.yml`: the runner on the developer's PC runs what a branch's workflow says for whoever may push.
+  Fine while the owner is the only one who can.
+
+(`tools/cockpit_convert.py` does not check indices against the number of vertices; the loader does where it reads
+them itself, `mw5.inc:950`, and Direct3D defines a draw with an index outside the buffer.)
+
+### Fine
+
+- Python and Node: no `eval`, `exec`, `pickle`, `yaml.load`, `shell=True`, `os.system`; programs are started with
+  argument lists. The glTF readers use `numpy.frombuffer`, which refuses sizes that do not fit.
+- Workflows: every action pinned to a commit, no `${{ }}` inside a `run:` text, the AI review runs the base
+  branch's script only, forks and Dependabot left out, no secret and no token in the prompt; pull requests of forks
+  get hosted runners, a read-only token and no secrets.
+- The game is started with `RunAsInvoker` (`mw4vr_start.ps1:20`): without the administrator rights its manifest
+  asks for. A gain - the mod's DLL then runs without them too.
+- No script downloads and runs code by itself: the store, python.org and UE Viewer buttons open pages; `winget`
+  and `pip` run on the player's click; pypi.org is asked over TLS and only numbers are taken from the answer.
+- What is deleted has a fixed name (`<game>\mw4vr_export`, `release\<name>`); what is overwritten in the game's
+  folder is kept once as `*.before_mw4vr` (the DLLs, `mw4hook.ini`, `clutter.txt`, `mw4vr_mechs.ini`).
+- `package.ps1` refuses a package holding cockpit, export or log files.
+- Meant so, and worth knowing: the scripts run with `-ExecutionPolicy Bypass` (they are not signed), and the setup
+  takes the "from the internet" mark off the files it installs (`Clear-WebMark`), so that the start script does not
+  ask at every start. The setup sets `antihack=0` in `mw4hook.ini` (said in its window): for offline play.
+
+## Notes on the DLLs (no action needed, or a matter of taste)
 
 - **Load paths: fine.** The system's `d3d11.dll`, `d3dcompiler_47.dll` and `dinput.dll` are loaded with the full
   path of the system folder (`main.cpp:136, 271`, `dinput.cpp:40`), not by the search order. The OpenXR runtime is
@@ -88,6 +192,9 @@ do not get slower.
   - C6054 (2): `told` / `g_mw5Name` "may not end in 0" - it always does (`mw5.inc:802, 803`).
   - C6385 (1): `mw5.inc:290`, reading `g[3]` of a row of four floats - looks like a false alarm, to be confirmed
     when the findings are dealt with.
+- cppcheck's messages: members without a value in a constructor (43; the structs are globals or are zeroed where
+  they are made), C-style casts of pointers (53; the vtable and memory work of a hook), `memset` on structs with
+  floats (4), parameters by value (5), one needless `substr`. No bounds, null or leak finding.
 - clang-tidy's messages: `memcmp` on floats (11, meant: "has anything changed"), `(int)(x + 0.5)` (4), comparisons
   without `!= 0` (9), `va_list` "not initialised" after `va_start` (3, false), one unused store (`vr.inc:1098`).
 
@@ -95,5 +202,6 @@ do not get slower.
 
 1. Fix S1 - S3 with a test each (the loader's checks moved to `core.h`, where the tests reach them).
 2. S4: switch on, measure the frame time.
-3. BinSkim and cppcheck once the downloads are approved; the two scripts here as a job of the pipeline.
-4. Fuzzing of the cockpit loader after the refactoring's step 3.
+3. T1 - T3 in the installer and the start script.
+4. The four scripts here as a job of the pipeline (BinSkim as a gate of the release).
+5. Fuzzing of the cockpit loader after the refactoring's step 3.
