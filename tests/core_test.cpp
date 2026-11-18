@@ -1037,6 +1037,34 @@ static void testSeat() {
     CHECK(!s.outside && s.misses == 1);
 }
 
+static void testSheet() {
+    // hardly there: no sheet, whatever its colour
+    CHECK(mcSheet(0, 0, 0, 0) == MC_SHEET_NONE);
+    CHECK(mcSheet(MC_SHEET_ALPHA - 1, 0, 0, 0) == MC_SHEET_NONE);
+    CHECK(mcSheet(MC_SHEET_ALPHA - 1, 0, 0, 7) == MC_SHEET_NONE); // (the menu's sheet fading in)
+    // black: a fade, from the least alpha that counts
+    CHECK(mcSheet(MC_SHEET_ALPHA, 0, 0, 0) == MC_SHEET_FADE);
+    CHECK(mcSheet(255, 0, 0, 0) == MC_SHEET_FADE);
+    // a colour up to a sixteenth of the alpha is still black - each of the three
+    CHECK(mcSheet(16, 1, 0, 0) == MC_SHEET_FADE);
+    CHECK(mcSheet(16, 0, 1, 0) == MC_SHEET_FADE);
+    CHECK(mcSheet(16, 0, 0, 1) == MC_SHEET_FADE);
+    CHECK(mcSheet(255, 15, 15, 15) == MC_SHEET_FADE);
+    // more than that is a colour: red or green alone are no sheet of ours, blue alone is the menu's
+    CHECK(mcSheet(16, 2, 0, 0) == MC_SHEET_NONE);
+    CHECK(mcSheet(16, 0, 2, 0) == MC_SHEET_NONE);
+    CHECK(mcSheet(16, 0, 0, 2) == MC_SHEET_MENU);
+    CHECK(mcSheet(128, 0, 0, 59) == MC_SHEET_MENU); // (as measured: the paused battle's sheet)
+    CHECK(mcSheet(255, 0, 60, 0) == MC_SHEET_NONE); // (light amplification)
+    // blue alone: red and green each at most a quarter of it
+    CHECK(mcSheet(255, 5, 0, 20) == MC_SHEET_MENU);
+    CHECK(mcSheet(255, 0, 5, 20) == MC_SHEET_MENU);
+    CHECK(mcSheet(255, 6, 0, 20) == MC_SHEET_NONE);
+    CHECK(mcSheet(255, 0, 6, 20) == MC_SHEET_NONE);
+    CHECK(mcSheet(255, 20, 0, 20) == MC_SHEET_NONE);
+    CHECK(mcSheet(255, 0, 20, 20) == MC_SHEET_NONE);
+}
+
 int main() {
     testHolds(), testTurnNorm(), testTurnFit(), testEyeInMesh(), testHudCross(), testHudGlass(), testGlassPose(), testGlassScale(), testGlassAim();
     testGridMark(), testGridPlace(), testGridTri(), testGridCells(), testGridFree(), testGridRim(), testGridFit();
@@ -1046,6 +1074,7 @@ int main() {
     testAdd(), testMeet(), testAddCut(), testMoveOut(), testSpans(), testLeftAlt(), testRightAlt();
     testHudPlain(), testHudZoom(), testHudZoomEdges(), testHudScreens(), testHudScreensZoom();
     testSeat();
+    testSheet();
     printf("%d checks, %d failed\n", g_checks, g_fail);
     return g_fail ? 1 : 0;
 }

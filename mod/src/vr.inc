@@ -58,6 +58,7 @@ struct VrState {
     float seatFwd = 0, seatUp = 0; // the eyes moved forward / up in the cockpit, game metres
     float zoomWinScale = 0.45f;    // the zoom window's size against the game's picture (smaller = weaker zoom, less in the way)
     float cross[4] = {0.39f, 0.415f, 0.61f, 0.585f}, crossScale = 0.25f; // the cross-hair's part of the HUD image, and its size
+    float menuScale = 1.5f;        // a paused battle's menu: the HUD image as one screen, at this size against the game's view (0: as it comes)
     float zoomWinMargin = 0.02f;   // the HUD cut away around the zoom window (the game's frame of it), part of the picture
     float zoomScale = 0.9f;        // zoomed: the image shown at this share of the full view (smaller = weaker zoom)
     float baseP00 = 0, baseP11 = 0; // the game's projection at its widest (not zoomed): what the layers span
@@ -252,6 +253,9 @@ static void vrReadIni() {
     if (g_vr.hudNear < 0.3f) g_vr.hudNear = 0.3f;
     GetPrivateProfileStringW(L"vr", L"hud_panel_scale", L"0.6", b, 64, p.c_str());
     g_vr.hudPanelScale = (float)_wtof(b);
+    GetPrivateProfileStringW(L"vr", L"menu_scale", L"1.5", b, 64, p.c_str());
+    g_vr.menuScale = (float)_wtof(b);
+    if (!(g_vr.menuScale >= 0.5f && g_vr.menuScale <= 4.0f)) g_vr.menuScale = g_vr.menuScale == 0 ? 0 : 1.5f;
     if (g_vr.hudPanelScale < 0.2f || g_vr.hudPanelScale > 1.0f) g_vr.hudPanelScale = 0.6f;
     GetPrivateProfileStringW(L"vr", L"hud_top", L"0.12", b, 64, p.c_str());
     g_vr.hudTop = (float)_wtof(b);
@@ -579,12 +583,16 @@ static inline MechValues vrValues() {
 // image that are empty otherwise are read back (the frame before's); if none is clear the sheet is there,
 // and one quad far larger than the view shows it in place of the HUD. Black sheets only: a coloured one (light
 // amplification) stays as it is, with the HUD.
+// A blue sheet is the one behind the menu of a paused battle (Esc): the HUD's parts - on monitors, on the glass, the
+// cross-hair made small and far - cut that menu to pieces. The whole HUD image is one flat screen then, straight
+// ahead ([vr] menu_scale; 0: off).
 static const float g_fadePts[6][2] = {{0.50f, 0.30f}, {0.36f, 0.40f}, {0.64f, 0.40f}, {0.36f, 0.70f}, {0.64f, 0.70f}, {0.30f, 0.55f}};
 static ID3D11Texture2D *g_fadeStage;
 static bool g_fadePending;
 static unsigned g_fadeCopyFrame = ~0u; // the frame whose HUD image waits to be read
 static unsigned g_fadeKnownFrame = ~0u; // the frame the last answer came in; none lately: the HUD is not shown yet
 static float g_fadeA;  // the sheet's alpha, 0: none
+static bool g_fadeMenu; // the sheet is a paused battle's (blue): its menu is up
 static int g_fadePt;   // the point showing the sheet alone
 static void fadeProbe(ID3D11DeviceContext *ctx, ID3D11Texture2D *hud) {
     D3D11_TEXTURE2D_DESC d;
@@ -606,12 +614,17 @@ static void fadeProbe(ID3D11DeviceContext *ctx, ID3D11Texture2D *hud) {
                 if (a < lo) lo = a, at = i;
             }
             const uint8_t *px = (const uint8_t *)m.pData + at * 4;
-            if (px[0] > 12 || px[1] > 12 || px[2] > 12) lo = 0;
+            const bool bgr = f >= 87; // (B8G8R8A8 and its kin; the others are R8G8B8A8)
+            int kind = mcSheet(lo, px[bgr ? 2 : 0], px[1], px[bgr ? 0 : 2]);
             ORIG(MechPFN_Unmap, ctx, VT_Ctx_Unmap)(ctx, g_fadeStage, 0);
-            float a = lo >= 2 ? lo / 255.0f : 0;
+            float a = kind == MC_SHEET_FADE ? lo / 255.0f : 0;
+            bool menu = kind == MC_SHEET_MENU && g_vr.menuScale > 0;
             if (g_frame - g_fadeCopyFrame <= 3 && (a > 0) != (g_fadeA > 0)) logf("hud: the game's fade sheet %s (alpha %.2f, frame %u)", a > 0 ? "begins" : "is gone", a, g_frame);
+            if (g_frame - g_fadeCopyFrame <= 3 && menu != g_fadeMenu)
+                logf(menu ? "hud: a paused battle's sheet (blue, alpha %.2f, frame %u) - the HUD image as one flat screen for its menu"
+                          : "hud: the paused battle's sheet is gone (alpha %.2f, frame %u) - the HUD in its parts again", lo / 255.0f, g_frame);
             if (g_frame - g_fadeCopyFrame <= 3) { // not an old battle's last picture
-                g_fadeA = a, g_fadePt = at;
+                g_fadeA = a, g_fadePt = at, g_fadeMenu = menu;
                 g_fadeKnownFrame = g_frame;
             }
             g_fadePending = false;
@@ -738,10 +751,12 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
     if (!g_vr.ok) return;
     static DWORD lastIni;
     static int lastMech = -2;
+    static bool lastMw5;
     // the [vr] values can be tuned while playing; another mech's values at once
-    if (GetTickCount() - lastIni >= 2000 || lastMech != g_mechCur) {
+    if (GetTickCount() - lastIni >= 2000 || lastMech != g_mechCur || lastMw5 != g_mechMw5) {
         lastIni = GetTickCount();
         lastMech = g_mechCur;
+        lastMw5 = g_mechMw5; // (a cockpit of ours has a seat of its own)
         vrReadIni();
     }
     {   // Ctrl+Home: the game camera becomes the head's current pose
@@ -940,7 +955,8 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
             g_vr.WaitSwapchainImage(g_vr.hudSc, &wi);
             D3D11_BOX hb = {0, 0, 0, min(g_hudTexW, hudWideW(g_vr.w)), min(g_hudH, g_vr.h), 1};
             ctx->CopySubresourceRegion(g_vr.hudImg[idx].texture, 0, 0, 0, 0, g_hudTex, 0, &hb);
-            g_crossShown = vrCrossImage(ctx, g_vr.hudImg[idx].texture, g_hudTex, hb.right, hb.bottom);
+            // (not under a paused battle's menu: it lies where the cross-hair is, and would be taken apart with it)
+            g_crossShown = !g_fadeMenu && vrCrossImage(ctx, g_vr.hudImg[idx].texture, g_hudTex, hb.right, hb.bottom);
             noteDraw(ctx, g_vr.hudImg[idx].texture, min(g_hudW, g_vr.w), hb.bottom); // a note of ours (note.inc)
             helpDraw(ctx, g_vr.hudImg[idx].texture, min(g_hudW, g_vr.w), hb.bottom, g_vr.hudLeft, g_vr.hudRight, g_vr.hudTop, g_vr.hudBottom);
             XrSwapchainImageReleaseInfo ri = {XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
@@ -1100,8 +1116,11 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
             rc[0][0] = g_fadePts[g_fadePt][0] - du, rc[0][1] = g_fadePts[g_fadePt][1] - dv, rc[0][2] = g_fadePts[g_fadePt][0] + du,
             rc[0][3] = g_fadePts[g_fadePt][1] + dv, rc[0][4] = 5;
             nr = 1;
+        } else if (g_fadeMenu) { // a paused battle's menu: the whole HUD image, one screen
+            rc[0][0] = 0, rc[0][1] = 0, rc[0][2] = 1, rc[0][3] = 1, rc[0][4] = 6;
+            nr = 1;
         }
-        bool crossNow = g_crossShown && g_crossSc != XR_NULL_HANDLE && nr > 0 && !(g_fadeA > 0);
+        bool crossNow = g_crossShown && g_crossSc != XR_NULL_HANDLE && nr > 0 && !(g_fadeA > 0) && !g_fadeMenu;
         for (int i = 0; i < nr; ++i) {
             float u0 = rc[i][0], v0 = rc[i][1], u1 = rc[i][2], v1 = rc[i][3];
             bool isFar = rc[i][4] == 1 || rc[i][4] >= 3, opaque = rc[i][4] == 2 || rc[i][4] == 3;
@@ -1171,6 +1190,13 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
             // the zoom window smaller, about its centre
             float ws = rc[i][4] == 3 ? g_vr.zoomWinScale : 1.0f;
             q.size = {W * (u1 - u0) * ws, H * (v1 - v0) * ws};
+            if (rc[i][4] == 6) { // straight ahead of the mech, as far as the near panels: nothing of the cockpit before it
+                float Dm = g_vr.hudNear, Wm = g_vr.menuScale * 2 * Dm / p0, Hm = g_vr.menuScale * 2 * Dm / p1;
+                XrVector3f c = qrot(g_vr.ref.orientation, XrVector3f{0, 0, -Dm});
+                q.pose.orientation = g_vr.ref.orientation;
+                q.pose.position = {g_vr.ref.position.x + c.x, g_vr.ref.position.y + c.y, g_vr.ref.position.z + c.z};
+                q.size = {Wm, Hm};
+            }
             if (rc[i][4] == 5) { // straight ahead of the mech, many times the view
                 XrVector3f c = qrot(g_vr.ref.orientation, XrVector3f{0, 0, -D});
                 q.pose.position = {g_vr.ref.position.x + c.x, g_vr.ref.position.y + c.y, g_vr.ref.position.z + c.z};

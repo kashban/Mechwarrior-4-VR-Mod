@@ -56,10 +56,15 @@ hud_extra_width=1.02
 ; PgUp / PgDn size it, Ins / Del set it farther / nearer, 0 hides it; Ctrl+Alt+7 puts all back into the row.
 ; Stored for each mech in mw4vr_mechs.ini as hud_part_<radar|target|damage|lance|weapons|top> = degrees right, up,
 ; width, metres away; the same keys here are the places for mechs that have none of their own.
+; Seen from outside (the third-person view) the parts have places of their own, the same for every mech:
+; hud_out_<name>, set with the same keys while outside.
 ; 0 = the flat frame of hud_parts=0 instead: the picture's edge strips near, at hud_panel_distance_m
 hud_parts=1
 hud_panel_distance_m=1.5
 hud_panel_scale=0.6
+; Esc in a battle: the game's menu (the whole HUD picture) as one flat screen straight ahead, at this size
+; against the game's view. 0 = off (the menu stays in the HUD's parts)
+menu_scale=1.5
 hud_panel_x_m=0
 hud_panel_y_m=0
 ; 1 = the near HUD and a MechWarrior 5 cockpit sway with the mech's steps, as the game's own cockpit does;

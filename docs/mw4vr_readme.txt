@@ -87,7 +87,10 @@ The HUD's parts: 1 radar, 2 target, 3 damage, 4 lance list, 5 weapons, 6 top str
 Other
   Ctrl+F12                     a picture of both eyes into mw4vr_shots\
 
-The seat, the sizes and the parts' places are remembered - the seat and sizes for each mech.
+The seat, the sizes and the parts' places are remembered - the seat and sizes for each mech, the seat apart for
+the game's cockpit and for a MechWarrior 5 one. Seen from outside (the third-person view) the HUD's parts have
+places of their own, the same for every mech; what you move out there leaves the cockpits alone.
+Esc in a battle: the game's menu is one flat screen straight ahead (its size: menu_scale in mw4vr.ini).
 
 
 MECHWARRIOR 5 COCKPITS (optional)
@@ -281,7 +284,10 @@ Teile des HUD: 1 Radar, 2 Ziel, 3 Schaden, 4 Lanzenliste, 5 Waffen, 6 Kopfleiste
 Sonstiges
   Strg+F12                     Bild beider Augen nach mw4vr_shots\
 
-Sitz, Größen und Plätze der Teile werden gemerkt - Sitz und Größen je Mech.
+Sitz, Größen und Plätze der Teile werden gemerkt - Sitz und Größen je Mech, der Sitz getrennt für das Cockpit
+des Spiels und für ein MechWarrior-5-Cockpit. Von außen gesehen (Außenansicht) haben die HUD-Teile eigene
+Plätze, für alle Mechs dieselben; was du dort verschiebst, lässt die Cockpits unberührt.
+Esc im Gefecht: das Menü des Spiels ist ein flacher Schirm geradeaus (Größe: menu_scale in mw4vr.ini).
 
 
 MECHWARRIOR-5-COCKPITS (optional)

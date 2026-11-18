@@ -189,11 +189,16 @@ static bool g_m5PlainOn = true;
 static const float g_m5PlainDef[M5_PARTS][4] = {{0, -24, 11, 1.2f}, {-15, -24, 8, 1.2f}, {15, -24, 8, 1.2f},
                                                 {-27, -24, 9, 1.2f}, {28, -24, 11, 1.2f}, {0, -14, 15, 1.2f}};
 static float g_m5Plain[M5_PARTS][4];
+// Seen from outside (the third-person view, a mission's intro) the row has places of its own, the same for every
+// mech ([vr] hud_out_<name>): what was set for a cockpit - its console, its windows - means nothing out there, and
+// what is set out there leaves the cockpits alone.
+static float g_m5Out[M5_PARTS][4];
 static inline bool mw5Plain() { return !mw5Active() && g_m5PlainOn && g_m5GlassOn; }
-// a part's place in use: the cockpit's glass, or the row without a cockpit
-static inline float *mw5G(int p) { return mw5Active() ? g_m5Glass[p] : g_m5Plain[p]; }
+static inline bool mw5Outside() { return !mw5Active() && mw5Waiting(); }
+// a part's place in use: the cockpit's glass, or the row without a cockpit (the outside view's, the mech's)
+static inline float *mw5G(int p) { return mw5Active() ? g_m5Glass[p] : mw5Outside() ? g_m5Out[p] : g_m5Plain[p]; }
 static inline float mw5DefW(int p) { return mw5Active() ? g_m5GlassDef[p][2] : g_m5PlainDef[p][2]; }
-static inline const wchar_t *mw5Who() { return mw5Active() ? g_mw5Name : L"HUD"; }
+static inline const wchar_t *mw5Who() { return mw5Active() ? g_mw5Name : mw5Outside() ? L"Outside view" : L"HUD"; }
 // Where the row's places are kept: for each mech in its section of mw4vr_mechs.ini (true), or in [vr] of mw4vr.ini
 // while no mech is known - those are also the places of a mech that has none of its own.
 static bool mw5PlainWhere(std::wstring *file, wchar_t *sec) {
@@ -307,6 +312,16 @@ static void mw5ReadIni() {
         if (n >= 4) g[3] = v[3];
         if (!(g[2] <= 120)) g[2] = g_m5PlainDef[i][2];
         if (!(g[3] >= 0.3f && g[3] <= 20)) g[3] = g_m5PlainDef[i][3];
+        // the outside view's: [vr] hud_out_<name>, else the row as it comes
+        swprintf(k, 32, L"hud_out_%ls", g_m5PartKey[i]);
+        GetPrivateProfileStringW(L"vr", k, L"", b, 96, ini.c_str());
+        float *o = g_m5Out[i];
+        memcpy(o, g_m5PlainDef[i], sizeof g_m5PlainDef[i]);
+        n = swscanf(b, L"%f %f %f %f", v, v + 1, v + 2, v + 3);
+        if (n >= 3) o[0] = v[0], o[1] = v[1], o[2] = v[2];
+        if (n >= 4) o[3] = v[3];
+        if (!(o[2] <= 120)) o[2] = g_m5PlainDef[i][2];
+        if (!(o[3] >= 0.3f && o[3] <= 20)) o[3] = g_m5PlainDef[i][3];
     }
     mw5GlassFit();
     if (!g_mw5IniRead) {
@@ -1019,6 +1034,11 @@ static void mw5GlassPut(int p) {
     wchar_t k[32], b[96];
     const float *g = mw5G(p);
     swprintf(b, 96, L"%.1f %.1f %.1f %.2f", g[0], g[1], g[2], g[3]);
+    if (mw5Outside()) { // the outside view's places: one set for all mechs
+        swprintf(k, 32, L"hud_out_%ls", g_m5PartKey[p]);
+        WritePrivateProfileStringW(L"vr", k, b, (g_dir + L"mw4vr.ini").c_str());
+        return;
+    }
     if (!mw5Active()) {
         swprintf(k, 32, L"hud_part_%ls", g_m5PartKey[p]);
         std::wstring file;
@@ -1073,15 +1093,17 @@ static void mw5HighlightDraw(ID3D11DeviceContext *c) {
 // Ins / Del: farther / nearer), 0 takes that part off the glass. Remembered for the cockpit.
 static void mw5Assign(int part, bool shift) {
     static const wchar_t *lanceAlt = L"0.000 0.000 0.243 0.435 0.210 0.125"; // the list with the open orders menu, and where that shows
-    const bool plain = !mw5Active();
+    const bool plain = !mw5Active(), outside = mw5Outside();
     int n = plain ? -1 : g_m5Looked - 1, p = part - 1;
     wchar_t note[200], k[32];
     if (plain && (part == 8 || part == 9)) return;
     if (part == 7) {
         if (shift) return;
         for (int i = 0; i < M5_PARTS; ++i) {
-            swprintf(k, 32, plain ? L"hud_part_%ls" : L"glass_%ls", g_m5PartKey[i]);
-            if (plain) { // this mech's own places go (those for all, or the row, are used again)
+            swprintf(k, 32, outside ? L"hud_out_%ls" : plain ? L"hud_part_%ls" : L"glass_%ls", g_m5PartKey[i]);
+            if (outside) { // the outside view's own places go (the row as it comes is used again)
+                WritePrivateProfileStringW(L"vr", k, nullptr, (g_dir + L"mw4vr.ini").c_str());
+            } else if (plain) { // this mech's own places go (those for all, or the row, are used again)
                 std::wstring file;
                 wchar_t sec[32];
                 mw5PlainWhere(&file, sec);
@@ -1282,6 +1304,7 @@ static void mw5GlassAdjust(int k) {
 static void mw5OnPresent() {
     if (!g_mw5IniRead) mw5ReadIni();
     mw5ForMech();
+    g_mechMw5 = g_mw5On && g_mw5State == 1; // (the seat kept for a cockpit of ours, mech.inc)
     bool ctrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0, alt = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
     bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
     {

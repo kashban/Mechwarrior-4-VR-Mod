@@ -73,7 +73,7 @@ Ctrl+Alt keys below.
 | Ctrl+Alt+Shift+1 … 6 | choose a part (it gets a yellow frame for some seconds); then Ctrl+Alt+Shift + arrows move it, PgUp / PgDn size it, Ins / Del put it farther / nearer, 0 hides it. A part on a monitor: arrows move what the monitor shows of the HUD, PgUp / PgDn nearer / more, Ins / Del longer / shorter, Home / End turn the picture left / right |
 | Ctrl+Alt+arrows, PgUp / PgDn | eye position in the cockpit mesh, its size (remembered per cockpit) |
 | Ctrl+Ins / Del | the cockpit's size (with Shift: the world's) |
-| Ctrl+arrows | the seat: up / down = forward / back, right / left = higher / lower |
+| Ctrl+arrows | the seat: up / down = forward / back, right / left = higher / lower (kept apart for the game's cockpit and a MechWarrior 5 one) |
 | Ctrl+PgUp / PgDn / End | the far HUD (cross-hair, target marks) farther / nearer / far |
 | Ctrl+F10 | this cockpit fits: remember it for this mech |
 | Ctrl+F12 | a picture of both eyes and the HUD into `mw4vr_shots\` |

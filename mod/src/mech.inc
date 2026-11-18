@@ -10,6 +10,8 @@
 // panels' place. A cockpit set by hand (a hot key, or Ctrl+F10 "this one fits") is "tuned"; one
 // that is not gets its values from the tuned ones by its measures (the console at the same
 // apparent distance, the panels as high above it and as far from the window's middle).
+// The seat is kept twice: for the game's cockpit, and for a cockpit of our own (mw5.inc) once it was set in one -
+// the two meshes are not alike, a seat that fits the one does not fit the other.
 // Included into main.cpp before the draw hooks; vr.inc applies and stores the values.
 
 static volatile bool g_mechOn;            // [vr] mech_profiles=1
@@ -23,6 +25,7 @@ static int g_mgSampleN;
 static bool g_mechSearching;              // samples are being collected
 static McSeat g_mechSeat;                 // seen from outside (third person)? (core.h)
 static int g_mechCkTris;                  // triangles of the game's cockpit in this frame's left-eye pass
+static bool g_mechMw5;                    // a cockpit of our own is in use (mw5.inc tells): its seat counts
 static bool g_mechSeated;                 // the game draws its cockpit: the camera sits in the mech (not a mission's intro)
 static unsigned g_mechBattleFrame;        // the battle's first frame
 static unsigned g_mechNextFrame;          // the next frame to measure
@@ -34,6 +37,8 @@ struct MechProfile {
     float sig[MG_N];
     bool tuned;
     float cockpitScale, seatFwd, seatUp, panelX, panelY, panelDist, panelScale;
+    bool seat5;              // the seat was set in a cockpit of our own
+    float seat5Fwd, seat5Up; // that seat
     float dash, top, centre; // console distance (m), its top (degrees), the window's middle (degrees)
 };
 static MechProfile g_mechs[MECH_MAX];
@@ -51,6 +56,15 @@ static void mechPutF(const wchar_t *sec, const wchar_t *key, float v) {
     wchar_t b[64];
     swprintf(b, 64, L"%.3f", v);
     WritePrivateProfileStringW(sec, key, b, mechIni().c_str());
+}
+
+// the seat in a cockpit of our own (mw5_seat_forward_m, mw5_seat_up_m); without both, the game's cockpit's seat
+static void mechSeat5(const wchar_t *sec, MechProfile &p) {
+    wchar_t f[64], u[64];
+    GetPrivateProfileStringW(sec, L"mw5_seat_forward_m", L"", f, 64, mechIni().c_str());
+    GetPrivateProfileStringW(sec, L"mw5_seat_up_m", L"", u, 64, mechIni().c_str());
+    p.seat5 = f[0] && u[0];
+    p.seat5Fwd = p.seat5 ? (float)_wtof(f) : 0, p.seat5Up = p.seat5 ? (float)_wtof(u) : 0;
 }
 
 static void mechMeasures(MechProfile &p) {
@@ -130,6 +144,7 @@ static void mechLoad() {
         p.cockpitScale = mechGetF(sec, L"cockpit_scale", 1);
         p.seatFwd = mechGetF(sec, L"seat_forward_m", 0);
         p.seatUp = mechGetF(sec, L"seat_up_m", 0);
+        mechSeat5(sec, p);
         p.panelX = mechGetF(sec, L"hud_panel_x_m", 0);
         p.panelY = mechGetF(sec, L"hud_panel_y_m", 0);
         p.panelDist = mechGetF(sec, L"hud_panel_distance_m", 1.5f);
@@ -150,6 +165,7 @@ static void mechReload(int i) {
     p.cockpitScale = mechGetF(sec, L"cockpit_scale", p.cockpitScale);
     p.seatFwd = mechGetF(sec, L"seat_forward_m", p.seatFwd);
     p.seatUp = mechGetF(sec, L"seat_up_m", p.seatUp);
+    mechSeat5(sec, p);
     p.panelX = mechGetF(sec, L"hud_panel_x_m", p.panelX);
     p.panelY = mechGetF(sec, L"hud_panel_y_m", p.panelY);
     p.panelDist = mechGetF(sec, L"hud_panel_distance_m", p.panelDist);
@@ -645,7 +661,8 @@ static bool mechValues(const MechValues &g, MechValues *out, const char **how) {
     if (!g_mechOn || g_mechCur < 0 || g_mechCur >= g_mechN) return false;
     const MechProfile &p = g_mechs[g_mechCur];
     if (p.tuned) {
-        *out = {p.cockpitScale, p.seatFwd, p.seatUp, p.panelX, p.panelY, p.panelDist, p.panelScale};
+        bool own = g_mechMw5 && p.seat5;
+        *out = {p.cockpitScale, own ? p.seat5Fwd : p.seatFwd, own ? p.seat5Up : p.seatUp, p.panelX, p.panelY, p.panelDist, p.panelScale};
         *how = "set by hand";
         return true;
     }
@@ -685,13 +702,24 @@ static bool mechStore(const MechValues &v) {
     wchar_t sec[32];
     swprintf(sec, 32, L"mech_%d", g_mechCur + 1);
     MechProfile &p = g_mechs[g_mechCur];
+    // In a cockpit of our own the seat is that cockpit's; the game's cockpit keeps the one it has. (A profile not
+    // set by hand before has none yet: it gets the seat in use, as it always did.)
+    bool gameSeat = !g_mechMw5 || !p.tuned;
     p.tuned = true;
-    p.cockpitScale = v.cockpitScale, p.seatFwd = v.seatFwd, p.seatUp = v.seatUp;
+    p.cockpitScale = v.cockpitScale;
     p.panelX = v.panelX, p.panelY = v.panelY, p.panelDist = v.panelDist, p.panelScale = v.panelScale;
     WritePrivateProfileStringW(sec, L"tuned", L"1", mechIni().c_str());
     mechPutF(sec, L"cockpit_scale", v.cockpitScale);
-    mechPutF(sec, L"seat_forward_m", v.seatFwd);
-    mechPutF(sec, L"seat_up_m", v.seatUp);
+    if (gameSeat) {
+        p.seatFwd = v.seatFwd, p.seatUp = v.seatUp;
+        mechPutF(sec, L"seat_forward_m", v.seatFwd);
+        mechPutF(sec, L"seat_up_m", v.seatUp);
+    }
+    if (g_mechMw5) {
+        p.seat5 = true, p.seat5Fwd = v.seatFwd, p.seat5Up = v.seatUp;
+        mechPutF(sec, L"mw5_seat_forward_m", v.seatFwd);
+        mechPutF(sec, L"mw5_seat_up_m", v.seatUp);
+    }
     mechPutF(sec, L"hud_panel_x_m", v.panelX);
     mechPutF(sec, L"hud_panel_y_m", v.panelY);
     mechPutF(sec, L"hud_panel_distance_m", v.panelDist);
