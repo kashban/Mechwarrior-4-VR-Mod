@@ -4,6 +4,7 @@
 #define MW4VR_MOD_H
 
 #include "base.h"
+#include "perf.h"
 #include "mw4hook_abi.h"
 #include "state.h"
 #include "head.h"

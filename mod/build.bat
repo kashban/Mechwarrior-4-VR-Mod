@@ -20,10 +20,18 @@ set DBGL=
 if defined MW4VR_PDB set DBG1=/Zi /Fd%OUT%\d3d11.pdb
 if defined MW4VR_PDB set DBG2=/Zi /Fd%OUT%\dinput.pdb
 if defined MW4VR_PDB set DBGL=/DEBUG /OPT:REF /OPT:ICF
+rem MW4VR_MAP=1: a map file beside d3d11.dll (which function lies where - for the sampler of perf.cpp). Such a
+rem build is not optimised across the units: only so the functions keep their places and names in the map.
+set WHOLE=/GL
+set WHOLEL=/LTCG
+set MAPL=
+if defined MW4VR_MAP set MAPL=/MAP:%OUT%\d3d11.map
+if defined MW4VR_MAP set WHOLE=
+if defined MW4VR_MAP set WHOLEL=
 rem The units are compiled for optimisation at link time (/GL, /LTCG): a call between two of them costs what a
 rem call inside one file costs.
-cl /nologo /O2 /GL /MP /MT /EHsc /std:c++17 /W3 %HARDEN% %DBG1% /LD /Iinclude /Fo%OUT%\ /Fe:%OUT%\d3d11.dll src\*.cpp src\vtidx.c ^
-   /link /DLL /NOLOGO /LTCG /guard:cf %DBGL% kernel32.lib user32.lib advapi32.lib gdi32.lib
+cl /nologo /O2 %WHOLE% /MP /MT /EHsc /std:c++17 /W3 %HARDEN% %DBG1% /LD /Iinclude /Fo%OUT%\ /Fe:%OUT%\d3d11.dll src\*.cpp src\vtidx.c ^
+   /link /DLL /NOLOGO %WHOLEL% /guard:cf %DBGL% %MAPL% kernel32.lib user32.lib advapi32.lib gdi32.lib
 if errorlevel 1 exit /b 1
 rem dinput.dll: in front of the system's old DirectInput (see dinput\dinput.cpp)
 cl /nologo /O2 /MT /EHsc /std:c++17 /W3 %HARDEN% %DBG2% /LD /Fo%OUT%\ /Fe:%OUT%\dinput.dll dinput\dinput.cpp ^

@@ -322,7 +322,8 @@ volatile bool g_in3DSeen;     // a "3D" label was seen (a battle is running)
 void onWork(void *ctx, const char *kind, bool compute) {
     if (ctxOf(ctx)->foreign) return;
     CtxState *s = ctxOf(ctx);
-    if (!compute && g_in3D && s->st[ST_VS].sh) {
+    // which vertex shaders draw in "3D": only the diagnosis key that hides one asks ([debug] level=1)
+    if (g_dbg && !compute && g_in3D && s->st[ST_VS].sh) {
         uint64_t h = s->st[ST_VS].sh->hash;
         std::lock_guard<std::mutex> lk(g_hideMx);
         bool have = false;

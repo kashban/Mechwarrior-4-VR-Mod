@@ -4,6 +4,8 @@
 
 extern bool g_e2eOn;
 extern std::vector<std::pair<float, float>> g_e2eYaw;
+// seconds since the camera first sat in the mech; below 0: not yet
+float e2eTime();
 // the head's turn to the right the plan asks for now, in degrees
 float e2eYawNow();
 // once for every picture the game presents (a paused battle's menu too): the plan's keys go down and up

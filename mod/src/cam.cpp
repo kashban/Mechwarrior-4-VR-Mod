@@ -439,7 +439,13 @@ static int __cdecl camDraw(uint8_t *cam, void *edxv, void *arg) {
     if (!both) {
         camPreEye(cam, -1);
         g_camInMain = isMain;
-        int r = camCallOrig(cam, edxv, arg);
+        int r;
+        if (isMain) {
+            PerfScope perf(PF_EYE0);
+            r = camCallOrig(cam, edxv, arg);
+        } else {
+            r = camCallOrig(cam, edxv, arg);
+        }
         g_camInMain = false;
         camPost(cam);
         return r;
@@ -455,11 +461,18 @@ static int __cdecl camDraw(uint8_t *cam, void *edxv, void *arg) {
         g_kEyeOverride = -1;
         LONG before = g_tonemapCount;
         g_camInMain = true;
-        r = camCallOrig(cam, edxv, arg);
+        {
+            PerfScope perf(PF_EYE0 + e);
+            r = camCallOrig(cam, edxv, arg);
+        }
         g_camInMain = false;
         g_camPassEye = -1;
         camPost(cam);
-        bool ok = g_tonemapCount != before && eyeGrab(e);
+        bool ok = false;
+        if (g_tonemapCount != before) {
+            PerfScope perf(PF_GRAB);
+            ok = eyeGrab(e);
+        }
         if (!ok) {
             static int fails;
             if (e == 0) {

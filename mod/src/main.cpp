@@ -12,6 +12,7 @@ static void STDMETHODCALLTYPE H_ExecuteCommandList(ID3D11DeviceContext *c, ID3D1
         flushPending(s);
         capLine(s, "ExecuteCommandList %p", l);
     }
+    PerfScope perf(PF_EXEC);
     ORIG(PFN_Exec, c, VT_Ctx_ExecuteCommandList)(c, l, keep);
 }
 typedef HRESULT(STDMETHODCALLTYPE *PFN_Finish)(ID3D11DeviceContext *, BOOL, ID3D11CommandList **);
@@ -174,10 +175,18 @@ static BOOL STDMETHODCALLTYPE H_GetStatus(ID3DUserDefinedAnnotation *a) {
 typedef HRESULT(STDMETHODCALLTYPE *PFN_Present)(IDXGISwapChain *, UINT, UINT);
 static HRESULT STDMETHODCALLTYPE H_Present(IDXGISwapChain *sc, UINT si, UINT fl) {
     DWORD t0 = GetTickCount();
-    if (!(fl & DXGI_PRESENT_TEST)) onPresent(sc);
+    if (!(fl & DXGI_PRESENT_TEST)) {
+        PerfScope perf(PF_OURS);
+        onPresent(sc);
+    }
     DWORD t1 = GetTickCount();
-    HRESULT hr = ORIG(PFN_Present, sc, VT_Sc_Present)(sc, si, fl);
+    HRESULT hr;
+    {
+        PerfScope perf(PF_SYS);
+        hr = ORIG(PFN_Present, sc, VT_Sc_Present)(sc, si, fl);
+    }
     g_presOurs = t1 - t0, g_presReal = GetTickCount() - t1;
+    if (!(fl & DXGI_PRESENT_TEST)) perfFrame(e2eTime());
     return hr;
 }
 typedef HRESULT(STDMETHODCALLTYPE *PFN_Present1)(IDXGISwapChain1 *, UINT, UINT, const DXGI_PRESENT_PARAMETERS *);
@@ -652,7 +661,7 @@ BOOL WINAPI DllMain(HINSTANCE h, DWORD reason, LPVOID) {
         if (g_dbg) g_shlog = _wfsopen((g_dir + L"mw4vr_shaders.txt").c_str(), L"w", _SH_DENYNO);
         wchar_t exe[MAX_PATH];
         GetModuleFileNameW(nullptr, exe, MAX_PATH);
-        logf("MW4VR v11.71 (debug level %d) loaded into %s", g_dbg, narrow(exe).c_str());
+        logf("MW4VR v11.72 (debug level %d) loaded into %s", g_dbg, narrow(exe).c_str());
         if (!loadReal()) logf("ERROR: the system d3d11.dll could not be loaded");
     }
     return TRUE;

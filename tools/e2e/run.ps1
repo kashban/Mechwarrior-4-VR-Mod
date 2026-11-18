@@ -1,5 +1,5 @@
 # An end-to-end test of the mod in the game, without a headset on anybody's head:
-#   powershell -File tools\e2e\run.ps1 -Game <the game's folder> -Pilot <pilot> [-Mech 'Mad Cat'] [-Cockpit madcat]
+#   powershell -File tools\e2e\run.ps1 -Game <the game's folder> -Pilot <pilot> [-Mech 'Mad Cat'] [-Map <number>] [-Perf [-Samples]] [-Cockpit madcat]
 #       [-Runtime steamvr-null|active] [-Seconds 62] [-Yaw '7:0 10:45 14:45 17:0'] [-Shots '1 19.2 26 35 43 46'] [-KeepDll]
 #       [-Keys '19:LMB:0.4 20.5:LMB:0.4 23:W:5 33:V:0.1 37:V:0.1 37.5:V:0.1 38:V:0.1 42:ESC:0.1 43.5:MOVE:0.5,0.459 44:LMB:0.15 48:MOVE:0.835,0.767 48.5:LMB:0.15 51:ESC:0.1 53.5:CTRL:0.6 53.7:F7:0.1 55:CTRL:0.6 55.2:F11:0.1 58:CTRL:0.6 58.2:F11:0.1']
 #       [-Walk 23:31] [-Fire 19:22] [-Outside 33:38] [-Menu 42:44] [-Options 44:48.5] [-Off 55.2:58.2]      (what the keys are to do, for the judge; the
@@ -15,12 +15,17 @@
 #   3. starts a battle through MW4Engine's "instant action by code" with the test plan (mod\src\e2e.cpp),
 #      waits until the battle has run -Seconds, ends the game;
 #   4. judges the run (tools\e2e\judge.py) and keeps everything in mod\build\e2e\<time>.
+#   -Perf: a performance run instead - the mod records every frame's time and its parts (mod\src\perf.cpp),
+#      tools\e2e\perf.py prints where the time goes; nothing is judged. -Samples: also where the render thread
+#      is, about every millisecond (mw4vr_perf_samples.txt; the run is a little slower for it). -Map takes the number of an instant
+#      action map (mw4hook's log names it: "map 7 of 54 'Halloran V - Checkpoint'").
 # Exit code: 0 passed, 1 failed, 2 the run itself did not work.
 # Not for the pipeline: it needs the game. Never while somebody plays - it ends every MW4Mercs.exe.
 param(
     [Parameter(Mandatory)][string]$Game,
     [Parameter(Mandatory)][string]$Pilot,
     [string]$Mech = 'Mad Cat',
+    [string]$Map = '',
     [string]$Cockpit = '',
     [ValidateSet('steamvr-null', 'active')][string]$Runtime = 'steamvr-null',
     [int]$Seconds = 62,
@@ -34,6 +39,8 @@ param(
     [string]$Options = '44:48.5',
     [string]$Off = '55.2:58.2',
     [int]$TimeoutSec = 240,
+    [switch]$Perf,
+    [switch]$Samples,
     [switch]$KeepDll
 )
 $ErrorActionPreference = 'Stop'
@@ -91,12 +98,17 @@ try {
     Copy-Item $new $dll -Force
     Remove-Item $csv -ErrorAction SilentlyContinue
     $plan = Join-Path $out 'plan.ini'
-    Set-Content $plan -Value @('[e2e]', "yaw=$Yaw", "shots=$Shots", "keys=$Keys") -Encoding ASCII
+    $planLines = @('[e2e]', "yaw=$Yaw", "shots=$Shots", "keys=$Keys")
+    if ($Perf) { $planLines += $(if ($Samples) { 'perf=2' } else { 'perf=1' }) }
+    Set-Content $plan -Value $planLines -Encoding ASCII
+    $perfCsv = Join-Path $Game 'mw4vr_perf.csv'
+    Remove-Item $perfCsv -ErrorAction SilentlyContinue
     $shotsDir = Join-Path $Game 'mw4vr_shots'
     $shotsBefore = @(Get-ChildItem $shotsDir -Filter *.bmp -ErrorAction SilentlyContinue | ForEach-Object Name)
 
     $env:MW4VR_E2E = $plan
     $env:MW4HOOK_IA = "pilot=$Pilot;mech=$Mech"
+    if ($Map) { $env:MW4HOOK_IA += ";map=$Map" }
     $env:__COMPAT_LAYER = 'RunAsInvoker'
     Say "starting the game: $Mech, plan '$Yaw', $Seconds s of battle"
     $started = Get-Date
@@ -124,11 +136,15 @@ try {
     Say "the run: $why after $([int]((Get-Date) - $started).TotalSeconds) s"
     [void](Stop-All @('MW4Mercs') 90)
 
-    foreach ($f in $csv, $log, (Join-Path $Game 'mw4hook.log')) { if (Test-Path $f) { Copy-Item $f $out } }
+    foreach ($f in $csv, $perfCsv, (Join-Path $Game 'mw4vr_perf_samples.txt'), $log, (Join-Path $Game 'mw4hook.log')) { if (Test-Path $f) { Copy-Item $f $out } }
     Get-ChildItem $shotsDir -Filter *.bmp -ErrorAction SilentlyContinue | Where-Object { $shotsBefore -notcontains $_.Name } | Move-Item -Destination $out
     if (-not (Test-Path (Join-Path $out 'mw4vr_e2e.csv'))) {
         Say 'the mod wrote no mw4vr_e2e.csv - see mw4vr.log in the run''s folder'
         $code = 2
+    } elseif ($Perf) {
+        # a performance run: the frames' times, no verdict (the eyes' colours are not read in such a run)
+        & python (Join-Path $PSScriptRoot 'perf.py') (Join-Path $out 'mw4vr_perf.csv') --to $Seconds | Tee-Object -FilePath (Join-Path $out 'perf.txt')
+        $code = $LASTEXITCODE
     } else {
         $a = @((Join-Path $PSScriptRoot 'judge.py'), (Join-Path $out 'mw4vr_e2e.csv'), (Join-Path $out 'mw4vr.log'), '--seconds', ($Seconds - 2))
         if ($Cockpit) { $a += @('--cockpit', $Cockpit) }

@@ -286,7 +286,11 @@ static void STDMETHODCALLTYPE H_DispatchIndirect(ID3D11DeviceContext *c, ID3D11B
 
 HRESULT STDMETHODCALLTYPE H_Map(ID3D11DeviceContext *c, ID3D11Resource *r, UINT sub, D3D11_MAP t, UINT fl,
                                 D3D11_MAPPED_SUBRESOURCE *m) {
-    HRESULT hr = ORIG(PFN_Map, c, VT_Ctx_Map)(c, r, sub, t, fl, m);
+    HRESULT hr;
+    {
+        PerfScope perf(PF_MAP);
+        hr = ORIG(PFN_Map, c, VT_Ctx_Map)(c, r, sub, t, fl, m);
+    }
     InterlockedIncrement(&g_statMaps);
     if (SUCCEEDED(hr) && m && t != D3D11_MAP_READ && !ctxOf(c)->foreign) {
         UINT sz = cbSize(r);

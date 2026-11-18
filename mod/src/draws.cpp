@@ -270,6 +270,7 @@ void e2eState(int *v) {
 }
 
 template <int V> static void STDMETHODCALLTYPE HP_Draw(ID3D11DeviceContext *c, UINT a, UINT b) {
+    PerfScope perfHook(PF_HOOK);
     onWork(c, "Draw", false);
     ++g_m5AllDraws;
     if (eyeHidden(c)) return;
@@ -278,11 +279,15 @@ template <int V> static void STDMETHODCALLTYPE HP_Draw(ID3D11DeviceContext *c, U
     int ck = sw && mechMeasuring() ? mechDraw(c, false, a, b, 0, g_camPassEye == 0) : 0;
     if (sw && g_mw5On) mw5Draw(c, (Mw5PFN_DrawIdx)g_tr[SL_DRAWIDX][V], ck);
     bool hw = hudWidePre(c);
-    ((PFN_U2)g_tr[SL_DRAW][V])(c, a, b);
+    {
+        PerfScope perfD3d(PF_D3D);
+        ((PFN_U2)g_tr[SL_DRAW][V])(c, a, b);
+    }
     if (hw) hudWidePost(c);
     if (sw) eyeTlPost(c);
 }
 template <int V> static void STDMETHODCALLTYPE HP_DrawIndexed(ID3D11DeviceContext *c, UINT a, UINT b, INT d) {
+    PerfScope perfHook(PF_HOOK);
     onWork(c, "DrawIndexed", false);
     ++g_m5AllDraws;
     if (eyeHidden(c)) return;
@@ -290,55 +295,82 @@ template <int V> static void STDMETHODCALLTYPE HP_DrawIndexed(ID3D11DeviceContex
     int ck = sw && mechMeasuring() ? mechDraw(c, true, a, b, d, g_camPassEye == 0) : 0;
     if (sw && g_mw5On) mw5Draw(c, (Mw5PFN_DrawIdx)g_tr[SL_DRAWIDX][V], ck);
     bool hw = hudWidePre(c);
-    ((PFN_U2I)g_tr[SL_DRAWIDX][V])(c, a, b, d);
+    {
+        PerfScope perfD3d(PF_D3D);
+        ((PFN_U2I)g_tr[SL_DRAWIDX][V])(c, a, b, d);
+    }
     if (hw) hudWidePost(c);
     if (sw) eyeTlPost(c);
 }
 template <int V>
 static void STDMETHODCALLTYPE HP_DrawInstanced(ID3D11DeviceContext *c, UINT a, UINT b, UINT d, UINT e) {
+    PerfScope perfHook(PF_HOOK);
     onWork(c, "DrawInstanced", false);
     if (eyeHidden(c)) return;
     bool sw = eyeTlPre(c);
     bool hw = hudWidePre(c);
-    ((PFN_U4)g_tr[SL_DRAWINST][V])(c, a, b, d, e);
+    {
+        PerfScope perfD3d(PF_D3D);
+        ((PFN_U4)g_tr[SL_DRAWINST][V])(c, a, b, d, e);
+    }
     if (hw) hudWidePost(c);
     if (sw) eyeTlPost(c);
 }
 template <int V>
 static void STDMETHODCALLTYPE HP_DrawIndexedInstanced(ID3D11DeviceContext *c, UINT a, UINT b, UINT d, INT e, UINT f) {
+    PerfScope perfHook(PF_HOOK);
     onWork(c, "DrawIndexedInstanced", false);
     if (eyeHidden(c)) return;
     bool sw = eyeTlPre(c);
     bool hw = hudWidePre(c);
-    ((PFN_U3IU)g_tr[SL_DRAWIDXINST][V])(c, a, b, d, e, f);
+    {
+        PerfScope perfD3d(PF_D3D);
+        ((PFN_U3IU)g_tr[SL_DRAWIDXINST][V])(c, a, b, d, e, f);
+    }
     if (hw) hudWidePost(c);
     if (sw) eyeTlPost(c);
 }
 template <int V>
 static void STDMETHODCALLTYPE HP_DrawInstancedIndirect(ID3D11DeviceContext *c, ID3D11Buffer *b, UINT o) {
+    PerfScope perfHook(PF_HOOK);
     onWork(c, "DrawInstancedIndirect", false);
     if (eyeHidden(c)) return;
     bool sheet = hudSheetPre(c);
     bool hw = hudWidePre(c);
-    ((PFN_BU)g_tr[SL_DRAWINSTIND][V])(c, b, o);
+    {
+        PerfScope perfD3d(PF_D3D);
+        ((PFN_BU)g_tr[SL_DRAWINSTIND][V])(c, b, o);
+    }
     if (hw) hudWidePost(c);
     if (sheet) hudSheetPost(c);
 }
 template <int V>
 static void STDMETHODCALLTYPE HP_DrawIndexedInstancedIndirect(ID3D11DeviceContext *c, ID3D11Buffer *b, UINT o) {
+    PerfScope perfHook(PF_HOOK);
     onWork(c, "DrawIndexedInstancedIndirect", false);
     if (eyeHidden(c)) return;
     bool hw = hudWidePre(c);
-    ((PFN_BU)g_tr[SL_DRAWIDXINSTIND][V])(c, b, o);
+    {
+        PerfScope perfD3d(PF_D3D);
+        ((PFN_BU)g_tr[SL_DRAWIDXINSTIND][V])(c, b, o);
+    }
     if (hw) hudWidePost(c);
 }
 template <int V> static void STDMETHODCALLTYPE HP_Dispatch(ID3D11DeviceContext *c, UINT x, UINT y, UINT z) {
+    PerfScope perfHook(PF_HOOK);
     onWork(c, "Dispatch", true);
-    ((PFN_U3)g_tr[SL_DISP][V])(c, x, y, z);
+    {
+        PerfScope perfD3d(PF_D3D);
+        ((PFN_U3)g_tr[SL_DISP][V])(c, x, y, z);
+    }
 }
 template <int V> static void STDMETHODCALLTYPE HP_DispatchIndirect(ID3D11DeviceContext *c, ID3D11Buffer *b, UINT o) {
+    PerfScope perfHook(PF_HOOK);
     onWork(c, "DispatchIndirect", true);
-    ((PFN_BU)g_tr[SL_DISPIND][V])(c, b, o);
+    {
+        PerfScope perfD3d(PF_D3D);
+        ((PFN_BU)g_tr[SL_DISPIND][V])(c, b, o);
+    }
 }
 template <int V>
 static void STDMETHODCALLTYPE HP_Upd(ID3D11DeviceContext *c, ID3D11Resource *r, UINT sub, const D3D11_BOX *box,

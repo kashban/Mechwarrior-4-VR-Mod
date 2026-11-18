@@ -64,6 +64,7 @@ log, the shaders' table, the contexts' table) has a mutex. The build optimises a
 | `cross` | The cross-hair taken out of the HUD's picture by its colour, as a layer of its own. |
 | `sway`, `note`, `help`, `shot` | The sway's values for its users; a line of text in the headset; the page of keys (Ctrl+F1); pictures for diagnosis (Ctrl+F12). |
 | `e2e` | The test mode for the end-to-end test: only with `MW4VR_E2E` set, plays a plan of keys and records every frame. |
+| `perf` | For a performance run of that test: every frame's length and the time of its parts, and where the render thread is ([PERFORMANCE.md](PERFORMANCE.md)). |
 | `eye_tl_vs.hlsl` / `.h` | The replacement vertex shader for the CPU path. |
 | `vtidx.c` | The positions of methods in Direct3D's vtables, taken from the SDK's own C declarations. |
 | `mod/dinput/dinput.cpp` | A second, small DLL: `dinput.dll` in front of the system's, which leaves out one class of devices that crashes the game on some PCs. |

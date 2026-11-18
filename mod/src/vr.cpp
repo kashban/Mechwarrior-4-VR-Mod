@@ -856,7 +856,11 @@ void vrOnPresent(IDXGISwapChain *swap, int eye) {
 
     XrFrameState fs = {XR_TYPE_FRAME_STATE};
     DWORD waitT0 = GetTickCount();
-    XrResult waited = g_vr.WaitFrame(g_vr.session, nullptr, &fs);
+    XrResult waited;
+    {
+        PerfScope perf(PF_WAIT);
+        waited = g_vr.WaitFrame(g_vr.session, nullptr, &fs);
+    }
     g_presWait = GetTickCount() - waitT0;
     if (!vrCheck(waited, "xrWaitFrame")) return;
     if (!vrCheck(g_vr.BeginFrame(g_vr.session, nullptr), "xrBeginFrame")) return;

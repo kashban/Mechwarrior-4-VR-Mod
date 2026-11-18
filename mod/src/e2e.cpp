@@ -19,6 +19,7 @@
 #include "mod.h"
 
 bool g_e2eOn;
+static int g_e2ePerf; // the plan asks for the frames' times (perf.cpp), not for the eyes' colours
 static FILE *g_e2eCsv;
 static ULONGLONG g_e2eStart, g_e2eSeat; // ticks: the first frame, the first frame in the mech (0: not yet)
 std::vector<std::pair<float, float>> g_e2eYaw;
@@ -97,6 +98,9 @@ static void e2eInit() {
     DWORD n = GetEnvironmentVariableW(L"MW4VR_E2E", plan, MAX_PATH);
     if (!n || n >= MAX_PATH) return;
     wchar_t b[512];
+    // perf=1: the frames' times are recorded (perf.cpp) and the eyes' pictures are not read back for their colours -
+    // reading them makes the graphics card wait
+    g_e2ePerf = GetPrivateProfileIntW(L"e2e", L"perf", 0, plan); // (2: with the sampler)
     GetPrivateProfileStringW(L"e2e", L"yaw", L"", b, 512, plan);
     for (const wchar_t *p = b; *p;) {
         wchar_t *end;
@@ -152,12 +156,13 @@ static void e2eInit() {
                       "flat,clean,cockpit\n");
     g_e2eStart = GetTickCount64();
     g_e2eOn = true;
+    if (g_e2ePerf) perfStart(g_e2ePerf >= 2);
     logf("e2e: test run - plan %ls, %u turns of the head, %u pictures, %u keys", plan, (unsigned)g_e2eYaw.size(),
          (unsigned)g_e2eShots.size(), (unsigned)g_e2eKeys.size());
 }
 
 // seconds since the camera first sat in the mech; below 0: not yet
-static float e2eTime() { return g_e2eSeat ? (float)(GetTickCount64() - g_e2eSeat) / 1000.0f : -1.0f; }
+float e2eTime() { return g_e2eSeat ? (float)(GetTickCount64() - g_e2eSeat) / 1000.0f : -1.0f; }
 
 // the head's turn to the right the plan asks for now, in degrees
 float e2eYawNow() {
@@ -223,8 +228,10 @@ void e2eFrame(ID3D11DeviceContext *ctx, ID3D11Texture2D *l, ID3D11Texture2D *r) 
         g_shotOne = 1;
     }
     float a[3] = {-1, -1, -1}, b[3] = {-1, -1, -1};
-    e2eMean(ctx, l, a);
-    e2eMean(ctx, r, b);
+    if (!g_e2ePerf) {
+        e2eMean(ctx, l, a);
+        e2eMean(ctx, r, b);
+    }
     wchar_t name[64] = L"";
     int own = e2eCockpit(name, 64);
     int pl[3], pr[3], st[4];

@@ -162,7 +162,7 @@ drawing - is not covered by tests.
 
 ## Layout
 
-How the code works: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Working on it: [CONTRIBUTING.md](CONTRIBUTING.md).
+How the code works: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Where the frames' time goes: [docs/PERFORMANCE.md](docs/PERFORMANCE.md). Working on it: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 - `mod/src/*.cpp` - the mod, a unit for each part, each with its header (`mod.h` brings them all); `main.cpp`
   has the entry points, `base.cpp` the proxy and the log, `hooks.cpp` and `draws.cpp` the hooks

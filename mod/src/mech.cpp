@@ -273,16 +273,26 @@ static bool swvOnPresent() {
         // with every turn of the head others are there, in another order (compared by order, the cockpit moved
         // with the head). Each vertex is the nearest one of the frame before, if within 3 cm - a step moves the
         // cockpit some millimetres a frame, and its vertices lie further apart.
+        // (Looked for among the vertices of the frame before that lie within those 3 cm in x - they are sorted by x
+        // for it - and not among all 1500: the same vertex is found, the first of the nearest, in a fortieth of
+        // the comparisons.)
         static float(*const P)[3] = g_swvPairP, (*const Q)[3] = g_swvPairQ;
+        static std::pair<float, int> byX[SWV_MAX];
+        const int prevN = g_swvPrevN;
+        for (int j = 0; j < prevN; ++j) byX[j] = {g_swvPrev[j][0], j};
+        std::sort(byX, byX + prevN);
         int m = 0;
         for (int i = 0; i < n; ++i) {
             const float *q = g_swvCur[i];
             float best = 9e-4f;
             int bj = -1;
-            for (int j = 0; j < g_swvPrevN; ++j) {
+            const std::pair<float, int> *it =
+                std::lower_bound(byX, byX + prevN, std::pair<float, int>(q[0] - 0.0301f, -1));
+            for (; it != byX + prevN && it->first <= q[0] + 0.0301f; ++it) {
+                const int j = it->second;
                 const float *p = g_swvPrev[j];
                 float dx = q[0] - p[0], dy = q[1] - p[1], dz = q[2] - p[2], d2 = dx * dx + dy * dy + dz * dz;
-                if (d2 < best) best = d2, bj = j;
+                if (d2 < best || (d2 == best && bj >= 0 && j < bj)) best = d2, bj = j;
             }
             if (bj >= 0) memcpy(P[m], g_swvPrev[bj], sizeof P[0]), memcpy(Q[m], q, sizeof Q[0]), ++m;
         }
@@ -420,11 +430,16 @@ static int mgRead(const uint8_t *vbase, UINT vbytes, UINT stride, UINT voff, INT
                 float y = R[3] * e[0] + R[4] * e[1] + R[5] * e[2] + T[1];
                 float z = R[6] * e[0] + R[7] * e[1] + R[8] * e[2] + T[2];
                 pos[k][0] = x, pos[k][1] = y, pos[k][2] = z;
-                float h = sqrtf(x * x + z * z);
-                v[k].az = atan2f(x, z) * 57.29578f;
-                v[k].el = atan2f(y, h) * 57.29578f;
-                v[k].d = sqrtf(x * x + y * y + z * z);
-                if (!(v[k].d > 0.02f)) ok = false;
+                float d2 = x * x + y * y + z * z;
+                if (!(d2 > 0.02f * 0.02f)) ok = false; // nearer than 2 cm: not a vertex of the cockpit
+                // its direction and distance: only the grid of a measured frame asks for them (two atan2 a vertex,
+                // in every frame and for both eyes, were a millisecond of a frame)
+                if (collect && g_mechMeasure) {
+                    float h = sqrtf(x * x + z * z);
+                    v[k].az = atan2f(x, z) * 57.29578f;
+                    v[k].el = atan2f(y, h) * 57.29578f;
+                    v[k].d = sqrtf(d2);
+                }
             }
             if (!ok) continue;
             ++found;
