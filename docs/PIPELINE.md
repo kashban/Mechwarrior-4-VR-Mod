@@ -74,8 +74,8 @@ changed in a fork's pull request could name the runner.
 4. Start **Publish** with the version (Actions, Publish, Run workflow; or `gh workflow run publish.yml -f version=v<version>`).
 
 The trees in the package are made from Poly Haven's plants (CC0) by `tools/trees/build_trees.py`; their output is too
-large for the source and lies as `trees.zip` in the release `build-data-trees-1`. After making new trees, put them
-up as `build-data-trees-2` and name that in `release.yml`.
+large for the source and lies as `trees.zip` in the release `build-data-trees-2`. After making new trees, put them
+up as `build-data-trees-3` and name that in `release.yml`.
 
 ## Nexus Mods and ModDB
 

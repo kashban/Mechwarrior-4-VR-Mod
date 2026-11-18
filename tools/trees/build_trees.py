@@ -324,8 +324,12 @@ def top(u, v):
 
 def build(name, height, trunk, whorls, cards, lean=0.0, sides=8):
     """trunk: (radius at the foot, up to this height); whorls: [(height, radius, droop, turn)] - six-sided cones of
-    the picture from above, hanging (droop > 0) or domed (< 0); cards: (from, to, half width, how many) - upright
-    cards of the picture from the side. lean: how far the top stands off the foot's axis (m)."""
+    the picture from above whose rim hangs droop metres below the middle; cards: (from, to, half width, how many) -
+    upright cards of the picture from the side. lean: how far the top stands off the foot's axis (m).
+
+    The cones hang, all of them, as the game's own trees are made: a cross of upright cards, and at some heights
+    triangles that fall from the stem outwards. Level, or with the rim above the middle (as the broad-leaved
+    trees' were at first), they look like plates on a pole - a bough's weight pulls its end down."""
     o = Obj(name)
     bark, leaf = name + '_bark', name + '_cards'
 
@@ -360,7 +364,7 @@ def build(name, height, trunk, whorls, cards, lean=0.0, sides=8):
     return o
 
 
-def fir_whorls(height, n, lowest, radius, droop=0.32, power=0.8):
+def fir_whorls(height, n, lowest, radius, droop=0.45, power=0.8):
     out = []
     for w in range(n):
         k = w / (n - 1)
@@ -456,8 +460,8 @@ def kind_text(name, model, density, size, patch, seed, wind, conifer=False, gras
 
 def card_tree(name, half, h, domes, cards=3, lean=0.0):
     """a tree all of cards for a model's pictures: upright cards over its whole height, and domes (height share,
-    radius share, how far the middle stands above the rim as a share of the radius) of the picture from above"""
-    return build(name, h, None, [(h * y, half * r, -half * r * up, 0.4 + 1.1 * i) for i, (y, r, up) in enumerate(domes)], (0.0, h, half, cards), lean)
+    radius share, how far the rim hangs below the middle as a share of the radius) of the picture from above"""
+    return build(name, h, None, [(h * y, half * r, half * r * hang, 0.4 + 1.1 * i) for i, (y, r, hang) in enumerate(domes)], (0.0, h, half, cards), lean)
 
 
 def main(src, out, ph=None):
@@ -491,20 +495,20 @@ def main(src, out, ph=None):
     trees = [
         ('fir_01', build('fir_01', 14.0, (0.24, 13.6), fir_whorls(14.0, 13, 2.2, 3.3), (1.2, 14.0, 3.56, 3)), fir, fir_bark,
          dict(density=0.0009, size=(0.8, 1.5), patch=(70, 0.5), seed=77, wind=(0.012, 0.35), conifer=True)),
-        ('fir_02', build('fir_02', 21.0, (0.34, 20.4), fir_whorls(21.0, 16, 6.5, 3.0, 0.4, 0.7), (5.4, 21.0, 3.3, 3), lean=0.5),
+        ('fir_02', build('fir_02', 21.0, (0.34, 20.4), fir_whorls(21.0, 16, 6.5, 3.0, 0.5, 0.7), (5.4, 21.0, 3.3, 3), lean=0.5),
          recolour(fir, (0.78, 0.9, 0.92)), dark_bark, dict(density=0.0006, size=(0.85, 1.3), patch=(70, 0.5), seed=78, wind=(0.01, 0.28), conifer=True)),
-        ('fir_03', build('fir_03', 7.5, (0.14, 7.2), fir_whorls(7.5, 9, 0.7, 2.5, 0.22, 0.9), (0.3, 7.5, 2.7, 3)),
+        ('fir_03', build('fir_03', 7.5, (0.14, 7.2), fir_whorls(7.5, 9, 0.7, 2.5, 0.38, 0.9), (0.3, 7.5, 2.7, 3)),
          recolour(fir, (1.06, 1.1, 0.9)), fir_bark, dict(density=0.0009, size=(0.6, 1.3), patch=(45, 0.55), seed=79, wind=(0.02, 0.5), conifer=True)),
         ('fir_04', build('fir_04', 15.0, (0.26, 14.6), fir_whorls(15.0, 8, 4.0, 2.4, 0.5, 0.6), (3.0, 15.0, 2.6, 2), lean=1.1),
          recolour(fir, (0.95, 0.74, 0.5), grey=0.75, thin=0.5), dark_bark,
          dict(density=0.0002, size=(0.7, 1.3), patch=(70, 0.5), seed=80, wind=(0.006, 0.3), conifer=True)),
-        ('oak_01', build('oak_01', 14.0, (0.42, 9.5), [(7.2, 5.0, -0.9, 0.2), (10.0, 4.6, -1.3, 1.3), (12.4, 3.0, -0.9, 2.1)], (3.0, 14.2, 6.4, 3)),
+        ('oak_01', build('oak_01', 14.0, (0.42, 9.5), [(7.6, 5.0, 1.7, 0.2), (10.6, 4.6, 1.7, 1.3), (12.9, 3.0, 1.2, 2.1)], (3.0, 14.2, 6.4, 3)),
          oak, dark_bark, dict(density=0.0006, size=(0.8, 1.4), patch=(80, 0.45), seed=91, wind=(0.008, 0.3), conifer=False)),
-        ('oak_02', build('oak_02', 17.2, (0.38, 12.0), [(8.6, 3.9, -1.0, 0.5), (11.8, 4.0, -1.5, 1.7), (15.0, 2.6, -1.0, 2.6)], (4.4, 17.4, 5.4, 3), lean=0.4),
+        ('oak_02', build('oak_02', 17.2, (0.38, 12.0), [(9.2, 3.9, 1.4, 0.5), (12.6, 4.0, 1.6, 1.7), (15.6, 2.6, 1.1, 2.6)], (4.4, 17.4, 5.4, 3), lean=0.4),
          oak2, dark_bark, dict(density=0.0005, size=(0.75, 1.3), patch=(80, 0.45), seed=92, wind=(0.009, 0.3), conifer=False)),
-        ('birch_01', build('birch_01', 15.0, (0.2, 13.5), [(8.0, 2.4, 0.5, 0.4), (11.0, 2.3, 0.3, 1.5), (13.6, 1.5, 0.2, 2.4)], (3.6, 15.2, 3.6, 3), lean=0.6),
+        ('birch_01', build('birch_01', 15.0, (0.2, 13.5), [(8.2, 2.4, 0.9, 0.4), (11.2, 2.3, 0.85, 1.5), (13.8, 1.5, 0.6, 2.4)], (3.6, 15.2, 3.6, 3), lean=0.6),
          birch, birch_bark(), dict(density=0.0006, size=(0.7, 1.25), patch=(55, 0.4), seed=93, wind=(0.016, 0.45), conifer=False)),
-        ('bush_01', build('bush_01', 3.2, (0.1, 1.6), [(1.2, 2.0, -0.5, 0.3), (2.3, 1.5, -0.5, 1.4)], (0.0, 3.4, 2.6, 3), sides=5),
+        ('bush_01', build('bush_01', 3.2, (0.1, 1.6), [(1.5, 2.0, 0.6, 0.3), (2.6, 1.5, 0.5, 1.4)], (0.0, 3.4, 2.6, 3), sides=5),
          bush, fir_bark, dict(density=0.0016, size=(0.6, 1.5), patch=(40, 0.5), seed=94, wind=(0.03, 0.7), conifer=False)),
     ]
     names = {'fir_01': 'tree_fir', 'fir_02': 'tree_fir_tall', 'fir_03': 'tree_fir_young', 'fir_04': 'tree_fir_dead', 'oak_01': 'tree_oak',
@@ -514,25 +518,25 @@ def main(src, out, ph=None):
         # name, asset, which of its meshes, scale, domes, the clutter kind's name and values
         trees = [t for t in trees if t[0] not in ('oak_01', 'oak_02', 'birch_01', 'bush_01')]
         real = [
-            ('leaf_01', 'tree_small_02', None, 3.4, [(0.5, 0.95, 0.1), (0.72, 0.85, 0.2), (0.9, 0.5, 0.25)], 'tree_leaf',
+            ('leaf_01', 'tree_small_02', None, 3.4, [(0.58, 0.95, 0.38), (0.78, 0.85, 0.4), (0.94, 0.5, 0.45)], 'tree_leaf',
              dict(density=0.0006, size=(0.75, 1.25), patch=(80, 0.45), seed=108, wind=(0.008, 0.3))),
-            ('leaf_02', 'island_tree_01', None, 3.2, [(0.5, 0.95, 0.1), (0.72, 0.85, 0.2), (0.9, 0.5, 0.25)], 'tree_leaf_wide',
+            ('leaf_02', 'island_tree_01', None, 3.2, [(0.58, 0.95, 0.38), (0.78, 0.85, 0.4), (0.94, 0.5, 0.45)], 'tree_leaf_wide',
              dict(density=0.0005, size=(0.75, 1.25), patch=(80, 0.45), seed=109, wind=(0.008, 0.3))),
-            ('leaf_03', 'island_tree_03', None, 3.4, [(0.6, 0.95, 0.12), (0.85, 0.7, 0.25)], 'tree_leaf_small',
+            ('leaf_03', 'island_tree_03', None, 3.4, [(0.68, 0.95, 0.38), (0.9, 0.7, 0.42)], 'tree_leaf_small',
              dict(density=0.0006, size=(0.7, 1.3), patch=(55, 0.4), seed=110, wind=(0.012, 0.4))),
-            ('jacaranda_01', 'jacaranda_tree', None, 0.85, [(0.5, 0.95, 0.1), (0.72, 0.85, 0.2), (0.9, 0.5, 0.25)], 'tree_jacaranda',
+            ('jacaranda_01', 'jacaranda_tree', None, 0.85, [(0.58, 0.95, 0.38), (0.78, 0.85, 0.4), (0.94, 0.5, 0.45)], 'tree_jacaranda',
              dict(density=0.0005, size=(0.7, 1.1), patch=(80, 0.45), seed=101, wind=(0.006, 0.25))),
-            ('island_01', 'island_tree_02', None, 3.2, [(0.6, 0.95, 0.12), (0.85, 0.7, 0.25)], 'tree_island',
+            ('island_01', 'island_tree_02', None, 3.2, [(0.68, 0.95, 0.38), (0.9, 0.7, 0.42)], 'tree_island',
              dict(density=0.0009, size=(0.75, 1.3), patch=(60, 0.5), seed=102, wind=(0.01, 0.35), where='warm')),
-            ('pine_01', 'pine_sapling_small', [1], 11.0, [(0.3, 0.95, -0.2), (0.48, 0.9, -0.2), (0.66, 0.7, -0.2), (0.82, 0.5, -0.2), (0.94, 0.25, -0.2)],
+            ('pine_01', 'pine_sapling_small', [1], 11.0, [(0.34, 0.95, 0.36), (0.5, 0.9, 0.36), (0.68, 0.7, 0.36), (0.83, 0.5, 0.36), (0.95, 0.25, 0.36)],
              'tree_pine', dict(density=0.0007, size=(0.75, 1.35), patch=(70, 0.5), seed=103, wind=(0.012, 0.35), conifer=True)),
-            ('quiver_01', 'quiver_tree_02', None, 3.6, [(0.82, 0.95, 0.1)], 'tree_quiver',
+            ('quiver_01', 'quiver_tree_02', None, 3.6, [(0.88, 0.95, 0.3)], 'tree_quiver',
              dict(density=0.0005, size=(0.7, 1.4), patch=(70, 0.35), seed=104, wind=(0.002, 0.3), where='dry')),
-            ('searsia_01', 'searsia_lucida', [0], 1.6, [(0.55, 0.9, 0.3)], 'bush_searsia',
+            ('searsia_01', 'searsia_lucida', [0], 1.6, [(0.75, 0.9, 0.4)], 'bush_searsia',
              dict(density=0.002, size=(0.6, 1.4), patch=(40, 0.45), seed=105, wind=(0.02, 0.6), where='dry', distance=900, sink=(-0.1, 0))),
-            ('rooibos_01', 'wild_rooibos_bush', [0], 2.4, [(0.6, 0.9, 0.3)], 'bush_rooibos',
+            ('rooibos_01', 'wild_rooibos_bush', [0], 2.4, [(0.78, 0.9, 0.4)], 'bush_rooibos',
              dict(density=0.006, size=(0.6, 1.5), patch=(25, 0.5), seed=106, wind=(0.03, 0.8), where='dry', distance=400, sink=(-0.05, 0))),
-            ('shrub_01', 'shrub_02', [0], 1.5, [(0.5, 0.9, 0.3)], 'bush_green',
+            ('shrub_01', 'shrub_02', [0], 1.5, [(0.72, 0.9, 0.4)], 'bush_green',
              dict(density=0.002, size=(0.6, 1.5), patch=(40, 0.5), seed=107, wind=(0.03, 0.7), distance=900, sink=(-0.1, 0))),
         ]
         none = Image.new('RGB', (8, 8), (70, 55, 40))

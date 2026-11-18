@@ -22,7 +22,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       TAG: ${{ github.ref_name }}
-      TREES: build-data-trees-1 # a release of this repository holding trees.zip: build_trees.py's output (Poly Haven, CC0)
+      TREES: build-data-trees-2 # a release of this repository holding trees.zip: build_trees.py's output (Poly Haven, CC0)
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: The tag is the version the mod logs
