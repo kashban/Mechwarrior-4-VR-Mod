@@ -185,9 +185,10 @@ static inline bool mw5Active() { return g_mw5On && g_mw5State == 1 && !mw5Waitin
 
 // Without a cockpit of our own ([vr] hud_parts=1): the same parts of the HUD as panes before the pilot, in a row
 // below the view ahead ([vr] hud_part_<name> = degrees right, up, width, metres away), moved with the same keys.
+// The top strip (the compass) not: it is above the view, in the picture's upper quarter, as the game has it.
 static bool g_m5PlainOn = true;
 static const float g_m5PlainDef[M5_PARTS][4] = {{0, -24, 11, 1.2f}, {-15, -24, 8, 1.2f}, {15, -24, 8, 1.2f},
-                                                {-27, -24, 9, 1.2f}, {28, -24, 11, 1.2f}, {0, -14, 15, 1.2f}};
+                                                {-27, -24, 9, 1.2f}, {28, -24, 11, 1.2f}, {0, 28, 15, 1.2f}};
 static float g_m5Plain[M5_PARTS][4];
 // Seen from outside (the third-person view, a mission's intro) the row has places of its own, the same for every
 // mech ([vr] hud_out_<name>): what was set for a cockpit - its console, its windows - means nothing out there, and

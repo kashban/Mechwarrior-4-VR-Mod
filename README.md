@@ -55,7 +55,7 @@ What the files are:
 To remove the mod, delete `d3d11.dll` and `dinput.dll` from the game's folder.
 
 Without MechWarrior 5 the game's own cockpits are used, and the HUD's parts - radar, target, damage, lance list,
-weapons, the top strip - float as panes of their own before you, below the view ahead. Move them with the
+weapons, the top strip - float as panes of their own before you, below the view ahead (the compass above it). Move them with the
 Ctrl+Alt keys below.
 
 ## Keys (in a battle)

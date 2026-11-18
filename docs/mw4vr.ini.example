@@ -51,7 +51,7 @@ hud_right=0.72
 ; this much wider than the game's (1 = not). Read at the start
 hud_extra_width=1.02
 ; 1 = without a cockpit mesh of our own the HUD's parts (radar, target, damage, lance list, weapons, top strip) are
-; panes of their own before the pilot, in a row below the view ahead. In a battle: look somewhere and press
+; panes of their own before the pilot, in a row below the view ahead (the compass above it). In a battle: look somewhere and press
 ; Ctrl+Alt+1..6 to put a part there; Ctrl+Alt+Shift+1..6 chooses one, then Ctrl+Alt+Shift + arrows move it,
 ; PgUp / PgDn size it, Ins / Del set it farther / nearer, 0 hides it; Ctrl+Alt+7 puts all back into the row.
 ; Stored for each mech in mw4vr_mechs.ini as hud_part_<radar|target|damage|lance|weapons|top> = degrees right, up,
