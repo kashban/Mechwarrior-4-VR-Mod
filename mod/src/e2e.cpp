@@ -4,7 +4,7 @@
 //   - writes a line for every frame with both eyes to mw4vr_e2e.csv: the time, the eyes' mean colours, whether the
 //     camera sits in the mech and whose cockpit is drawn, the sway (what the test's script judges);
 //   - turns the head as the plan says (a runtime without a headset gives one pose for ever);
-//   - takes pictures at the plan's times (shot.inc);
+//   - takes pictures at the plan's times (shot.cpp);
 //   - presses keys at the plan's times, as input to the window in front (the game's): walking, firing, the view from
 //     outside, the menu.
 // The plan, an .ini:   [e2e]  yaw=2:0 6:45 10:45 14:0     seconds:degrees to the right, straight lines between
@@ -15,12 +15,13 @@
 //                                  43:MOVE:0.5,0.47       the mouse's pointer to this place of the picture (parts of
 //                                                         its width and height), for a click in a menu
 // Seconds count from the frame the camera first sits in the mech. Without MW4VR_E2E none of this does anything.
-// Included into main.cpp after shot.inc, before vr.inc.
 
-static bool g_e2eOn;
+#include "mod.h"
+
+bool g_e2eOn;
 static FILE *g_e2eCsv;
 static ULONGLONG g_e2eStart, g_e2eSeat; // ticks: the first frame, the first frame in the mech (0: not yet)
-static std::vector<std::pair<float, float>> g_e2eYaw;
+std::vector<std::pair<float, float>> g_e2eYaw;
 static std::vector<float> g_e2eShots;
 static size_t g_e2eShotNext;
 struct E2eKey {
@@ -32,12 +33,8 @@ struct E2eKey {
 };
 static std::vector<E2eKey> g_e2eKeys;
 
-static int e2eCockpit(wchar_t *name, int n); // main.cpp, after mw5.inc: 1 - a cockpit of our own is drawn
-static void
-e2ePass(int e, int *v); // an eye's pass: CPU-path draws, at which ours was drawn, the game's cockpit's triangles there
-static void e2eState(int *v); // main.cpp: 1 - a paused battle's menu is up; the draws of the frame; of those, the
-                              // indirect ones into the HUD's image while the menu is up (how much the menu shows);
-                              // 1 - the menu's picture of this frame has no HUD under the sheet
+// indirect ones into the HUD's image while the menu is up (how much the menu shows);
+// 1 - the menu's picture of this frame has no HUD under the sheet
 
 static int e2eVk(const wchar_t *s, size_t n) {
     if (n == 1 && iswalnum(s[0])) return towupper(s[0]);
@@ -163,7 +160,7 @@ static void e2eInit() {
 static float e2eTime() { return g_e2eSeat ? (float)(GetTickCount64() - g_e2eSeat) / 1000.0f : -1.0f; }
 
 // the head's turn to the right the plan asks for now, in degrees
-static float e2eYawNow() {
+float e2eYawNow() {
     e2eInit();
     if (!g_e2eOn || g_e2eYaw.empty()) return 0;
     float t = e2eTime();
@@ -178,7 +175,7 @@ static float e2eYawNow() {
 }
 
 // once for every picture the game presents (a paused battle's menu too): the plan's keys go down and up
-static void e2eKeysStep() {
+void e2eKeysStep() {
     if (!g_e2eOn || !g_e2eSeat) return;
     float t = (float)(GetTickCount64() - g_e2eSeat) / 1000.0f;
     for (E2eKey &k : g_e2eKeys) {
@@ -204,9 +201,9 @@ static bool e2eMean(ID3D11DeviceContext *ctx, ID3D11Texture2D *tex, float *rgb) 
     return true;
 }
 
-// once for every frame with both eyes, before shot.inc's pictures are taken - and for every flat picture of a menu's
+// once for every frame with both eyes, before shot.cpp's pictures are taken - and for every flat picture of a menu's
 // screen (r is null then; the record's "flat" is 1 and both eyes have the one picture's colour)
-static void e2eFrame(ID3D11DeviceContext *ctx, ID3D11Texture2D *l, ID3D11Texture2D *r) {
+void e2eFrame(ID3D11DeviceContext *ctx, ID3D11Texture2D *l, ID3D11Texture2D *r) {
     e2eInit();
     if (!g_e2eOn || !ctx || !l) return;
     const bool flat = !r;

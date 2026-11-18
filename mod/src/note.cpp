@@ -1,14 +1,16 @@
 // ---------------------------------------------------------------------------------------------
 // A line of text in the headset for a few seconds (which cockpit was just chosen): drawn with GDI
 // into a small bitmap and put into the HUD layer's picture above the cross-hair, over what the game
-// drew there. Included into main.cpp before vr.inc.
+// drew there.
+
+#include "mod.h"
 
 #define NOTE_W 960
 #define NOTE_H 64
 static uint32_t g_noteBits[NOTE_W * NOTE_H]; // BGRA, top row first
 static ULONGLONG g_noteUntil;
 
-static void noteShow(const wchar_t *text, int seconds = 5) {
+void noteShow(const wchar_t *text, int seconds) {
     BITMAPINFO bi = {};
     bi.bmiHeader.biSize = sizeof bi.bmiHeader;
     bi.bmiHeader.biWidth = NOTE_W, bi.bmiHeader.biHeight = -NOTE_H; // top-down
@@ -42,7 +44,7 @@ static void noteShow(const wchar_t *text, int seconds = 5) {
 }
 
 // into the picture tex (w x h used of it, 8-bit BGRA), while a note is due
-static void noteDraw(ID3D11DeviceContext *ctx, ID3D11Texture2D *tex, UINT w, UINT h) {
+void noteDraw(ID3D11DeviceContext *ctx, ID3D11Texture2D *tex, UINT w, UINT h) {
     if (!g_noteUntil || !ctx || !tex) return;
     if (GetTickCount64() > g_noteUntil) {
         g_noteUntil = 0;

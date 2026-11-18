@@ -23,7 +23,7 @@ static inline void mcViewAxis(const float *m, const float *A, int k, float *v) {
 
 static inline float mcDot3(const float *a, const float *b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
 
-// ---- the camera's frustum planes (cam.inc) ----
+// ---- the camera's frustum planes (cam.cpp) ----
 // Six planes (normal, d: inside is n.p <= d): far, near, right, left, bottom, top.
 struct McFrustum {
     float planes[24];
@@ -66,7 +66,7 @@ static inline bool mcFrustumPlanes(const float *pl, const float *base, const flo
     return true;
 }
 
-// ---- the wide HUD (hud.inc) ----
+// ---- the wide HUD (hud.cpp) ----
 
 // [vr] hud_extra_width as read: 1 (not wider) for anything outside 1..1.3
 static inline float mcWideFactor(float k) { return k <= 1.3f ? fmaxf(k, 1.0f) : 1.0f; }
@@ -75,7 +75,7 @@ static inline unsigned mcWideWidth(unsigned w, float k) {
     return k > 1.001f ? ((unsigned)(w * k + 0.5f) + 7) & ~7u : w;
 }
 
-// ---- the parts of the HUD image shown as quads (vr.inc) ----
+// ---- the parts of the HUD image shown as quads (vr.cpp) ----
 // u, v: 0..1 over the game's picture (u beyond 1 with the wide HUD), v down.
 
 enum { MC_RECTS = 32, MC_SPANS = 8, MC_CAMS = 4 };
@@ -283,7 +283,7 @@ static inline void mcHudRects(const McHud &h, McRects &q, int shown = MC_SHOWN) 
     if (q.n > shown) mcHudRectsWith(h, q, false);
 }
 
-// ---- where a part on the glass lies (vr.inc, mw5.inc) ----
+// ---- where a part on the glass lies (vr.cpp, mw5.cpp) ----
 // Seen from the seat: degrees to the right and up from straight ahead, at the distance D. The runtime's axes:
 // x right, y up, z back.
 
@@ -310,7 +310,7 @@ static inline void mcGlassAim(const float *p, const float *f, float D, float *ri
     *up = atan2f(y, sqrtf(x * x + z * z)) / MC_RAD;
 }
 
-// ---- the cockpit as seen from the seat: where its windows are (mw5.inc) ----
+// ---- the cockpit as seen from the seat: where its windows are (mw5.cpp) ----
 // A grid of directions, 2 degrees a cell, 80 degrees to each side and 50 up and down: the nearest mesh in each
 // (metres), 0 where the view is open. A cell stands for the direction of its lower left corner.
 

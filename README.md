@@ -151,7 +151,7 @@ Visual Studio 2022 Build Tools (x86), then `mod\build.bat`. The results are `mod
 - `core_test.cpp` - the mod's arithmetic (`mod/src/core.h`: matrices, the camera's frustum planes, which parts
   of the HUD go where), built as a console program
 - `test_shaders.py` - the mod's shaders compile (Windows SDK's `fxc`)
-- `test_abi.py` - `mw4hook_abi.inc` against the programs themselves. Set `MW4_DIR` to the game's folder and it
+- `test_abi.py` - `mw4hook_abi.h` against the programs themselves. Set `MW4_DIR` to the game's folder and it
   checks the builds of `mw4hook.dll` and `MW4Mercs.exe` and every instruction the mod relies on; a new build of
   mw4hook fails here first.
 
@@ -164,11 +164,12 @@ drawing - is not covered by tests.
 
 How the code works: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Working on it: [CONTRIBUTING.md](CONTRIBUTING.md).
 
-- `mod/src/main.cpp` - the proxy, hooks, shader tracking
-- `mod/src/mw4hook_abi.inc` - everything known about the insides of `mw4hook.dll` and `MW4Mercs.exe`
+- `mod/src/*.cpp` - the mod, a unit for each part, each with its header (`mod.h` brings them all); `main.cpp`
+  has the entry points, `base.cpp` the proxy and the log, `hooks.cpp` and `draws.cpp` the hooks
+- `mod/src/mw4hook_abi.h` - everything known about the insides of `mw4hook.dll` and `MW4Mercs.exe`
   (addresses, offsets, shader hashes, label names). A new build of either means changes here only.
 - `mod/src/core.h` - the arithmetic, free of Windows and the game (what the tests test)
-- `mod/src/cam.inc` - the camera hook; `vr.inc` - OpenXR; `hud.inc` - the HUD layer; `mw5.inc` - the cockpit mesh
+- `mod/src/cam.cpp` - the camera hook; `vr.cpp` - OpenXR; `hud.cpp` - the HUD layer; `mw5.cpp` - the cockpit mesh
 - `tools/` - cockpit conversion, the start script, the release package; `tools/trees` - the trees (card models
   from Poly Haven's plants); `tools/faces` - comparing MW4 mechs with MW5 cockpits
 

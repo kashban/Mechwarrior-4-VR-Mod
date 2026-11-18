@@ -11,9 +11,8 @@
 // ([cockpit], written by the converter); without that file the [vr] mw5_* values of mw4vr.ini hold.
 // Ctrl+Alt+F11 takes the next cockpit file (with Shift the one before) and remembers it for the mech one sits
 // in (mw4vr_mechs.ini: mw5_cockpit in the mech's section), or as [vr] mw5_cockpit while no mech is known.
-// Included into main.cpp after vr.inc.
 
-typedef void(STDMETHODCALLTYPE *Mw5PFN_DrawIdx)(ID3D11DeviceContext *, UINT, UINT, INT);
+#include "mod.h"
 
 struct Mw5Group {
     ID3D11Buffer *vb, *ib;
@@ -55,10 +54,10 @@ static void mw5HiTouch() { g_m5HiUntil = GetTickCount64() + 6000; }
 #define MW5_GROUPS 40
 static Mw5Group g_m5[MW5_GROUPS];
 static int g_m5N;
-static int g_mw5State; // 0: not loaded yet, 1: ready, -1: failed (stays off)
-static volatile bool g_mw5On;
+int g_mw5State; // 0: not loaded yet, 1: ready, -1: failed (stays off)
+volatile bool g_mw5On;
 static bool g_mw5IniRead;
-static wchar_t g_mw5Name[64];
+wchar_t g_mw5Name[64];
 static float g_mw5Scale = 1, g_mw5Eye[3], g_mw5Ems = 1.5f, g_mw5Amb = 0.45f;
 static int g_mw5LinearOut, g_mw5Reversed = 1;
 // painted metal (the parts the converter marks; mw4vr_cockpits\mw4vr_paint.mwd, made by it, holds the picture for it)
@@ -181,13 +180,6 @@ float4 ps(VSOut i) : SV_Target {
     return float4(c, 1);
 }
 )HLSL";
-
-// Not while the game draws no cockpit (a mission's intro, seen from outside). Which cockpit: by the mech's name as
-// the game tells it, from the battle's first frame (mw5ForMech) - not only once the mech's profile is recognised
-// by its cockpit's shape, which takes seconds and showed the cockpit chosen for all mechs until then.
-// Nor while the camera is outside the mech in a battle (the third-person view, g_mechSeat).
-static inline bool mw5Waiting() { return g_mechOn && g_doubleDraw && (!g_mechSeated || g_mechSeat.outside); }
-static inline bool mw5Active() { return g_mw5On && g_mw5State == 1 && !mw5Waiting(); }
 
 // Without a cockpit of our own ([vr] hud_parts=1): the same parts of the HUD as panes before the pilot, in a row
 // below the view ahead ([vr] hud_part_<name> = degrees right, up, width, metres away), moved with the same keys.
@@ -581,8 +573,8 @@ static void mw5Load() {
          g_mw5Name, g_m5N);
 }
 
-// the monitors show the HUD (the near HUD quads are then left out, vr.inc)
-static bool mw5ScreensOn() { return mw5Active() && g_mw5ScreensWanted && g_m5Screens > 0 && g_m5HudSrv; }
+// the monitors show the HUD (the near HUD quads are then left out, vr.cpp)
+bool mw5ScreensOn() { return mw5Active() && g_mw5ScreensWanted && g_m5Screens > 0 && g_m5HudSrv; }
 
 // a monitor shows this part of the HUD (its middle)
 static bool mw5PartOnMonitor(int p) {
@@ -604,7 +596,7 @@ static int mw5MonitorOf(int p) {
 
 // a monitor's piece of the HUD image that reaches below the top strip (a list set longer by hand): the far HUD
 // does not show that again
-static void mw5MonitorLists(McHud &hd, float T) {
+void mw5MonitorLists(McHud &hd, float T) {
     for (int i = 0; i < g_m5N && mw5ScreensOn(); ++i) {
         if (!g_m5[i].screen) continue;
         const float *r = g_m5Rect[g_m5[i].screen - 1];
@@ -617,7 +609,7 @@ static void mw5MonitorLists(McHud &hd, float T) {
 }
 
 // The parts of the HUD shown on the glass: those no monitor shows, with a width. 0: none (no cockpit of our own).
-static int mw5GlassItems(GlassItem *out) {
+int mw5GlassItems(GlassItem *out) {
     if (!(mw5Active() && g_m5GlassOn) && !mw5Plain()) return 0;
     int n = 0;
     for (int p = 0; p < M5_PARTS; ++p) {
@@ -635,7 +627,7 @@ static int mw5GlassItems(GlassItem *out) {
 }
 
 // the parts of the HUD image's top strip (above v = T) the monitors show, as spans of u in rising order
-static int mw5TopSpans(float T, float (*iv)[2]) {
+int mw5TopSpans(float T, float (*iv)[2]) {
     int n = 0;
     for (int i = 0; i < g_m5N; ++i)
         if (g_m5[i].screen) mcTopSpan(iv, n, g_m5Rect[g_m5[i].screen - 1], T);
@@ -643,7 +635,7 @@ static int mw5TopSpans(float T, float (*iv)[2]) {
 }
 
 // the left side column of the HUD image (u < L): how far down the monitors' second parts reach (0: none)
-static float mw5LeftAltBottom(float L) {
+float mw5LeftAltBottom(float L) {
     float v = 0;
     for (int i = 0; i < g_m5N; ++i)
         if (g_m5[i].screen) v = mcLeftAlt(g_m5Alt[g_m5[i].screen - 1], L, v);
@@ -651,7 +643,7 @@ static float mw5LeftAltBottom(float L) {
 }
 
 // at Present, with the HUD image of this frame complete
-static void mw5HudCopy(ID3D11DeviceContext *c, ID3D11Texture2D *hud) {
+void mw5HudCopy(ID3D11DeviceContext *c, ID3D11Texture2D *hud) {
     if (!mw5Active() || !g_mw5ScreensWanted || !g_m5Screens || !hud || !c) return;
     D3D11_TEXTURE2D_DESC d;
     hud->GetDesc(&d);
@@ -678,19 +670,19 @@ static void mw5HudCopy(ID3D11DeviceContext *c, ID3D11Texture2D *hud) {
 
 // at a CPU-path draw of the main camera's pass for an eye (our replacement shader is bound): once per pass
 // gameCockpit: this draw is one of the game's own cockpit
-// for a test run's record (e2e.inc): an eye's pass of this frame - its CPU-path draws so far, at which of them our
+// for a test run's record (e2e.cpp): an eye's pass of this frame - its CPU-path draws so far, at which of them our
 // cockpit was drawn (0: not), and how many of the game's cockpit's triangles that draw had
-static unsigned g_m5PassFrame[2] = {~0u, ~0u};
-static int g_m5PassDraws[2], g_m5PassOrd[2], g_m5PassCk[2];
-static unsigned g_m5AllDraws; // every Draw / DrawIndexed of the immediate context, counted on (which draw of the frame
-                              // is this one?)
+unsigned g_m5PassFrame[2] = {~0u, ~0u};
+int g_m5PassDraws[2], g_m5PassOrd[2], g_m5PassCk[2];
+unsigned g_m5AllDraws; // every Draw / DrawIndexed of the immediate context, counted on (which draw of the frame
+                       // is this one?)
 struct M5Seq {
     unsigned at; // g_m5AllDraws
     int ck;      // the game's cockpit's triangles
     void *rtv;
     int vpW, ours; // ours: 1 - our cockpit was drawn at this draw
 };
-static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw, int ckTris) {
+void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw, int ckTris) {
     const bool gameCockpit = ckTris >= 10;
     int e = g_camPassEye;
     if (e < 0 || e > 1 || !g_camInMain || !g_kTlOnly || mw5Waiting()) return;
@@ -868,7 +860,7 @@ static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw, int ckTris) {
     const float *R = g_vrR[e], *T = g_vrT[e], *raw = g_vrRaw[e];
     float S = g_vr.cockpitScale * g_mw5Scale;
     float cb[60] = {};
-    // The cockpit sways with the mech's steps, as the game's own does (sway.inc: the game's cockpit against the
+    // The cockpit sways with the mech's steps, as the game's own does (sway.cpp: the game's cockpit against the
     // camera, in the camera's space): c' = D c + d. Without a sway D is the identity.
     float D[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1}, d[3] = {0, 0, 0};
     if (g_swayValid && g_swayOn) {
@@ -942,7 +934,7 @@ static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw, int ckTris) {
             if (scr) { // the part of the HUD image, whole and undistorted in the monitor
                 const float *r = g_m5Rect[g.screen - 1];
                 bool have = g_m5HudSrv && r[2] > r[0] && r[3] > r[1] && g_m5HudH;
-                // the rectangles count in pictures (u = 1: the game's right edge); the HUD image may be wider (hud.inc)
+                // the rectangles count in pictures (u = 1: the game's right edge); the HUD image may be wider (hud.cpp)
                 float pw = g_hudW ? (float)g_hudW : (float)g_m5HudW, ku = g_m5HudW ? pw / g_m5HudW : 1;
                 float ar = have ? (r[2] - r[0]) * pw / ((r[3] - r[1]) * g_m5HudH) : 1;
                 cb[27] = 1;
@@ -1100,12 +1092,13 @@ static void mw5ForMech() {
 // Ctrl+Alt+F11: the next cockpit file (Shift: the one before), remembered for this mech
 static void mw5Next(int step) {
     std::vector<std::wstring> v = mw5Files();
-    if (v.empty()) {
+    int n = (int)v.size();
+    if (n == 0) {
         logf("mw5: no cockpit files in mw4vr_cockpits");
         Beep(300, 200);
         return;
     }
-    int n = (int)v.size(), at = step > 0 ? -1 : 0;
+    int at = step > 0 ? -1 : 0;
     for (int i = 0; i < n; ++i)
         if (!_wcsicmp(v[i].c_str(), g_mw5Name)) at = i;
     int pick = ((at + step) % n + n) % n;
@@ -1260,7 +1253,7 @@ static void mw5GlassPut(int p) {
 
 // The part the keys change, for some seconds after it was chosen, placed or changed: a yellow frame around it in
 // the HUD picture of this frame - seen wherever the part is shown, on a monitor, on the glass or in the row.
-static void mw5HighlightDraw(ID3D11DeviceContext *c) {
+void mw5HighlightDraw(ID3D11DeviceContext *c) {
     int p = g_m5GlassLast;
     if (p < 0 || p >= M5_PARTS || !g_m5HiUntil || !c) return;
     if (GetTickCount64() > g_m5HiUntil) {
@@ -1578,10 +1571,10 @@ static void mw5GlassAdjust(int k) {
 }
 
 // hot keys, once a frame
-static void mw5OnPresent() {
+void mw5OnPresent() {
     if (!g_mw5IniRead) mw5ReadIni();
     mw5ForMech();
-    g_mechMw5 = g_mw5On && g_mw5State == 1; // (the seat kept for a cockpit of ours, mech.inc)
+    g_mechMw5 = g_mw5On && g_mw5State == 1; // (the seat kept for a cockpit of ours, mech.cpp)
     bool ctrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0, alt = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
     bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
     {

@@ -12,7 +12,7 @@
 #   2. -Runtime steamvr-null: switches SteamVR to its "null" driver (no headset) and has the mod use SteamVR's
 #      32-bit OpenXR for this start alone (XR_RUNTIME_JSON) - SteamVR's settings come back at the end;
 #      -Runtime active: the machine's active OpenXR runtime as it is (the headset must be on and connected);
-#   3. starts a battle through MW4Engine's "instant action by code" with the test plan (mod\src\e2e.inc),
+#   3. starts a battle through MW4Engine's "instant action by code" with the test plan (mod\src\e2e.cpp),
 #      waits until the battle has run -Seconds, ends the game;
 #   4. judges the run (tools\e2e\judge.py) and keeps everything in mod\build\e2e\<time>.
 # Exit code: 0 passed, 1 failed, 2 the run itself did not work.

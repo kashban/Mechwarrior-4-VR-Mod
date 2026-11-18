@@ -1,4 +1,4 @@
-# Is mod/src/mw4hook_abi.inc still true? Reads the constants out of the file and holds them against the programs
+# Is mod/src/mw4hook_abi.h still true? Reads the constants out of the file and holds them against the programs
 # themselves: mw4hook.dll and MW4Mercs.exe in the folder the environment variable MW4_DIR names (the game's
 # folder). Without MW4_DIR only the file's own consistency is tested; the rest is skipped.
 #   set MW4_DIR=<the game's folder>
@@ -7,7 +7,7 @@
 import os, re, struct, unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-INC = os.path.join(HERE, '..', 'mod', 'src', 'mw4hook_abi.inc')
+INC = os.path.join(HERE, '..', 'mod', 'src', 'mw4hook_abi.h')
 GAME = os.environ.get('MW4_DIR')
 
 

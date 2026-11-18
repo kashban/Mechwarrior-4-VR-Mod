@@ -9,7 +9,7 @@ set OUT=build\analyze
 rem /analyze:only: no code is generated; /analyze:external-: the SDK's and OpenXR's headers are not ours to fix
 set FLAGS=/nologo /MT /EHsc /std:c++17 /W4 /sdl /analyze /analyze:only /analyze:stacksize 65536 ^
   /external:anglebrackets /external:W0 /analyze:external- /Iinclude
-cl %FLAGS% /Fo%OUT%\ src\main.cpp src\vtidx.c > %OUT%\analyze.log 2>&1
+cl %FLAGS% /Fo%OUT%\ src\*.cpp src\vtidx.c > %OUT%\analyze.log 2>&1
 cl %FLAGS% /Fo%OUT%\ dinput\dinput.cpp >> %OUT%\analyze.log 2>&1
 "%SystemRoot%\System32\find.exe" /c "warning C" %OUT%\analyze.log
 exit /b 0

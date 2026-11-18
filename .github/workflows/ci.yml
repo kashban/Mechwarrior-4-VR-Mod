@@ -104,7 +104,7 @@ jobs:
         run: |
           common="--platform=win32W --quiet --inline-suppr --suppress=missingIncludeSystem -D_WIN32 -D_MSC_VER=1940 -D_M_IX86"
           cppcheck $common "--template={file}:{line}: [{severity}/{id}] {message}" --enable=warning,portability,performance \
-            --std=c++17 --language=c++ -Imod/include mod/src/main.cpp mod/dinput/dinput.cpp tests/core_test.cpp 2> cppcheck.log
+            --std=c++17 --language=c++ -Imod/include mod/src/*.cpp mod/dinput/dinput.cpp tests/core_test.cpp 2> cppcheck.log
           cppcheck $common "--template={file}:{line}: [{severity}/{id}] {message}" --enable=warning,portability mod/src/vtidx.c 2>> cppcheck.log
           echo "$(grep -c '\[' cppcheck.log || true) messages"
           if grep -F '[error/' cppcheck.log; then exit 1; fi

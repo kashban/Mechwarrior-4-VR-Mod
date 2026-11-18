@@ -33,7 +33,7 @@ def compile_calls():
     """(text's variable, entry point, target) of every D3DCompile call in the mod's sources"""
     calls = []
     for name in sorted(os.listdir(SRC)):
-        if name.endswith(('.cpp', '.inc')):
+        if name.endswith('.cpp'):
             calls += re.findall(r'g_compile\((\w+), sizeof\(\1\) - 1, "[^"]*", nullptr, nullptr, "(\w+)", "(\w+)"', read(name))
     return calls
 
@@ -50,7 +50,7 @@ class Sources(unittest.TestCase):
 
 @unittest.skipUnless(FXC and os.path.exists(FXC), 'no fxc.exe (Windows SDK)')
 class Compile(unittest.TestCase):
-    TEXTS = {'g_eyeTlHlsl': 'eye_tl_vs.h', 'g_m5Hlsl': 'mw5.inc', 'g_crHlsl': 'cross.inc'}
+    TEXTS = {'g_eyeTlHlsl': 'eye_tl_vs.h', 'g_m5Hlsl': 'mw5.cpp', 'g_crHlsl': 'cross.cpp'}
 
     def test_all(self):
         for var, entry, target in compile_calls():
@@ -68,7 +68,7 @@ class Compile(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             src = os.path.join(d, 'shader.hlsl')
             with open(src, 'w', encoding='ascii') as f:
-                f.write(hlsl_in('mw5.inc').replace('float4', 'float5', 1))
+                f.write(hlsl_in('mw5.cpp').replace('float4', 'float5', 1))
             r = subprocess.run([FXC, '/nologo', '/T', 'vs_5_0', '/E', 'vs', '/Fo', os.path.join(d, 'x.cso'), src], capture_output=True)
             self.assertNotEqual(r.returncode, 0)
 

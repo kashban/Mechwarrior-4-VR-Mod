@@ -9,7 +9,7 @@ if not exist build\analyze mkdir build\analyze
 set T="--template={file}:{line}: [{severity}/{id}] {message}"
 set COMMON=--platform=win32W --quiet --inline-suppr --suppress=missingIncludeSystem -D_WIN32 -D_MSC_VER=1940 -D_M_IX86
 "%CPPCHECK%" %COMMON% %T% --enable=warning,portability,performance --inconclusive --std=c++17 --language=c++ -Iinclude ^
-   src\main.cpp dinput\dinput.cpp ..\tests\core_test.cpp 2> build\analyze\cppcheck.log
+   src\*.cpp dinput\dinput.cpp ..\tests\core_test.cpp 2> build\analyze\cppcheck.log
 "%CPPCHECK%" %COMMON% %T% --enable=warning,portability src\vtidx.c 2>> build\analyze\cppcheck.log
 "%SystemRoot%\System32\find.exe" /c "[" build\analyze\cppcheck.log
 "%SystemRoot%\System32\findstr.exe" /c:"[error/" build\analyze\cppcheck.log && exit /b 1

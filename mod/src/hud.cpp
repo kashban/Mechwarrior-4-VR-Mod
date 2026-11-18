@@ -1,28 +1,29 @@
 // ---------------------------------------------------------------------------------------------
 // HUD layer: while the game draws its top-level "after 3D: HUD, 2D" pass, the frame's render target
 // is replaced by a transparent texture of our own. The eye images then hold the world alone, and
-// the HUD goes to the headset as quads fixed to the mech (vr.inc). Included into main.cpp before
-// the OMSetRenderTargets hooks.
+// the HUD goes to the headset as quads fixed to the mech (vr.cpp).
 
-static volatile bool g_hudLayerOn; // set by vr.inc: tracking at the camera and [vr] hud_layer=1
-static ID3D11Texture2D *g_hudTex;
-static ID3D11RenderTargetView *g_hudRtv;
-static ID3D11RenderTargetView *g_hudFrameRtv; // the game's target, replaced while the HUD pass runs (a reference held)
+#include "mod.h"
+
+volatile bool g_hudLayerOn; // set by vr.cpp: tracking at the camera and [vr] hud_layer=1
+ID3D11Texture2D *g_hudTex;
+ID3D11RenderTargetView *g_hudRtv;
+ID3D11RenderTargetView *g_hudFrameRtv;        // the game's target, replaced while the HUD pass runs (a reference held)
 static ID3D11RenderTargetView *g_hudKnownRtv; // the game's frame target as last seen in a HUD pass (a reference held)
-static UINT g_hudW, g_hudH;
-static unsigned g_hudClearedFrame = ~0u, g_hudDrawnFrame = ~0u;
-static bool g_hudInternal; // our own OMSetRenderTargets calls pass the hook untouched
+UINT g_hudW, g_hudH;
+unsigned g_hudClearedFrame = ~0u, g_hudDrawnFrame = ~0u;
+bool g_hudInternal; // our own OMSetRenderTargets calls pass the hook untouched
 
 // The game lays its HUD out wider than a square picture: the weapon list and the damage display run past
 // the right edge. The layer texture is therefore wider than the frame ([vr] hud_extra_width, 1 = not): a
 // pixel of the game is a pixel of the texture, and what lay beyond the edge is drawn as well - the HUD
-// pass's full viewport is widened and its vertex shaders get the wider picture's 2 / width (main.cpp).
+// pass's full viewport is widened and its vertex shaders get the wider picture's 2 / width (draws.cpp).
 // The depth buffer has the frame's size and cannot go with the wider texture: the HUD is drawn without.
-static UINT g_hudTexW;              // the layer texture's width (>= g_hudW, the frame's)
-static volatile bool g_hudWideLive; // the frame constants are known: the part beyond the edge is drawn
+UINT g_hudTexW;              // the layer texture's width (>= g_hudW, the frame's)
+volatile bool g_hudWideLive; // the frame constants are known: the part beyond the edge is drawn
 static ID3D11DepthStencilView
     *g_hudGameDsv; // what the game wants as depth while the layer is the target (a reference held)
-static UINT hudWideW(UINT w) {
+UINT hudWideW(UINT w) {
     static float k = -1;
     if (k < 0) {
         wchar_t b[64];
@@ -31,10 +32,7 @@ static UINT hudWideW(UINT w) {
     }
     return mcWideWidth(w, k);
 }
-static inline bool hudWide() { return g_hudTexW > g_hudW && g_hudW; }
-// the HUD pass draws into the wider layer texture: its full viewports are as wide
-static inline bool hudWideNow() { return g_inHud && g_hudFrameRtv && hudWide() && g_hudWideLive; }
-static void hudKeepDsv(ID3D11DepthStencilView *dsv) {
+void hudKeepDsv(ID3D11DepthStencilView *dsv) {
     if (dsv) dsv->AddRef();
     if (g_hudGameDsv) g_hudGameDsv->Release();
     g_hudGameDsv = dsv;
@@ -45,13 +43,9 @@ static void hudSetOurs(ID3D11DeviceContext *c, ID3D11DepthStencilView *dsv) {
     c->OMSetRenderTargets(1, &g_hudRtv, hudWide() ? nullptr : dsv);
     g_hudInternal = false;
 }
-// the 'Frame' constants (g_screen = 2 / width, 2 / height, ...) as last written, per buffer
-struct FrameCb {
-    float v[12];
-};
-static std::mutex g_frameCbMx;
-static std::unordered_map<void *, FrameCb> g_frameCb;
-static void frameCbSeen(void *r, const void *p) {
+std::mutex g_frameCbMx;
+std::unordered_map<void *, FrameCb> g_frameCb;
+void frameCbSeen(void *r, const void *p) {
     if (!hudWide() || !p) return;
     const float *f = (const float *)p;
     float ex = 2.0f / g_hudW, ey = 2.0f / g_hudH;
@@ -68,15 +62,10 @@ static void frameCbSeen(void *r, const void *p) {
     g_hudWideLive = true;
 }
 
-// the small cameras drawn into the frame this frame (pixels): a window in the middle of the picture is
-// the zoom window, shown at the cross-hair's depth
-struct HudCamRect {
-    int x, y, w, h;
-};
-static HudCamRect g_hudCams[4];
-static int g_hudCamN;
-static unsigned g_hudCamFrame = ~0u;
-static void hudCamRect(int x, int y, int w, int h) {
+HudCamRect g_hudCams[4];
+int g_hudCamN;
+unsigned g_hudCamFrame = ~0u;
+void hudCamRect(int x, int y, int w, int h) {
     if (g_hudCamFrame != g_frame) {
         g_hudCamFrame = g_frame;
         g_hudCamN = 0;
@@ -96,7 +85,7 @@ static void hudCamRect(int x, int y, int w, int h) {
     }
 }
 
-static void hudBegin(ID3D11DeviceContext *c) {
+void hudBegin(ID3D11DeviceContext *c) {
     if (!g_hudLayerOn || !g_dev || !c || g_hudFrameRtv) return;
     ID3D11RenderTargetView *rtv = nullptr;
     ID3D11DepthStencilView *dsv = nullptr;
@@ -157,7 +146,7 @@ static void hudBegin(ID3D11DeviceContext *c) {
 
 // a small camera drawn into the frame (the zoom window, the target's view): from now until hudEnd the
 // frame target is ours wherever the game sets it
-static void hudBeginKnown(ID3D11DeviceContext *c) {
+void hudBeginKnown(ID3D11DeviceContext *c) {
     if (!g_hudLayerOn || !c || g_hudFrameRtv || !g_hudKnownRtv || !g_hudRtv) return;
     if (g_hudClearedFrame != g_frame) {
         const float zero[4] = {0, 0, 0, 0};
@@ -178,7 +167,7 @@ static void hudBeginKnown(ID3D11DeviceContext *c) {
     if (dsv) dsv->Release();
 }
 
-static void hudEnd(ID3D11DeviceContext *c) {
+void hudEnd(ID3D11DeviceContext *c) {
     if (!g_hudFrameRtv || !c) return;
     ID3D11RenderTargetView *cur = nullptr;
     ID3D11DepthStencilView *dsv = nullptr;
@@ -196,17 +185,12 @@ static void hudEnd(ID3D11DeviceContext *c) {
     frame->Release();
 }
 
-// the game sets its frame target again inside the HUD pass: ours instead
-static inline ID3D11RenderTargetView *hudSwap(ID3D11RenderTargetView *v) {
-    return (g_hudFrameRtv && !g_hudInternal && v == g_hudFrameRtv && g_hudRtv) ? g_hudRtv : v;
-}
-
 // both eyes per frame: after a camera's Draw the frame holds that eye's picture (before the HUD and the
 // output's gamma); it is copied to a texture of that eye
-static ID3D11Texture2D *g_eyeTex[2];
-static unsigned g_eyeTexFrame[2] = {~0u, ~0u};
-static UINT g_eyeTexW, g_eyeTexH;
-static bool eyeGrab(int e) {
+ID3D11Texture2D *g_eyeTex[2];
+unsigned g_eyeTexFrame[2] = {~0u, ~0u};
+UINT g_eyeTexW, g_eyeTexH;
+bool eyeGrab(int e) {
     if (!g_hudKnownRtv || !g_dev || !g_imm) return false;
     ID3D11Resource *res = nullptr;
     g_hudKnownRtv->GetResource(&res);

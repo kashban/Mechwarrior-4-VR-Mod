@@ -7,7 +7,7 @@ The windows (seconds of the plan, from a key going down to the next thing) say w
 there: the mech walks, it fires, the camera is outside, the paused battle's menu is up, the options' screen is
 open (reached from that menu; it is a screen of its own, one flat picture), our cockpit is switched off.
 
-The mod writes a line for every frame to mw4vr_e2e.csv while a test runs (mod/src/e2e.inc): the time, both eyes'
+The mod writes a line for every frame to mw4vr_e2e.csv while a test runs (mod/src/e2e.cpp): the time, both eyes'
 mean colours, whether the camera sits in the mech, whether a cockpit of ours is drawn, the head's turn the plan
 asked for, and the cockpit's sway. This script reads it and the mod's log and says what is wrong.
 Exit code: 0 all checks passed, 1 at least one failed, 2 the files could not be read.

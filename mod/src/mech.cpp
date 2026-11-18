@@ -10,42 +10,33 @@
 // panels' place. A cockpit set by hand (a hot key, or Ctrl+F10 "this one fits") is "tuned"; one
 // that is not gets its values from the tuned ones by its measures (the console at the same
 // apparent distance, the panels as high above it and as far from the window's middle).
-// The seat is kept twice: for the game's cockpit, and for a cockpit of our own (mw5.inc) once it was set in one -
+// The seat is kept twice: for the game's cockpit, and for a cockpit of our own (mw5.cpp) once it was set in one -
 // the two meshes are not alike, a seat that fits the one does not fit the other.
-// Included into main.cpp before the draw hooks; vr.inc applies and stores the values.
+// vr.cpp applies and stores the values.
 
-static volatile bool g_mechOn;          // [vr] mech_profiles=1
-static volatile bool g_mechAuto = true; // [vr] mech_auto_fit=1
-enum { MG_AZ = 20, MG_EL = 18, MG_N = MG_AZ * MG_EL, MG_SAMPLES = 15, MECH_MAX = 64 };
+#include "mod.h"
+
+volatile bool g_mechOn;          // [vr] mech_profiles=1
+volatile bool g_mechAuto = true; // [vr] mech_auto_fit=1
 static const float MG_AZ0 = -40.0f, MG_EL0 = -48.0f, MG_STEP = 4.0f;
 static float g_mgFrame[MG_N]; // this frame's grid (metres, 0 = nothing)
 static int g_mgTris, g_mgBad, g_mgDraws;
 static float g_mgSamples[MG_SAMPLES][MG_N];
 static int g_mgSampleN;
-static bool g_mechSearching;       // samples are being collected
-static McSeat g_mechSeat;          // seen from outside (third person)? (core.h)
-static int g_mechCkTris;           // triangles of the game's cockpit in this frame's left-eye pass
-static bool g_mechMw5;             // a cockpit of our own is in use (mw5.inc tells): its seat counts
-static bool g_mechSeated;          // the game draws its cockpit: the camera sits in the mech (not a mission's intro)
-static unsigned g_mechBattleFrame; // the battle's first frame
-static unsigned g_mechNextFrame;   // the next frame to measure
+bool g_mechSearching;            // samples are being collected
+McSeat g_mechSeat;               // seen from outside (third person)? (core.h)
+static int g_mechCkTris;         // triangles of the game's cockpit in this frame's left-eye pass
+bool g_mechMw5;                  // a cockpit of our own is in use (mw5.cpp tells): its seat counts
+bool g_mechSeated;               // the game draws its cockpit: the camera sits in the mech (not a mission's intro)
+unsigned g_mechBattleFrame;      // the battle's first frame
+static unsigned g_mechNextFrame; // the next frame to measure
 static unsigned g_mechLastCamFrame = ~0u;
 
-struct MechProfile {
-    wchar_t name[48];
-    wchar_t model[32]; // the mech's folder in the game's files ("catapult"); empty: not known yet
-    float sig[MG_N];
-    bool tuned;
-    float cockpitScale, seatFwd, seatUp, panelX, panelY, panelDist, panelScale;
-    bool seat5;              // the seat was set in a cockpit of our own
-    float seat5Fwd, seat5Up; // that seat
-    float dash, top, centre; // console distance (m), its top (degrees), the window's middle (degrees)
-};
-static MechProfile g_mechs[MECH_MAX];
-static int g_mechN, g_mechCur = -1;
+MechProfile g_mechs[MECH_MAX];
+int g_mechN, g_mechCur = -1;
 static bool g_mechLoaded;
 
-static std::wstring mechIni() { return g_dir + L"mw4vr_mechs.ini"; }
+std::wstring mechIni() { return g_dir + L"mw4vr_mechs.ini"; }
 
 static float mechGetF(const wchar_t *sec, const wchar_t *key, float def) {
     wchar_t b[64];
@@ -157,7 +148,7 @@ static void mechLoad() {
 }
 
 // the values of a profile set by hand are read again (they can be edited while playing)
-static void mechReload(int i) {
+void mechReload(int i) {
     if (i < 0 || i >= g_mechN) return;
     wchar_t sec[32];
     swprintf(sec, 32, L"mech_%d", i + 1);
@@ -452,12 +443,8 @@ static int mgRead(const uint8_t *vbase, UINT vbytes, UINT stride, UINT voff, INT
     return found;
 }
 
-typedef HRESULT(STDMETHODCALLTYPE *MechPFN_Map)(ID3D11DeviceContext *, ID3D11Resource *, UINT, D3D11_MAP, UINT,
-                                                D3D11_MAPPED_SUBRESOURCE *);
-typedef void(STDMETHODCALLTYPE *MechPFN_Unmap)(ID3D11DeviceContext *, ID3D11Resource *, UINT);
-
 // a CPU-path draw of an eye's pass of the main camera. Returns how many triangles of the game's cockpit it draws.
-static int mechDraw(ID3D11DeviceContext *c, bool indexed, UINT count, UINT start, INT baseV, bool collect) {
+int mechDraw(ID3D11DeviceContext *c, bool indexed, UINT count, UINT start, INT baseV, bool collect) {
     if (count < 3 || count > 200000 || !(g_P00 > 0) || !(g_P11 > 0)) return 0;
     D3D11_PRIMITIVE_TOPOLOGY topo = D3D11_PRIMITIVE_TOPOLOGY_UNDEFINED;
     c->IAGetPrimitiveTopology(&topo);
@@ -500,9 +487,6 @@ static int mechDraw(ID3D11DeviceContext *c, bool indexed, UINT count, UINT start
     if (g_camPassEye == 0) g_mechCkTris += found;
     return found;
 }
-
-// (in every frame: the sway is measured from the cockpit's vertices, and they tell whether the camera sits in the mech)
-static inline bool mechMeasuring() { return g_camInMain && (g_camPassEye == 0 || g_camPassEye == 1); }
 
 // ---- once per frame (from vrOnPresent) -------------------------------------------------------
 
@@ -588,7 +572,7 @@ static void mechIdentify() {
 }
 
 // inBattle: the main camera is drawn with head tracking; zoomed: its projection is not the wide one
-static void mechOnPresent(bool inBattle, bool zoomed) {
+void mechOnPresent(bool inBattle, bool zoomed) {
     bool measured = g_mechMeasure;
     g_mechMeasure = false;
     bool cockpitNow = swvOnPresent();
@@ -695,13 +679,10 @@ static void mechOnPresent(bool inBattle, bool zoomed) {
 
 // ---- the values in use -----------------------------------------------------------------------
 
-struct MechValues {
-    float cockpitScale, seatFwd, seatUp, panelX, panelY, panelDist, panelScale;
-};
 static inline float mechClamp(float v, float a, float b) { return v < a ? a : (v > b ? b : v); }
 
 // g: the [vr] values; out: what this cockpit gets. false: the [vr] values stay
-static bool mechValues(const MechValues &g, MechValues *out, const char **how) {
+bool mechValues(const MechValues &g, MechValues *out, const char **how) {
     if (!g_mechOn || g_mechCur < 0 || g_mechCur >= g_mechN) return false;
     const MechProfile &p = g_mechs[g_mechCur];
     if (p.tuned) {
@@ -743,7 +724,7 @@ static bool mechValues(const MechValues &g, MechValues *out, const char **how) {
 }
 
 // the values in use become this cockpit's own ("set by hand"); false: no cockpit is known now
-static bool mechStore(const MechValues &v) {
+bool mechStore(const MechValues &v) {
     if (!g_mechOn || g_mechCur < 0 || g_mechCur >= g_mechN) return false;
     wchar_t sec[32];
     swprintf(sec, 32, L"mech_%d", g_mechCur + 1);

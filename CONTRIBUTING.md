@@ -41,7 +41,7 @@ tools\security\binskim.bat                         the DLLs' hardening
 - **Tests are not rewritten along with the code they test.** A change that tidies code leaves its tests as they
   are, so a change of behaviour shows; new tests are welcome. A change of behaviour says so and changes the test
   that held the old one.
-- **Offsets and addresses** of the game and of mw4hook live in `mw4hook_abi.inc` and nowhere else.
+- **Offsets and addresses** of the game and of mw4hook live in `mw4hook_abi.h` and nowhere else.
 - **Releases** are made by the pipeline from a tag `v<version>` that equals the version in `mod/src/main.cpp`.
   Tags are never moved or deleted.
 

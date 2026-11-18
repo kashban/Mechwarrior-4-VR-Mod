@@ -9,7 +9,8 @@ getting something wrong about this project.
 - `mod/src`: one 32-bit `d3d11.dll` (C++, MSVC x86) that the game
   MechWarrior 4: Mercenaries loads in place of the system's and that passes every call on to the real one. It sits
   behind another author's renderer mod (`mw4hook.dll`, MW4Engine DX11) and hooks that mod's Direct3D 11 calls.
-  `main.cpp` includes the `.inc` files; they are parts of one translation unit, not headers of their own.
+  Every part is a unit of its own (`x.cpp`) with a header (`x.h`) of what the other units use; `mod.h` includes
+  all headers in the order in which they build on each other, and every unit includes `mod.h`.
 - `mod/src/core.h`: the arithmetic (matrices, frustum planes, HUD rectangles) as plain functions without Windows
   headers, so `tests/core_test.cpp` can test them alone.
 - OpenXR session on the game's own device; every frame is drawn twice, once per eye.
@@ -22,7 +23,7 @@ getting something wrong about this project.
 ## Facts the review must not get wrong
 
 - The game is a 32-bit process: pointers are 4 bytes, `size_t` is 32 bits. Offsets into the game's or the hook's
-  memory are for exactly one build of `mw4hook.dll`; `mw4hook_abi.inc` checks that build and switches those
+  memory are for exactly one build of `mw4hook.dll`; `mw4hook_abi.cpp` checks that build (the facts are in `mw4hook_abi.h`) and switches those
   parts off for any other. Hard-coded offsets there are intended.
 - `core.h`'s matrices are 3 rows of 4 floats (the rows: the axes x, y, z; the fourth column: the translation).
   HLSL constant buffers are filled by hand as `float` arrays, so a buffer's size and each index in it must match

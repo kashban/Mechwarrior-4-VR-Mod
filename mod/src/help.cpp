@@ -1,15 +1,17 @@
 // ---------------------------------------------------------------------------------------------
 // Ctrl+F1 in a battle: the mod's keys as a page in the headset, the game waiting behind it.
 // The page is drawn with GDI into a bitmap and put into the far middle of the HUD layer's picture
-// (as note.inc does with its line). While it shows, Present does not return: the same frame is
+// (as note.cpp does with its line). While it shows, Present does not return: the same frame is
 // handed to the headset again and again, so the game does nothing - and so that it does not see
 // one very long frame afterwards, the clock functions the game and mw4hook call are wrapped and
 // the time the page was up is taken off what they return ([vr] help_pause=0: the game goes on
 // behind the page; help_clock=0: the clocks are left alone).
-// Included into main.cpp before vr.inc; helpPause() is called from onPresent.
+// helpPause() is called from onPresent.
 
-static volatile bool g_helpOn;
-static bool g_helpPause = true, g_helpClock = true;
+#include "mod.h"
+
+volatile bool g_helpOn;
+bool g_helpPause = true, g_helpClock = true;
 static int g_helpSize = 60; // [vr] help_size: the page's size, per cent of the far middle of the HUD's picture
 static std::vector<uint32_t> g_helpBits; // BGRA, top row first
 static UINT g_helpW, g_helpH;
@@ -130,8 +132,7 @@ static void helpBuild(UINT w, UINT h) {
 }
 
 // into the HUD layer's picture tex (w x h used of it), while the page is up: its far middle
-static void helpDraw(ID3D11DeviceContext *ctx, ID3D11Texture2D *tex, UINT w, UINT h, float L, float R, float T,
-                     float B) {
+void helpDraw(ID3D11DeviceContext *ctx, ID3D11Texture2D *tex, UINT w, UINT h, float L, float R, float T, float B) {
     if (!g_helpOn || !ctx || !tex || w < 400 || h < 400) return;
     float part = g_helpSize / 100.0f; // of the far middle's width and height
     UINT bw = (UINT)((R - L) * w * part) & ~1u, bh = (UINT)((B - T) * h * part) & ~1u;
@@ -150,8 +151,8 @@ typedef BOOL(WINAPI *HelpPFN_Qpc)(LARGE_INTEGER *);
 typedef DWORD(WINAPI *HelpPFN_Ms)(void);
 static HelpPFN_Qpc g_helpQpc;
 static HelpPFN_Ms g_helpTgt, g_helpGtc;
-static volatile LONGLONG g_helpOffQpc; // what the page's time adds up to, in the counter's units
-static volatile DWORD g_helpOffMs;     // and in milliseconds
+volatile LONGLONG g_helpOffQpc; // what the page's time adds up to, in the counter's units
+volatile DWORD g_helpOffMs;     // and in milliseconds
 static BOOL WINAPI helpW_Qpc(LARGE_INTEGER *p) {
     BOOL r = g_helpQpc(p);
     if (r && p) p->QuadPart -= g_helpOffQpc;
@@ -201,7 +202,7 @@ static int helpClockModule(HMODULE m) {
 }
 
 // once, in the first battle frame (the game is unpacked and mw4hook loaded by then)
-static void helpClocks() {
+void helpClocks() {
     static bool done;
     if (done) return;
     done = true;
@@ -225,7 +226,7 @@ static void helpClocks() {
 // our dinput.dll, if it is the one loaded). The releases stay, so no key the game knew as held stays held -
 // only in DirectInput's buffer they go too: a key held before the page and let go while it was up counts as
 // held until it is pressed again.
-static void helpForgetKeys() {
+void helpForgetKeys() {
     MSG m, ups[64];
     int n = 0, dropped = 0;
     for (int i = 0; i < 4096 && PeekMessageW(&m, nullptr, WM_KEYFIRST, WM_KEYLAST, PM_REMOVE); ++i) {
@@ -248,7 +249,7 @@ static void helpForgetKeys() {
 }
 
 // Ctrl+F1, once a frame: the page on / off (on only in a battle, where it can be seen); Esc closes it too
-static void helpKey(bool battle) {
+void helpKey(bool battle) {
     static bool was, wasEsc;
     bool down = (GetAsyncKeyState(VK_CONTROL) & 0x8000) && !(GetAsyncKeyState(VK_MENU) & 0x8000) &&
                 (GetAsyncKeyState(VK_F1) & 0x8000);

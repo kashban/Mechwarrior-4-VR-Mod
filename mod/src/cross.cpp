@@ -1,12 +1,13 @@
 // ---------------------------------------------------------------------------------------------
-// The cross-hair's part of the HUD picture, split by colour (vr.inc, vrCrossImage). The cross-hair with its
+// The cross-hair's part of the HUD picture, split by colour (vr.cpp, vrCrossImage). The cross-hair with its
 // pitch scale and weapon groups is green, its range yellow; a target's mark is red or blue. The smaller cross-hair
 // is a layer of its own - with the whole part in it a target's mark became smaller too and left its target. So:
 // what is green goes into the cross-hair's image (with the range's yellow text and the dark inside of the green
 // boxes), what is red or blue stays in the HUD's image, where it was.
 // Two passes of one triangle over the part; the device context's state is put back. The calls that the mod hooks
 // go to the runtime's own functions, so the mod's book-keeping of the game's state stays as it is.
-// Included into main.cpp after the hooks of the context's methods.
+
+#include "mod.h"
 
 typedef void(STDMETHODCALLTYPE *CrPFN_Viewports)(ID3D11DeviceContext *, UINT, const D3D11_VIEWPORT *);
 typedef void(STDMETHODCALLTYPE *CrPFN_Draw)(ID3D11DeviceContext *, UINT, UINT);
@@ -175,8 +176,8 @@ static void crDraw3(ID3D11DeviceContext *c, UINT first) {
 
 // part: the cross-hair's part of the HUD picture (w x h), readable by a shader. crossTex: the cross-hair's image
 // (w x h). hudTex: the HUD layer's image; the part lies at x0, y0 in it. fmt: both images' format.
-static bool crossSplit(ID3D11DeviceContext *c, ID3D11ShaderResourceView *part, ID3D11Texture2D *crossTex,
-                       ID3D11Texture2D *hudTex, UINT x0, UINT y0, UINT w, UINT h, DXGI_FORMAT fmt) {
+bool crossSplit(ID3D11DeviceContext *c, ID3D11ShaderResourceView *part, ID3D11Texture2D *crossTex,
+                ID3D11Texture2D *hudTex, UINT x0, UINT y0, UINT w, UINT h, DXGI_FORMAT fmt) {
     if (g_crState == 0) {
         g_crState = crCreate() ? 1 : -1;
         logf(g_crState == 1

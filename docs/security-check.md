@@ -1,7 +1,9 @@
 # Security check of the mod's code
 
 The findings below are of v11.59 (`cc3f5b0`). **All of them are dealt with in v11.70** - what was done is in the
-table; the text of each finding stays as it was found.
+table; the text of each finding stays as it was found. The files and lines named are those of v11.59 too: since
+the code was split into units, `x.inc` is `x.cpp`, and what was in `main.cpp` is in `base.cpp`, `state.cpp`,
+`view.cpp`, `hooks.cpp`, `draws.cpp` and `main.cpp`.
 
 | | Finding | Done in v11.70 |
 |---|---|---|

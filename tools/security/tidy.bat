@@ -10,7 +10,8 @@ if not exist build\analyze mkdir build\analyze
 set OUT=build\analyze
 rem The checks, and why some are off: .clang-tidy in the repository's root. Exit code 1: something was found.
 set ARGS=--target=i686-pc-windows-msvc -fms-compatibility -fms-extensions -D_CRT_SECURE_NO_WARNINGS -Iinclude -w
-"%TIDY%" --quiet --config-file=..\.clang-tidy --header-filter=mod.src.* src\main.cpp -- -std=c++17 %ARGS% > %OUT%\tidy.log 2>&1
+type nul > %OUT%\tidy.log
+for %%f in (src\*.cpp) do "%TIDY%" --quiet --config-file=..\.clang-tidy --header-filter=mod.src.* %%f -- -std=c++17 %ARGS% >> %OUT%\tidy.log 2>&1
 "%TIDY%" --quiet --config-file=..\.clang-tidy src\vtidx.c -- %ARGS% >> %OUT%\tidy.log 2>&1
 "%TIDY%" --quiet --config-file=..\.clang-tidy dinput\dinput.cpp -- -std=c++17 %ARGS% >> %OUT%\tidy.log 2>&1
 "%SystemRoot%\System32\find.exe" /c "warning:" %OUT%\tidy.log

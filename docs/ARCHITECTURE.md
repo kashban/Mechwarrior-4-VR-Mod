@@ -20,39 +20,50 @@ Nothing of the game or of mw4hook is changed on disk. In memory the mod patches 
 
 ## A frame
 
-1. The game calls its camera (`CameraElement::Draw`). The mod has redirected that call (`cam.inc`): it runs the
+1. The game calls its camera (`CameraElement::Draw`). The mod has redirected that call (`cam.cpp`): it runs the
    camera twice, once for each eye, each time with the camera's matrix moved by that eye's pose in the headset.
    mw4hook culls, lights and draws the world from there, so everything follows the head.
-2. While an eye's pass runs, the mod sees every draw (`main.cpp`, the hooks). Draws of the game's old
+2. While an eye's pass runs, the mod sees every draw (`draws.cpp`). Draws of the game's old
    "CPU path" (vertices already transformed: the cockpit) get a replacement shader, and where the game draws its
-   cockpit the mod draws a cockpit mesh of its own instead (`mw5.inc`).
-3. After each pass the picture is copied to that eye's texture (`hud.inc`, `eyeGrab`).
+   cockpit the mod draws a cockpit mesh of its own instead (`mw5.cpp`).
+3. After each pass the picture is copied to that eye's texture (`hud.cpp`, `eyeGrab`).
 4. The game draws its HUD. The mod has replaced the render target for that pass with a transparent texture of
-   its own (`hud.inc`), so the eyes' pictures hold the world alone.
-5. At `Present` (`vr.inc`, `vrOnPresent`) the two eye textures go to the headset as a projection layer, and the
+   its own (`hud.cpp`), so the eyes' pictures hold the world alone.
+5. At `Present` (`vr.cpp`, `vrOnPresent`) the two eye textures go to the headset as a projection layer, and the
    HUD's texture as flat layers fixed to the mech: parts of it on the cockpit's monitors and glass, the cross-hair
    far ahead. Then the head's pose for the next frame is asked for.
 
 ## The files
 
-All of `mod/src` is one translation unit: `main.cpp` includes the `.inc` files in an order that matters (each
-says at its top what must come before it). They share globals; all drawing happens on the game's one render
-thread, so those are not locked. Splitting them into units of their own is planned work.
+Every part of the mod is a unit of its own in `mod/src`: `x.cpp`, and `x.h` with what the other units use of it -
+types, the variables they share (`extern`), functions. What a unit keeps to itself is `static` in its `.cpp`.
+`mod.h` includes the system's headers, `core.h` and every unit's header in the order in which they build on each
+other; each unit includes `mod.h` and nothing else. (So a header is not meant to be included alone.)
 
-| File | What it holds |
+The units share state through those variables: what the game has bound, which eye a pass is for, the head's pose.
+All drawing happens on the game's one render thread, so that state is not locked; what other threads touch (the
+log, the shaders' table, the contexts' table) has a mutex. The build optimises across the units at link time
+(`/GL`, `/LTCG`), so a call between two of them costs what a call inside one file costs.
+
+| Unit | What it holds |
 |---|---|
-| `main.cpp` | The proxy (`D3D11CreateDevice` and friends), the hooks of the device's and the context's methods, the book-keeping of what the game has bound (shaders, constant buffers, render targets), the log. |
-| `mw4hook_abi.inc` | Everything known about the insides of `mw4hook.dll` and `MW4Mercs.exe`: addresses, offsets, shader hashes, label names - and the check that the builds are the known ones. A new build of either means changes here only. |
+| `main` | The DLL's entry points (`DllMain`, `D3D11CreateDevice` as the game calls it), which methods of a device and a context are hooked, the hooks of mw4hook's annotation labels, of the swap chain and of the mouse. |
+| `base` | The ground the others stand on: the log, the real `d3d11.dll` and the exports passed through, the patching of vtable slots, what is known of every shader. |
+| `state` | What the game has done so far, per device context: what is bound (shaders, constant buffers, render targets), which label it is inside. |
+| `view` | The renderer's constant buffer 'View': the projection and the camera's axes read from it, which eye a frame is for; the capture of one frame for diagnosis. |
+| `hooks` | The hooks of the device's and the context's methods, and what happens at `Present`. |
+| `draws` | The draw calls, hooked in Direct3D's own code: the replacement shader for the CPU path, the HUD's wide pass, the pause sheet; the hooks of render targets and viewports. |
+| `mw4hook_abi` | Everything known about the insides of `mw4hook.dll` and `MW4Mercs.exe`: addresses, offsets, shader hashes, label names (all in the header) - and the check that the builds are the known ones. A new build of either means changes here only. |
 | `core.h` | The arithmetic and the decisions, free of Windows and the game: matrices, frustum planes, which part of the HUD goes where, what a cockpit file may hold. **The only part the tests can reach** - what can be decided without Direct3D belongs here. |
-| `head.inc` | The head's pose as a change of the camera. |
-| `cam.inc` | The camera hook: both eyes drawn in every frame. |
-| `mech.inc` | Which mech's cockpit this is (a profile for each), the cockpit's sway with the mech's steps, whether the camera sits in the mech or looks at it from outside. |
-| `hud.inc` | The HUD pass drawn into a texture of our own; the eyes' textures. |
-| `vr.inc` | OpenXR: the session, the swap chains, the layers of a frame, the settings in `mw4vr.ini`, the hot keys for seat and sizes. |
-| `mw5.inc` | A cockpit mesh of our own (`.mwc`): loading, drawing, its monitors, the HUD's parts on its glass, the hot keys that place them. |
-| `cross.inc` | The cross-hair taken out of the HUD's picture by its colour, as a layer of its own. |
-| `sway.inc`, `note.inc`, `help.inc`, `shot.inc` | The sway's values for its users; a line of text in the headset; the page of keys (Ctrl+F1); pictures for diagnosis (Ctrl+F12). |
-| `e2e.inc` | The test mode for the end-to-end test: only with `MW4VR_E2E` set, plays a plan of keys and records every frame. |
+| `head` | The head's pose as a change of the camera. |
+| `cam` | The camera hook: both eyes drawn in every frame. |
+| `mech` | Which mech's cockpit this is (a profile for each), the cockpit's sway with the mech's steps, whether the camera sits in the mech or looks at it from outside. |
+| `hud` | The HUD pass drawn into a texture of our own; the eyes' textures. |
+| `vr` | OpenXR: the session, the swap chains, the layers of a frame, the settings in `mw4vr.ini`, the hot keys for seat and sizes. |
+| `mw5` | A cockpit mesh of our own (`.mwc`): loading, drawing, its monitors, the HUD's parts on its glass, the hot keys that place them. |
+| `cross` | The cross-hair taken out of the HUD's picture by its colour, as a layer of its own. |
+| `sway`, `note`, `help`, `shot` | The sway's values for its users; a line of text in the headset; the page of keys (Ctrl+F1); pictures for diagnosis (Ctrl+F12). |
+| `e2e` | The test mode for the end-to-end test: only with `MW4VR_E2E` set, plays a plan of keys and records every frame. |
 | `eye_tl_vs.hlsl` / `.h` | The replacement vertex shader for the CPU path. |
 | `vtidx.c` | The positions of methods in Direct3D's vtables, taken from the SDK's own C declarations. |
 | `mod/dinput/dinput.cpp` | A second, small DLL: `dinput.dll` in front of the system's, which leaves out one class of devices that crashes the game on some PCs. |
@@ -62,11 +73,11 @@ thread, so those are not locked. Splitting them into units of their own is plann
 - **The proxy.** The DLL exports what `d3d11.dll` exports and loads the real one from the system folder by its full
   path. The device and context it hands back are the real ones.
 - **Vtable hooks.** For the device and each context, slots of the vtable are replaced by the mod's functions
-  (`main.cpp`), which do their work and call the original.
+  (`hooks.cpp`, installed in `main.cpp`), which do their work and call the original.
 - **Hot patches.** mw4hook rewrites some vtable slots itself, so for the draw calls the mod patches the first
   bytes of Direct3D's own functions instead (`HP_Draw` and its siblings).
-- **Two patches in the game and mw4hook.** The camera's call (`cam.inc`) and the clocks while the help page is up
-  (`help.inc`). Both check the bytes they expect before they write, and both are switched off for a build that is
+- **Two patches in the game and mw4hook.** The camera's call (`cam.cpp`) and the clocks while the help page is up
+  (`help.cpp`). Both check the bytes they expect before they write, and both are switched off for a build that is
   not the known one.
 
 Every patch makes its bytes writable, writes, and puts the protection back.
@@ -97,7 +108,7 @@ trusted: sizes, counts and names are checked before they are used (`core.h`: `mc
 - `tests/mutate.py` plants errors into `core.h` and the converter and expects a test to fail for each
   (`tests/mutation_floor.json`: both at 100 %, and the floors only rise).
 - What needs the game, a headset or Direct3D is not reached by those. For that there is an end-to-end test
-  (`tools/e2e/run.ps1`): it starts the game with `MW4VR_E2E` set to a plan, the mod (`e2e.inc`) plays the plan's
+  (`tools/e2e/run.ps1`): it starts the game with `MW4VR_E2E` set to a plan, the mod (`e2e.cpp`) plays the plan's
   keys and writes a record of every frame, and `tools/e2e/judge.py` judges that record. It needs the game, the
   cockpits and an awake headset, so it runs on a developer's PC and not in the pipeline. Without `MW4VR_E2E` the
   test mode does nothing.

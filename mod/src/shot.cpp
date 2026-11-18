@@ -3,11 +3,13 @@
 // they are handed to the runtime, and the HUD layer's image, as .bmp into mw4vr_shots\.
 // Ctrl+F12: one picture at full size. Ctrl+Shift+F12: a series, every 4th frame for about 5 s,
 // each eye at most 720 pixels wide (again to stop). The file names carry the frame number the
-// log counts with. Included into main.cpp after mech.inc and hud.inc, before vr.inc.
+// log counts with.
+
+#include "mod.h"
 
 static ID3D11Texture2D *g_shotStage;
 static D3D11_TEXTURE2D_DESC g_shotStageD;
-static int g_shotOne;    // a single picture is due
+int g_shotOne;           // a single picture is due
 static int g_shotSeries; // frames of the series left
 static unsigned g_shotCount;
 
@@ -30,8 +32,8 @@ static inline uint8_t shotLin(float v) { // linear light -> display
 
 // the texture's pixels, every step-th of them, as BGR rows top-down into out (appended at column x0 of a
 // picture ow wide: out must hold ow * (height / step) * 3 bytes); false: this format is not read
-static bool shotRead(ID3D11DeviceContext *ctx, ID3D11Texture2D *src, UINT step, uint8_t *out, UINT ow, UINT x0, UINT w,
-                     UINT h) {
+bool shotRead(ID3D11DeviceContext *ctx, ID3D11Texture2D *src, UINT step, uint8_t *out, UINT ow, UINT x0, UINT w,
+              UINT h) {
     D3D11_TEXTURE2D_DESC d;
     src->GetDesc(&d);
     if (d.SampleDesc.Count != 1) return false;
@@ -137,7 +139,7 @@ static bool shotSave(ID3D11DeviceContext *ctx, ID3D11Texture2D *a, ID3D11Texture
 }
 
 // hot keys; once a frame
-static void shotKeys() {
+void shotKeys() {
     static bool was;
     bool down = (GetAsyncKeyState(VK_CONTROL) & 0x8000) && (GetAsyncKeyState(VK_F12) & 0x8000);
     if (down && !was) {
@@ -153,8 +155,8 @@ static void shotKeys() {
 }
 
 // with the frame's pictures at hand: l / r this frame's eyes (r null: one picture for both, in l), hud or null
-static void shotFrame(ID3D11DeviceContext *ctx, ID3D11Texture2D *l, ID3D11Texture2D *r, ID3D11Texture2D *hud,
-                      const char *what) {
+void shotFrame(ID3D11DeviceContext *ctx, ID3D11Texture2D *l, ID3D11Texture2D *r, ID3D11Texture2D *hud,
+               const char *what) {
     bool one = g_shotOne != 0, ser = false;
     if (g_shotSeries > 0) {
         ser = (g_shotSeries % 4) == 0;

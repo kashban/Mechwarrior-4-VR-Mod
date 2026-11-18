@@ -5,22 +5,24 @@
 // is moved by the head pose of the eye this frame is for; mw4hook then culls, lights and draws the
 // world from there, so everything follows (terrain, shadows, effects, the cockpit, the target marks).
 // The axes of the game's camera space are matched to the view space (x right, y up, z forward) once
-// by comparing the matrix with g_vWorldToClip of the same frame. Included into main.cpp after head.inc.
+// by comparing the matrix with g_vWorldToClip of the same frame.
 
-static const uintptr_t CAM_DRAW = GM_CAMERA_DRAW; // CameraElement::Draw (mw4hook_abi.inc)
+#include "mod.h"
+
+static const uintptr_t CAM_DRAW = GM_CAMERA_DRAW; // CameraElement::Draw (mw4hook_abi.h)
 static void *g_camOrig;                           // where its jmp went (mw4hook's detour)
-static volatile bool g_camHooked, g_srcCam;       // hook installed; [vr] source_camera=1
-static float g_camA[9];                           // view-space basis vectors in camera-local coordinates (columns)
-static volatile bool g_camCal;                    // g_camA known
+volatile bool g_camHooked, g_srcCam;              // hook installed; [vr] source_camera=1
+float g_camA[9];                                  // view-space basis vectors in camera-local coordinates (columns)
+volatile bool g_camCal;                           // g_camA known
 static float g_camLast[12];                       // the main camera's matrix as the game left it (this frame)
 static unsigned g_camLastFrame = ~0u;
 static void *g_camMain;                       // the main camera's object
 static float g_camWritten[12], g_camBase[12]; // what we wrote last time, and the game's matrix under it
-static volatile int g_camEye = -1;            // the eye the main camera was moved for, this frame
-static unsigned g_camEyeFrame = ~0u;
+volatile int g_camEye = -1;                   // the eye the main camera was moved for, this frame
+unsigned g_camEyeFrame = ~0u;
 static volatile LONG g_statCamMoves, g_statCamCalls;
-static float g_camEyeBase[2][12]; // the game's matrix under each eye's latest image
-static bool g_camEyeBaseOk[2];
+float g_camEyeBase[2][12]; // the game's matrix under each eye's latest image
+bool g_camEyeBaseOk[2];
 enum { CAM_ANC = 5 };
 static float g_camAnc[CAM_ANC][12]; // the camera element's ancestors' local -> world matrices, this frame
 static uint8_t *g_camAncPtr[CAM_ANC];
@@ -40,7 +42,7 @@ static bool camIsMain(uint8_t *cam) {
 
 // called from eyeLearnLayout with a fresh, unmoved g_vWorldToClip: which camera-local axis is
 // right, up and forward
-static void camCalibrate() {
+void camCalibrate() {
     if (g_camCal) return;
     if (g_camLastFrame != g_frame || !g_haveRight || g_P11 <= 0) {
         static unsigned logs;
@@ -89,19 +91,18 @@ static void camCalibrate() {
          ax[2], m[3], m[7], m[11]);
 }
 
-static volatile bool g_camInMain;         // the main camera is being drawn (its projection is the one to learn)
-static volatile bool g_doubleDraw = true; // [vr] double_draw: the main camera drawn once per eye in every frame
-static volatile LONG g_tonemapCount;      // "tonemap into the frame" labels seen (the camera's picture is in the frame)
-static unsigned g_camBothFrame = ~0u;     // the frame both eyes were drawn in
-static bool eyeGrab(int e);               // hud.inc: the frame as it is -> this eye's texture
+volatile bool g_camInMain;         // the main camera is being drawn (its projection is the one to learn)
+volatile bool g_doubleDraw = true; // [vr] double_draw: the main camera drawn once per eye in every frame
+volatile LONG g_tonemapCount;      // "tonemap into the frame" labels seen (the camera's picture is in the frame)
+unsigned g_camBothFrame = ~0u;     // the frame both eyes were drawn in
 
 // diagnosis: the annotation labels inside the main camera's Draw, for each eye's pass of one frame,
 // written to mw4vr_labels.txt (Ctrl+F9, and once some seconds after both eyes are first drawn)
-static volatile bool g_mechMeasure;    // mech.inc: this frame's left-eye pass is measured
-static volatile int g_camPassEye = -1; // the eye whose pass of the main camera is being drawn
-static volatile bool g_lblDump;
-static volatile int g_lblEye;
-static std::string g_lblBuf[2];
+volatile bool g_mechMeasure;    // mech.cpp: this frame's left-eye pass is measured
+volatile int g_camPassEye = -1; // the eye whose pass of the main camera is being drawn
+volatile bool g_lblDump;
+volatile int g_lblEye;
+std::string g_lblBuf[2];
 static void lblWrite() {
     std::string a, b;
     {
@@ -122,7 +123,7 @@ static void lblWrite() {
 // mw4vr_dump_exe.bin (offset = address - image base), and three times (some seconds apart) the main camera's
 // element and the elements above it to mw4vr_dump_cam_<n>.txt - for finding where the camera's matrix is
 // made and what else looks through it.
-static bool camRead(const void *p, void *out, size_t n) {
+bool camRead(const void *p, void *out, size_t n) {
     SIZE_T got = 0;
     return ReadProcessMemory(GetCurrentProcess(), p, out, n, &got) && got == n;
 }
@@ -381,7 +382,7 @@ static void camPreEye(uint8_t *cam, int eyeOv) {
 // and the aiming then follow the head - for the test); 2 = the game's for the HUD, the head's again from
 // Present until the next Draw.
 static volatile int g_camKeep = -1;
-static void camKeepKey() {
+void camKeepKey() {
     if (g_camKeep < 0) g_camKeep = GetPrivateProfileIntW(L"vr", L"cam_keep", 0, (g_dir + L"mw4vr.ini").c_str()) % 3;
     static bool was;
     // (a key for diagnosis, [debug] level=1 only: pressed by mistake beside Ctrl+F11 it changed the picture for good)
@@ -398,7 +399,7 @@ static void camKeepKey() {
     was = down;
 }
 // at Present (the HUD is drawn): mode 2 puts the head's matrix back
-static void camAtPresent() {
+void camAtPresent() {
     if (g_camKeep != 2 || !g_camMain || g_camEyeFrame != g_frame) return;
     __try {
         float *m = (float *)((uint8_t *)g_camMain + EL_WORLD);
@@ -506,7 +507,7 @@ static __declspec(naked) void camThunk() {
     }
 }
 
-static void camInstall() {
+void camInstall() {
     if (g_camHooked) return;
     gmCheck();
     uint8_t *p = (uint8_t *)CAM_DRAW;
