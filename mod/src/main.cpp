@@ -1239,6 +1239,12 @@ static int e2eCockpit(wchar_t *name, int n) {
     name[n - 1] = 0;
     return mw5Active() ? 1 : 0;
 }
+static void e2eState(int *v) {
+    static unsigned last;
+    v[0] = g_fadeMenu ? 1 : 0;
+    v[1] = (int)(g_m5AllDraws - last);
+    last = g_m5AllDraws;
+}
 static void e2ePass(int e, int *v) {
     bool now = g_m5PassFrame[e] == g_frame;
     v[0] = now ? g_m5PassDraws[e] : 0, v[1] = now ? g_m5PassOrd[e] : 0, v[2] = now ? g_m5PassCk[e] : 0;

@@ -4,9 +4,13 @@
 //   - writes a line for every frame with both eyes to mw4vr_e2e.csv: the time, the eyes' mean colours, whether the
 //     camera sits in the mech and whose cockpit is drawn, the sway (what the test's script judges);
 //   - turns the head as the plan says (a runtime without a headset gives one pose for ever);
-//   - takes pictures at the plan's times (shot.inc).
+//   - takes pictures at the plan's times (shot.inc);
+//   - presses keys at the plan's times, as input to the window in front (the game's): walking, firing, the view from
+//     outside, the menu.
 // The plan, an .ini:   [e2e]  yaw=2:0 6:45 10:45 14:0     seconds:degrees to the right, straight lines between
 //                             shots=5 12                  seconds
+//                             keys=13:LMB:0.3 18:W:5      seconds:key:seconds held - a letter or digit, ESC, SPACE,
+//                                                         ENTER, TAB, F1..F12, LMB / RMB (the mouse's buttons)
 // Seconds count from the frame the camera first sits in the mech. Without MW4VR_E2E none of this does anything.
 // Included into main.cpp after shot.inc, before vr.inc.
 
@@ -16,9 +20,52 @@ static ULONGLONG g_e2eStart, g_e2eSeat; // ticks: the first frame, the first fra
 static std::vector<std::pair<float, float>> g_e2eYaw;
 static std::vector<float> g_e2eShots;
 static size_t g_e2eShotNext;
+struct E2eKey {
+    float at, hold;
+    int vk;    // a virtual key; -1 / -2: the left / right mouse button
+    int state; // 0 waits, 1 is down, 2 done
+    char name[8];
+};
+static std::vector<E2eKey> g_e2eKeys;
 
 static int e2eCockpit(wchar_t *name, int n); // main.cpp, after mw5.inc: 1 - a cockpit of our own is drawn
 static void e2ePass(int e, int *v);          // an eye's pass: CPU-path draws, at which ours was drawn, the game's cockpit's triangles there
+static void e2eState(int *v);                // main.cpp: 1 - a paused battle's menu is up; the draws of the frame
+
+static int e2eVk(const wchar_t *s, size_t n) {
+    if (n == 1 && iswalnum(s[0])) return towupper(s[0]);
+    if (n == 3 && !_wcsnicmp(s, L"ESC", 3)) return VK_ESCAPE;
+    if (n == 5 && !_wcsnicmp(s, L"SPACE", 5)) return VK_SPACE;
+    if (n == 5 && !_wcsnicmp(s, L"ENTER", 5)) return VK_RETURN;
+    if (n == 3 && !_wcsnicmp(s, L"TAB", 3)) return VK_TAB;
+    if (n == 3 && !_wcsnicmp(s, L"LMB", 3)) return -1;
+    if (n == 3 && !_wcsnicmp(s, L"RMB", 3)) return -2;
+    if ((n == 2 || n == 3) && towupper(s[0]) == L'F') {
+        int k = _wtoi(s + 1);
+        if (k >= 1 && k <= 12) return VK_F1 + k - 1;
+    }
+    return 0;
+}
+static void e2eSend(const E2eKey &k, bool down) {
+    // only into the game: with another program's window in front the key would be typed there
+    DWORD pid = 0;
+    GetWindowThreadProcessId(GetForegroundWindow(), &pid);
+    if (pid != GetCurrentProcessId()) {
+        logf("e2e: %s %s NOT SENT - the game's window is not in front", k.name, down ? "down" : "up");
+        return;
+    }
+    INPUT in = {};
+    if (k.vk < 0) {
+        in.type = INPUT_MOUSE;
+        in.mi.dwFlags = k.vk == -1 ? (down ? MOUSEEVENTF_LEFTDOWN : MOUSEEVENTF_LEFTUP) : (down ? MOUSEEVENTF_RIGHTDOWN : MOUSEEVENTF_RIGHTUP);
+    } else { // by its scan code: that is what DirectInput reads
+        in.type = INPUT_KEYBOARD;
+        in.ki.wScan = (WORD)MapVirtualKeyW((UINT)k.vk, MAPVK_VK_TO_VSC);
+        in.ki.dwFlags = KEYEVENTF_SCANCODE | (down ? 0 : KEYEVENTF_KEYUP);
+    }
+    UINT sent = SendInput(1, &in, sizeof in);
+    logf("e2e: %s %s at %.2f s%s", k.name, down ? "down" : "up", g_e2eSeat ? (float)(GetTickCount64() - g_e2eSeat) / 1000.0f : -1.0f, sent ? "" : " - NOT SENT");
+}
 
 static void e2eInit() {
     static bool done;
@@ -47,15 +94,39 @@ static void e2eInit() {
         g_e2eShots.push_back(t);
         p = end;
     }
+    GetPrivateProfileStringW(L"e2e", L"keys", L"", b, 512, plan);
+    for (const wchar_t *p = b; *p;) {
+        while (*p == L' ') ++p;
+        wchar_t *end;
+        E2eKey k = {};
+        k.at = wcstof(p, &end);
+        if (end == p || *end != L':') break;
+        const wchar_t *name = end + 1, *q = name;
+        while (*q && *q != L':' && *q != L' ') ++q;
+        k.vk = e2eVk(name, (size_t)(q - name));
+        snprintf(k.name, sizeof k.name, "%.*ls", (int)min((size_t)7, (size_t)(q - name)), name);
+        k.hold = 0.1f;
+        p = q;
+        if (*p == L':') {
+            k.hold = wcstof(p + 1, &end);
+            p = end;
+        }
+        if (!k.vk) {
+            logf("e2e: key '%s' of the plan is not known - left out", k.name);
+            continue;
+        }
+        g_e2eKeys.push_back(k);
+    }
     g_e2eCsv = _wfsopen((g_dir + L"mw4vr_e2e.csv").c_str(), L"w", _SH_DENYNO);
     if (!g_e2eCsv) {
         logf("e2e: mw4vr_e2e.csv cannot be written - no test");
         return;
     }
-    fprintf(g_e2eCsv, "frame,ms,t,seated,own,yaw,lr,lg,lb,rr,rg,rb,sx,sy,sz,ld,lo,lk,rd,ro,rk,cockpit\n");
+    fprintf(g_e2eCsv, "frame,ms,t,seated,own,yaw,lr,lg,lb,rr,rg,rb,sx,sy,sz,ld,lo,lk,rd,ro,rk,outside,menu,draws,cockpit\n");
     g_e2eStart = GetTickCount64();
     g_e2eOn = true;
-    logf("e2e: test run - plan %ls, %u turns of the head, %u pictures", plan, (unsigned)g_e2eYaw.size(), (unsigned)g_e2eShots.size());
+    logf("e2e: test run - plan %ls, %u turns of the head, %u pictures, %u keys", plan, (unsigned)g_e2eYaw.size(), (unsigned)g_e2eShots.size(),
+         (unsigned)g_e2eKeys.size());
 }
 
 // seconds since the camera first sat in the mech; below 0: not yet
@@ -72,6 +143,16 @@ static float e2eYawNow() {
         if (t <= b.first) return b.first > a.first ? a.second + (b.second - a.second) * (t - a.first) / (b.first - a.first) : b.second;
     }
     return g_e2eYaw.back().second;
+}
+
+// once for every picture the game presents (a paused battle's menu too): the plan's keys go down and up
+static void e2eKeysStep() {
+    if (!g_e2eOn || !g_e2eSeat) return;
+    float t = (float)(GetTickCount64() - g_e2eSeat) / 1000.0f;
+    for (E2eKey &k : g_e2eKeys) {
+        if (k.state == 0 && t >= k.at) e2eSend(k, true), k.state = 1;
+        else if (k.state == 1 && t >= k.at + k.hold) e2eSend(k, false), k.state = 2;
+    }
 }
 
 // an eye's mean colour (0..255, as it is shown), from some thousand of its pixels
@@ -112,10 +193,11 @@ static void e2eFrame(ID3D11DeviceContext *ctx, ID3D11Texture2D *l, ID3D11Texture
     e2eMean(ctx, r, b);
     wchar_t name[64] = L"";
     int own = e2eCockpit(name, 64);
-    int pl[3], pr[3];
-    e2ePass(0, pl), e2ePass(1, pr);
-    fprintf(g_e2eCsv, "%u,%llu,%.3f,%d,%d,%.2f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%.4f,%.4f,%.4f,%d,%d,%d,%d,%d,%d,%ls\n", g_frame, GetTickCount64() - g_e2eStart, t,
+    int pl[3], pr[3], st[2];
+    e2ePass(0, pl), e2ePass(1, pr), e2eState(st);
+    fprintf(g_e2eCsv, "%u,%llu,%.3f,%d,%d,%.2f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%.4f,%.4f,%.4f,%d,%d,%d,%d,%d,%d,%d,%d,%d,%ls\n", g_frame, GetTickCount64() - g_e2eStart, t,
             in ? 1 : 0, own, e2eYawNow(), a[0], a[1], a[2], b[0], b[1], b[2], g_swayValid ? g_swayT[0] : 0.0f,
-            g_swayValid ? g_swayT[1] : 0.0f, g_swayValid ? g_swayT[2] : 0.0f, pl[0], pl[1], pl[2], pr[0], pr[1], pr[2], name);
+            g_swayValid ? g_swayT[1] : 0.0f, g_swayValid ? g_swayT[2] : 0.0f, pl[0], pl[1], pl[2], pr[0], pr[1], pr[2],
+            g_mechSeat.outside ? 1 : 0, st[0], st[1], name);
     if ((g_frame & 31) == 0) fflush(g_e2eCsv);
 }

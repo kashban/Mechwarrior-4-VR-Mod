@@ -13,8 +13,71 @@ def frames(n=900, fps=60.0, own=1, cockpit='atlas', bright=80.0):
     out = []
     for i in range(n):
         out.append({'frame': 1000.0 + i, 'ms': i * 1000.0 / fps, 't': i / fps, 'seated': 1.0, 'own': float(own), 'yaw': 0.0,
-                    'left': bright, 'right': bright + 1, 'sx': 0.0, 'sy': 0.0, 'sz': 0.0, 'cockpit': cockpit})
+                    'left': bright, 'right': bright + 1, 'sx': 0.0, 'sy': 0.0, 'sz': 0.0, 'outside': 0.0, 'menu': 0.0, 'draws': 600.0,
+                    'cockpit': cockpit})
     return out
+
+
+def acted(walk=True, fire=True, outside=True, menu=True, back=True, menu_at=6.05):
+    """15 s: the mech walks from second 1 to 3, fires from 4 to 5, the camera is outside from 6 to 8, the menu up from 10 to 12."""
+    f = frames()
+    for x in f:
+        t = x['t']
+        if walk and 1.5 <= t <= 3:
+            x['sy'] = 0.01
+        if fire and 4.2 <= t <= 4.8:
+            x['draws'] = 640.0
+        if outside and 6.3 <= t <= (8.2 if back else 99):
+            x['outside'], x['own'], x['seated'] = 1.0, 0.0, 0.0
+        if menu and menu_at + 4 <= t <= 12.1:
+            x['menu'] = 1.0
+    return f
+
+
+WINDOWS = dict(walk=(1, 3), fire=(4, 5), outside=(6, 8), menu=(10, 12))
+
+
+class Acting(unittest.TestCase):
+    def failed(self, **how):
+        return judge.judge(acted(**how), LOG, cockpit='Atlas', **WINDOWS)[1]
+
+    def test_a_run_that_does_all_passes(self):
+        passed, failed = judge.judge(acted(), LOG, cockpit='Atlas', **WINDOWS)
+        self.assertEqual(failed, [])
+        self.assertGreaterEqual(len(passed), 18)
+
+    def test_a_mech_that_stands(self):
+        failed = self.failed(walk=False)
+        self.assertEqual(len(failed), 1)
+        self.assertIn('the mech walks', failed[0])
+
+    def test_no_shot(self):
+        failed = self.failed(fire=False)
+        self.assertEqual(len(failed), 1)
+        self.assertIn('the mech fires', failed[0])
+
+    def test_the_view_does_not_change(self):
+        failed = self.failed(outside=False)
+        self.assertEqual(len(failed), 1)
+        self.assertIn('seen from outside', failed[0])
+
+    def test_the_view_does_not_come_back(self):
+        failed = self.failed(back=False)
+        self.assertTrue(any('back in the mech' in x for x in failed), failed)
+
+    def test_no_menu(self):
+        failed = self.failed(menu=False)
+        self.assertEqual(len(failed), 2)
+        self.assertIn('menu is shown as one screen', failed[0])
+
+    def test_a_menu_that_comes_late(self):
+        failed = self.failed(menu_at=6.7)
+        self.assertEqual(len(failed), 1)
+        self.assertIn('within half a second', failed[0])
+
+    def test_windows(self):
+        self.assertEqual(judge.window('13:18.5'), (13.0, 18.5))
+        self.assertIsNone(judge.window(None))
 
 
 class Judge(unittest.TestCase):

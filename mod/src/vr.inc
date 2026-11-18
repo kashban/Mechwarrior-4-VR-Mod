@@ -905,6 +905,7 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
         was = down;
     }
     vrPollEvents();
+    e2eKeysStep(); // a test run's keys (e2e.inc)
     if (!g_vr.running) return;
 
     // the pose the finished frame was rendered with (chosen by buildK from the poses located last time)

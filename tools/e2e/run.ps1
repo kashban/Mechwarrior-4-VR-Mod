@@ -1,6 +1,9 @@
 # An end-to-end test of the mod in the game, without a headset on anybody's head:
 #   powershell -File tools\e2e\run.ps1 -Game <the game's folder> -Pilot <pilot> [-Mech 'Mad Cat'] [-Cockpit madcat]
-#       [-Runtime steamvr-null|active] [-Seconds 16] [-Yaw '2:0 5:45 9:45 12:0'] [-Shots '1 7'] [-KeepDll]
+#       [-Runtime steamvr-null|active] [-Seconds 46] [-Yaw '2:0 5:45 9:45 12:0'] [-Shots '1 21 30 38'] [-KeepDll]
+#       [-Keys '14:LMB:0.4 15.5:LMB:0.4 18:W:5 28:V:0.1 32:V:0.1 36:ESC:0.1 40:ESC:0.1']
+#       [-Walk 18:26] [-Fire 14:17] [-Outside 28:32] [-Menu 36:40]      (what the keys are to do, for the judge;
+#       '' leaves a check out. The keys are the game's own defaults - another pilot's keys need another -Keys.)
 # What it does:
 #   1. puts mod\build\d3d11.dll into the game's folder (the one that was there comes back at the end);
 #   2. -Runtime steamvr-null: switches SteamVR to its "null" driver (no headset) and has the mod use SteamVR's
@@ -17,9 +20,14 @@ param(
     [string]$Mech = 'Mad Cat',
     [string]$Cockpit = '',
     [ValidateSet('steamvr-null', 'active')][string]$Runtime = 'steamvr-null',
-    [int]$Seconds = 16,
+    [int]$Seconds = 46,
     [string]$Yaw = '2:0 5:45 9:45 12:0',
-    [string]$Shots = '1 7',
+    [string]$Shots = '1 21 30 38',
+    [string]$Keys = '14:LMB:0.4 15.5:LMB:0.4 18:W:5 28:V:0.1 32:V:0.1 36:ESC:0.1 40:ESC:0.1',
+    [string]$Walk = '18:26',
+    [string]$Fire = '14:17',
+    [string]$Outside = '28:32',
+    [string]$Menu = '36:40',
     [int]$TimeoutSec = 240,
     [switch]$KeepDll
 )
@@ -78,7 +86,7 @@ try {
     Copy-Item $new $dll -Force
     Remove-Item $csv -ErrorAction SilentlyContinue
     $plan = Join-Path $out 'plan.ini'
-    Set-Content $plan -Value @('[e2e]', "yaw=$Yaw", "shots=$Shots") -Encoding ASCII
+    Set-Content $plan -Value @('[e2e]', "yaw=$Yaw", "shots=$Shots", "keys=$Keys") -Encoding ASCII
     $shotsDir = Join-Path $Game 'mw4vr_shots'
     $shotsBefore = @(Get-ChildItem $shotsDir -Filter *.bmp -ErrorAction SilentlyContinue | ForEach-Object Name)
 
@@ -119,6 +127,12 @@ try {
     } else {
         $a = @((Join-Path $PSScriptRoot 'judge.py'), (Join-Path $out 'mw4vr_e2e.csv'), (Join-Path $out 'mw4vr.log'), '--seconds', ($Seconds - 2))
         if ($Cockpit) { $a += @('--cockpit', $Cockpit) }
+        if ($Keys) {
+            if ($Walk) { $a += @('--walk', $Walk) }
+            if ($Fire) { $a += @('--fire', $Fire) }
+            if ($Outside) { $a += @('--outside', $Outside) }
+            if ($Menu) { $a += @('--menu', $Menu) }
+        }
         & python @a | Tee-Object -FilePath (Join-Path $out 'verdict.txt')
         $code = $LASTEXITCODE
     }
