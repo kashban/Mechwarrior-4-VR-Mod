@@ -121,11 +121,27 @@ template <class F> static bool vrGet(F &fn, const char *name) {
     return true;
 }
 
+static bool vrElevated() {
+    HANDLE tok = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &tok)) return true; // not known: as if
+    TOKEN_ELEVATION el = {};
+    DWORD got = 0;
+    bool yes = !GetTokenInformation(tok, TokenElevation, &el, sizeof el, &got) || el.TokenIsElevated;
+    CloseHandle(tok);
+    return yes;
+}
+
 // the active runtime for this (32-bit) process: HKLM\SOFTWARE\Khronos\OpenXR\1 seen through WOW64
 static bool vrLoadRuntime() {
     wchar_t json[MAX_PATH] = {};
     DWORD sz = sizeof json;
-    if (RegGetValueW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Khronos\\OpenXR\\1", L"ActiveRuntime",
+    // XR_RUNTIME_JSON names another runtime's manifest for this process alone, as the standard loader has it - and
+    // like it, not for a process with administrator rights
+    DWORD en = GetEnvironmentVariableW(L"XR_RUNTIME_JSON", json, MAX_PATH);
+    bool fromEnv = en > 0 && en < MAX_PATH && !vrElevated();
+    if (fromEnv) logf("vr: the runtime's manifest comes from XR_RUNTIME_JSON");
+    else json[0] = 0;
+    if (!fromEnv && RegGetValueW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Khronos\\OpenXR\\1", L"ActiveRuntime",
                      RRF_RT_REG_SZ | RRF_SUBKEY_WOW6432KEY, nullptr, json, &sz) != ERROR_SUCCESS) {
         logf("vr: no active 32-bit OpenXR runtime in the registry");
         return false;
@@ -523,6 +539,18 @@ static void vrLocate(XrTime when) {
         !(vs.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT)) {
         g_vrPoseOk[0] = g_vrPoseOk[1] = false;
         return;
+    }
+    if (float deg = e2eYawNow()) { // a test run turns the head (e2e.inc): both eyes about the point between them
+        float a = -deg * 0.0174532925f; // (about +y a positive angle turns to the left)
+        XrQuaternionf q = {0, sinf(a / 2), 0, cosf(a / 2)};
+        XrVector3f mid = {(views[0].pose.position.x + views[1].pose.position.x) / 2, (views[0].pose.position.y + views[1].pose.position.y) / 2,
+                          (views[0].pose.position.z + views[1].pose.position.z) / 2};
+        for (int e = 0; e < 2; ++e) {
+            XrVector3f &p = views[e].pose.position;
+            XrVector3f d = qrot(q, {p.x - mid.x, p.y - mid.y, p.z - mid.z});
+            p = {mid.x + d.x, mid.y + d.y, mid.z + d.z};
+            views[e].pose.orientation = qmul(q, views[e].pose.orientation);
+        }
     }
     if (!g_vr.haveRef || g_vr.recenter) {
         // the head between the eyes, looking where the left eye looks
@@ -943,6 +971,7 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
             g_vr.ReleaseSwapchainImage(g_vr.sc[e], &ri);
             g_vr.have[e] = true;
         }
+        if (bothNow) e2eFrame(ctx, g_eyeTex[0], g_eyeTex[1]); // a test run's line for this frame (e2e.inc)
         // diagnosis pictures (shot.inc): what went to the eyes just now, and the HUD layer's image
         shotFrame(ctx, bothNow ? g_eyeTex[0] : bb, bothNow ? g_eyeTex[1] : nullptr,
                   (g_hudLayerOn && g_hudTex && g_hudDrawnFrame == g_frame) ? g_hudTex : nullptr,

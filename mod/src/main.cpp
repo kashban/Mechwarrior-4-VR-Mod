@@ -874,6 +874,7 @@ static void hotpatchScan(ID3D11DeviceContext *ctx);
 #include "help.inc"
 #include "hud.inc"
 #include "shot.inc"
+#include "e2e.inc"
 // a picture that stands still: who held the frame up - the game, the system's Present, or our own work in it?
 static DWORD g_presOurs, g_presReal, g_presWait; // ms: our part of the last Present, the system's, xrWaitFrame in ours
 #include "vr.inc"
@@ -1232,6 +1233,12 @@ static void updateCommon(ID3D11Resource *r, const D3D11_BOX *box, const void *&s
 
 // ---------------------------------------------------------------------------------------------
 #include "mw5.inc"
+
+static int e2eCockpit(wchar_t *name, int n) {
+    wcsncpy(name, g_mw5Name, n - 1);
+    name[n - 1] = 0;
+    return mw5Active() ? 1 : 0;
+}
 
 // CPU path: while in "3D" and an eye is active, draws with VS ad8cee09 run our replacement shader
 // (same work + clip.x offset), its offset in our own constant buffer at b12; both restored after.
