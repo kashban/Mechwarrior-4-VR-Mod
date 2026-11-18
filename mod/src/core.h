@@ -383,3 +383,25 @@ static inline bool mcGridFit(const McGrid &g, float w, float h, float wantR, flo
         }
     return found;
 }
+
+// ---- is the camera in the mech? ------------------------------------------------------------------------------------
+// The game draws its cockpit only while the camera sits in the mech; seen from outside (the third-person view) it
+// draws none, and ours must not be drawn either. But the game draws none as well while the pilot looks far to the
+// side or back (its cockpit is then outside the picture), and there ours has to stay. So a frame counts against
+// "inside" only while the head looks ahead, where the game's cockpit cannot be missed: some such frames in a row
+// mean outside, one frame with the game's cockpit means inside again.
+enum { MC_COCKPIT_TRIS = 30, MC_OUTSIDE_FRAMES = 5 };
+struct McSeat {
+    int misses;   // frames in a row, looking ahead, without the game's cockpit
+    bool outside; // the camera is not in the mech
+};
+// once for every frame of a battle. tris: triangles of the game's cockpit in the frame; ahead: the head looks ahead
+static inline void mcSeatStep(McSeat &s, int tris, bool ahead) {
+    if (tris >= MC_COCKPIT_TRIS) {
+        s.misses = 0, s.outside = false;
+        return;
+    }
+    if (!ahead) return;
+    if (s.misses < MC_OUTSIDE_FRAMES) ++s.misses;
+    if (s.misses >= MC_OUTSIDE_FRAMES) s.outside = true;
+}

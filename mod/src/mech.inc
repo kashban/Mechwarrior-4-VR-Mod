@@ -21,6 +21,8 @@ static int g_mgTris, g_mgBad, g_mgDraws;
 static float g_mgSamples[MG_SAMPLES][MG_N];
 static int g_mgSampleN;
 static bool g_mechSearching;              // samples are being collected
+static McSeat g_mechSeat;                 // seen from outside (third person)? (core.h)
+static int g_mechCkTris;                  // triangles of the game's cockpit in this frame's left-eye pass
 static bool g_mechSeated;                 // the game draws its cockpit: the camera sits in the mech (not a mission's intro)
 static unsigned g_mechBattleFrame;        // the battle's first frame
 static unsigned g_mechNextFrame;          // the next frame to measure
@@ -463,6 +465,7 @@ static int mechDraw(ID3D11DeviceContext *c, bool indexed, UINT count, UINT start
     }
     if (vb) vb->Release();
     if (ib) ib->Release();
+    if (g_camPassEye == 0) g_mechCkTris += found;
     return found;
 }
 
@@ -553,6 +556,19 @@ static void mechOnPresent(bool inBattle, bool zoomed) {
     bool measured = g_mechMeasure;
     g_mechMeasure = false;
     bool cockpitNow = swvOnPresent();
+    // the third-person view: the game draws no cockpit although the head looks ahead (not judged in the zoomed view)
+    int ckTris = g_mechCkTris;
+    g_mechCkTris = 0;
+    if (inBattle && !zoomed && g_doubleDraw) {
+        bool was = g_mechSeat.outside;
+        mcSeatStep(g_mechSeat, ckTris, g_vrPoseOk[0] && g_vrR[0][8] > 0.94f); // (within 20 degrees of straight ahead)
+        if (was != g_mechSeat.outside) {
+            static int told;
+            if (told++ < 20)
+                logf(g_mechSeat.outside ? "mech: frame %u - the game draws no cockpit although the head looks ahead: seen from outside, ours is not drawn"
+                                        : "mech: frame %u - the game draws its cockpit again (%d triangles): back in the mech", g_frame, ckTris);
+        }
+    }
     if (!g_mechOn) {
         g_mechCur = -1;
         return;
@@ -562,6 +578,7 @@ static void mechOnPresent(bool inBattle, bool zoomed) {
     if (inBattle && (g_mechLastCamFrame == ~0u || g_frame - g_mechLastCamFrame > 30)) {
         g_mechSearching = true;
         g_mechSeated = false;
+        g_mechSeat = {};
         g_mechBattleFrame = g_frame;
         g_mgSampleN = 0;
         g_mechNextFrame = g_frame + 60; // (the cockpit known so far stays in use until this one is recognised)

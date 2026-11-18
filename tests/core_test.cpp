@@ -1007,6 +1007,36 @@ static void testGridFit() {
     CHECK(mcGridFit(g_grid, 4, 4, 0, 0, 1000, nullptr, 0, &r, &u));
 }
 
+static void testSeat() {
+    McSeat s = {};
+    // the game's cockpit in every frame: inside, whatever the head does
+    for (int i = 0; i < 20; ++i) mcSeatStep(s, 200, i & 1);
+    CHECK(!s.outside && s.misses == 0);
+    // looking away, no cockpit of the game's: nothing is concluded
+    for (int i = 0; i < 20; ++i) mcSeatStep(s, 0, false);
+    CHECK(!s.outside && s.misses == 0);
+    // looking ahead without it: outside with the fifth such frame, not before
+    for (int i = 0; i < MC_OUTSIDE_FRAMES - 1; ++i) mcSeatStep(s, 0, true);
+    CHECK(!s.outside && s.misses == MC_OUTSIDE_FRAMES - 1);
+    mcSeatStep(s, 0, false); // (a look to the side in between does not count, and does not start anew)
+    CHECK(!s.outside && s.misses == MC_OUTSIDE_FRAMES - 1);
+    mcSeatStep(s, 0, true);
+    CHECK(s.outside && s.misses == MC_OUTSIDE_FRAMES);
+    mcSeatStep(s, 0, true), mcSeatStep(s, 0, true);
+    CHECK(s.outside && s.misses == MC_OUTSIDE_FRAMES); // (the count does not run on)
+    // outside it stays while the head looks away
+    mcSeatStep(s, 0, false);
+    CHECK(s.outside);
+    // a few triangles near the camera (the mech's hull at the picture's edge) are not the cockpit
+    mcSeatStep(s, MC_COCKPIT_TRIS - 1, true);
+    CHECK(s.outside && s.misses == MC_OUTSIDE_FRAMES);
+    // one frame with the cockpit: inside again, and the count starts anew
+    mcSeatStep(s, MC_COCKPIT_TRIS, false);
+    CHECK(!s.outside && s.misses == 0);
+    mcSeatStep(s, MC_COCKPIT_TRIS - 1, true);
+    CHECK(!s.outside && s.misses == 1);
+}
+
 int main() {
     testHolds(), testTurnNorm(), testTurnFit(), testEyeInMesh(), testHudCross(), testHudGlass(), testGlassPose(), testGlassScale(), testGlassAim();
     testGridMark(), testGridPlace(), testGridTri(), testGridCells(), testGridFree(), testGridRim(), testGridFit();
@@ -1015,6 +1045,7 @@ int main() {
     testWide();
     testAdd(), testMeet(), testAddCut(), testMoveOut(), testSpans(), testLeftAlt(), testRightAlt();
     testHudPlain(), testHudZoom(), testHudZoomEdges(), testHudScreens(), testHudScreensZoom();
+    testSeat();
     printf("%d checks, %d failed\n", g_checks, g_fail);
     return g_fail ? 1 : 0;
 }

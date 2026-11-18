@@ -179,7 +179,8 @@ float4 ps(VSOut i) : SV_Target {
 // Not while the game draws no cockpit (a mission's intro, seen from outside). Which cockpit: by the mech's name as
 // the game tells it, from the battle's first frame (mw5ForMech) - not only once the mech's profile is recognised
 // by its cockpit's shape, which takes seconds and showed the cockpit chosen for all mechs until then.
-static inline bool mw5Waiting() { return g_mechOn && g_doubleDraw && !g_mechSeated; }
+// Nor while the camera is outside the mech in a battle (the third-person view, g_mechSeat).
+static inline bool mw5Waiting() { return g_mechOn && g_doubleDraw && (!g_mechSeated || g_mechSeat.outside); }
 static inline bool mw5Active() { return g_mw5On && g_mw5State == 1 && !mw5Waiting(); }
 
 // Without a cockpit of our own ([vr] hud_parts=1): the same parts of the HUD as panes before the pilot, in a row
