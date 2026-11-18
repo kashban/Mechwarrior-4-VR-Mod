@@ -1,5 +1,6 @@
-# The C++ of mod/ and tests/core_test.cpp: LLVM's style with four spaces and 120 columns.
-#   clang-format -i mod/src/*.cpp mod/src/*.h mod/src/*.inc mod/dinput/*.cpp
+# The C++ of mod/: LLVM's style with four spaces and 120 columns. The sources are in this format (clang-format 19):
+#   clang-format -i mod/src/main.cpp mod/src/core.h mod/src/*.inc mod/src/vtidx.c mod/dinput/dinput.cpp
+# Not mod/src/eye_tl_vs.h: the shader compiler writes it.
 # (Visual Studio's Build Tools bring clang-format: VC\Tools\Llvm\bin.)
 BasedOnStyle: LLVM
 IndentWidth: 4

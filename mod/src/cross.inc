@@ -77,21 +77,28 @@ static bool crCreate() {
     ID3DBlob *code[3] = {}, *err[3] = {};
     // (each call written out: tests/test_shaders.py finds them and compiles the same text with fxc)
     HRESULT hr[3];
-    hr[0] = g_compile(g_crHlsl, sizeof(g_crHlsl) - 1, "cross", nullptr, nullptr, "vs", "vs_5_0", 1 << 15, 0, &code[0], &err[0]);
-    hr[1] = g_compile(g_crHlsl, sizeof(g_crHlsl) - 1, "cross", nullptr, nullptr, "ps_cross", "ps_5_0", 1 << 15, 0, &code[1], &err[1]);
-    hr[2] = g_compile(g_crHlsl, sizeof(g_crHlsl) - 1, "cross", nullptr, nullptr, "ps_rest", "ps_5_0", 1 << 15, 0, &code[2], &err[2]);
+    hr[0] = g_compile(g_crHlsl, sizeof(g_crHlsl) - 1, "cross", nullptr, nullptr, "vs", "vs_5_0", 1 << 15, 0, &code[0],
+                      &err[0]);
+    hr[1] = g_compile(g_crHlsl, sizeof(g_crHlsl) - 1, "cross", nullptr, nullptr, "ps_cross", "ps_5_0", 1 << 15, 0,
+                      &code[1], &err[1]);
+    hr[2] = g_compile(g_crHlsl, sizeof(g_crHlsl) - 1, "cross", nullptr, nullptr, "ps_rest", "ps_5_0", 1 << 15, 0,
+                      &code[2], &err[2]);
     bool ok = true;
     for (int i = 0; i < 3; ++i) {
         if (FAILED(hr[i]) || !code[i]) {
-            logf("hud: the cross-hair's shader %d failed to compile (0x%08lx): %s", i, hr[i], err[i] ? (const char *)err[i]->GetBufferPointer() : "");
+            logf("hud: the cross-hair's shader %d failed to compile (0x%08lx): %s", i, hr[i],
+                 err[i] ? (const char *)err[i]->GetBufferPointer() : "");
             ok = false;
         }
         if (err[i]) err[i]->Release();
     }
     if (ok)
-        ok = SUCCEEDED(ORIG(PFN_CreateShader, g_dev, VT_Dev_CreateVertexShader)(g_dev, code[0]->GetBufferPointer(), code[0]->GetBufferSize(), nullptr, (void **)&g_crVS)) &&
-             SUCCEEDED(ORIG(PFN_CreateShader, g_dev, VT_Dev_CreatePixelShader)(g_dev, code[1]->GetBufferPointer(), code[1]->GetBufferSize(), nullptr, (void **)&g_crPS[0])) &&
-             SUCCEEDED(ORIG(PFN_CreateShader, g_dev, VT_Dev_CreatePixelShader)(g_dev, code[2]->GetBufferPointer(), code[2]->GetBufferSize(), nullptr, (void **)&g_crPS[1]));
+        ok = SUCCEEDED(ORIG(PFN_CreateShader, g_dev, VT_Dev_CreateVertexShader)(
+                 g_dev, code[0]->GetBufferPointer(), code[0]->GetBufferSize(), nullptr, (void **)&g_crVS)) &&
+             SUCCEEDED(ORIG(PFN_CreateShader, g_dev, VT_Dev_CreatePixelShader)(
+                 g_dev, code[1]->GetBufferPointer(), code[1]->GetBufferSize(), nullptr, (void **)&g_crPS[0])) &&
+             SUCCEEDED(ORIG(PFN_CreateShader, g_dev, VT_Dev_CreatePixelShader)(
+                 g_dev, code[2]->GetBufferPointer(), code[2]->GetBufferSize(), nullptr, (void **)&g_crPS[1]));
     for (ID3DBlob *b : code)
         if (b) b->Release();
     if (!ok) return false;
@@ -100,7 +107,8 @@ static bool crCreate() {
     D3D11_DEPTH_STENCIL_DESC dd = {};
     D3D11_RASTERIZER_DESC rd = {};
     rd.FillMode = D3D11_FILL_SOLID, rd.CullMode = D3D11_CULL_NONE, rd.DepthClipEnable = FALSE;
-    return SUCCEEDED(g_dev->CreateBlendState(&bd, &g_crBlend)) && SUCCEEDED(g_dev->CreateDepthStencilState(&dd, &g_crDepth)) &&
+    return SUCCEEDED(g_dev->CreateBlendState(&bd, &g_crBlend)) &&
+           SUCCEEDED(g_dev->CreateDepthStencilState(&dd, &g_crDepth)) &&
            SUCCEEDED(g_dev->CreateRasterizerState(&rd, &g_crRaster));
 }
 
@@ -127,19 +135,29 @@ static ID3D11RenderTargetView *crView(ID3D11Texture2D *tex, bool *lin) {
     DXGI_FORMAT f = td.Format;
     bool l = false;
     switch (td.Format) {
-    case DXGI_FORMAT_B8G8R8A8_TYPELESS: f = DXGI_FORMAT_B8G8R8A8_UNORM; break;
-    case DXGI_FORMAT_R8G8B8A8_TYPELESS: f = DXGI_FORMAT_R8G8B8A8_UNORM; break;
+    case DXGI_FORMAT_B8G8R8A8_TYPELESS:
+        f = DXGI_FORMAT_B8G8R8A8_UNORM;
+        break;
+    case DXGI_FORMAT_R8G8B8A8_TYPELESS:
+        f = DXGI_FORMAT_R8G8B8A8_UNORM;
+        break;
     case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB:
-    case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB: l = true; break;
-    default: break;
+    case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:
+        l = true;
+        break;
+    default:
+        break;
     }
     D3D11_RENDER_TARGET_VIEW_DESC d = {};
     d.Format = f, d.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
     ID3D11RenderTargetView *v = nullptr;
     if (FAILED(g_dev->CreateRenderTargetView(tex, &d, &v))) v = nullptr;
     static int told;
-    if (told++ < 2) logf("hud: a layer's image is format %d - drawn into as format %d%s%s", (int)td.Format, (int)f, l ? ", decoded first" : "", v ? "" : " (no view)");
-    if (n < 16) kept[n++] = {tex, v, l}; // (a layer has a few images, for the whole session; a failure is remembered too)
+    if (told++ < 2)
+        logf("hud: a layer's image is format %d - drawn into as format %d%s%s", (int)td.Format, (int)f,
+             l ? ", decoded first" : "", v ? "" : " (no view)");
+    if (n < 16)
+        kept[n++] = {tex, v, l}; // (a layer has a few images, for the whole session; a failure is remembered too)
     *lin = l;
     return v;
 }
@@ -157,19 +175,24 @@ static void crDraw3(ID3D11DeviceContext *c, UINT first) {
 
 // part: the cross-hair's part of the HUD picture (w x h), readable by a shader. crossTex: the cross-hair's image
 // (w x h). hudTex: the HUD layer's image; the part lies at x0, y0 in it. fmt: both images' format.
-static bool crossSplit(ID3D11DeviceContext *c, ID3D11ShaderResourceView *part, ID3D11Texture2D *crossTex, ID3D11Texture2D *hudTex, UINT x0, UINT y0,
-                       UINT w, UINT h, DXGI_FORMAT fmt) {
+static bool crossSplit(ID3D11DeviceContext *c, ID3D11ShaderResourceView *part, ID3D11Texture2D *crossTex,
+                       ID3D11Texture2D *hudTex, UINT x0, UINT y0, UINT w, UINT h, DXGI_FORMAT fmt) {
     if (g_crState == 0) {
         g_crState = crCreate() ? 1 : -1;
-        logf(g_crState == 1 ? "hud: the cross-hair is told from a target's mark by its colour (green and yellow: the cross-hair)"
-                            : "hud: no shaders to tell the cross-hair from a target's mark - a mark in its part becomes smaller with it");
+        logf(g_crState == 1
+                 ? "hud: the cross-hair is told from a target's mark by its colour (green and yellow: the cross-hair)"
+                 : "hud: no shaders to tell the cross-hair from a target's mark - a mark in its part becomes smaller "
+                   "with it");
     }
     if (g_crState != 1) return false;
     bool lin[2] = {};
     ID3D11RenderTargetView *vCross = crView(crossTex, &lin[0]), *vHud = crView(hudTex, &lin[1]);
     if (!vCross || !vHud) {
         static bool told;
-        if (!told) logf("hud: no view to draw into the layers' images (format %d) - a mark in the cross-hair's part becomes smaller with it", (int)fmt);
+        if (!told)
+            logf("hud: no view to draw into the layers' images (format %d) - a mark in the cross-hair's part becomes "
+                 "smaller with it",
+                 (int)fmt);
         told = true;
         return false;
     }

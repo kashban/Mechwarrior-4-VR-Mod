@@ -42,25 +42,29 @@ struct VrState {
     XrSpace space = XR_NULL_HANDLE;
     XrSwapchain sc[2] = {XR_NULL_HANDLE, XR_NULL_HANDLE};
     std::vector<XrSwapchainImageD3D11KHR> img[2];
-    XrSwapchain hudSc = XR_NULL_HANDLE;   // the HUD layer's image
+    XrSwapchain hudSc = XR_NULL_HANDLE; // the HUD layer's image
     int64_t hudFormat = 0;
     std::vector<XrSwapchainImageD3D11KHR> hudImg;
     bool hudHave = false, hudLayer = true;
     float hudNear = 1.5f, hudTop = 0.12f, hudBottom = 0.77f; // the edge strips' distance; where they end / begin
-    float hudLeft = 0.25f, hudRight = 0.72f; // the far middle's sides; beside it the near side columns
-    float hudPanelScale = 0.6f;    // the edge strips' angular size against the game's image (drawn towards the middle)
-    float cockpitScale = 1.0f;     // the cockpit's size: eye movement for the near CPU-path geometry, times this
-    bool mechReproject = true;     // the older eye image turned by what the mech turned since
-    float panelX = 0, panelY = 0;  // the near HUD frame moved right / up, metres
-    // with the own cockpit's monitors: the torso mark (below the cross-hair, in the HUD image) is shown this much higher,
-    // clear of the dashboard
+    float hudLeft = 0.25f, hudRight = 0.72f;                 // the far middle's sides; beside it the near side columns
+    float hudPanelScale = 0.6f;   // the edge strips' angular size against the game's image (drawn towards the middle)
+    float cockpitScale = 1.0f;    // the cockpit's size: eye movement for the near CPU-path geometry, times this
+    bool mechReproject = true;    // the older eye image turned by what the mech turned since
+    float panelX = 0, panelY = 0; // the near HUD frame moved right / up, metres
+    // with the own cockpit's monitors: the torso mark (below the cross-hair, in the HUD image) is shown this much
+    // higher, clear of the dashboard
     float twist[4] = {0.42f, 0.585f, 0.58f, 0.665f}, twistDv = -0.045f;
     float seatFwd = 0, seatUp = 0; // the eyes moved forward / up in the cockpit, game metres
-    float zoomWinScale = 0.45f;    // the zoom window's size against the game's picture (smaller = weaker zoom, less in the way)
-    float cross[4] = {0.39f, 0.415f, 0.61f, 0.585f}, crossScale = 0.25f; // the cross-hair's part of the HUD image, and its size
-    float menuScale = 1.5f;        // a paused battle's menu: the HUD image as one screen, at this size against the game's view (0: as it comes)
-    float zoomWinMargin = 0.02f;   // the HUD cut away around the zoom window (the game's frame of it), part of the picture
-    float zoomScale = 0.9f;        // zoomed: the image shown at this share of the full view (smaller = weaker zoom)
+    float zoomWinScale =
+        0.45f; // the zoom window's size against the game's picture (smaller = weaker zoom, less in the way)
+    float cross[4] = {0.39f, 0.415f, 0.61f, 0.585f},
+          crossScale = 0.25f; // the cross-hair's part of the HUD image, and its size
+    float menuScale = 1.5f; // a paused battle's menu: the HUD image as one screen, at this size against the game's view
+                            // (0: as it comes)
+    float zoomWinMargin =
+        0.02f;              // the HUD cut away around the zoom window (the game's frame of it), part of the picture
+    float zoomScale = 0.9f; // zoomed: the image shown at this share of the full view (smaller = weaker zoom)
     float baseP00 = 0, baseP11 = 0; // the game's projection at its widest (not zoomed): what the layers span
     UINT w = 0, h = 0;
     bool have[2] = {false, false}; // an image of this eye was delivered
@@ -68,16 +72,16 @@ struct VrState {
     float ipd = 0.064f, hudDistance = 5.0f; // the quads sit in front of each eye; the HUD's apparent depth
     unsigned frames = 0;
     // head tracking
-    bool tracking = true;          // [vr] tracking: projection layers following the head (0 = the screen)
-    float worldScale = 1.0f;       // head and eye movement in the game, times this
-    float fovScale = 1.0f;         // the rendered field of view: the headset's, its tangents times this
+    bool tracking = true;    // [vr] tracking: projection layers following the head (0 = the screen)
+    float worldScale = 1.0f; // head and eye movement in the game, times this
+    float fovScale = 1.0f;   // the rendered field of view: the headset's, its tangents times this
     bool haveRef = false, recenter = false;
-    XrPosef ref = {{0, 0, 0, 1}, {0, 0, 0}};   // the head pose the game camera stands for
-    XrPosef next[2], used[2];      // located for the next frame; the pose each eye's image was rendered with
+    XrPosef ref = {{0, 0, 0, 1}, {0, 0, 0}}; // the head pose the game camera stands for
+    XrPosef next[2], used[2];                // located for the next frame; the pose each eye's image was rendered with
     bool nextOk[2] = {}, usedOk[2] = {};
     XrFovf usedFov[2];
-    XrPosef layerPose[2];          // the pose each eye's latest image belongs to
-    XrFovf layerFov[2];            // and its field of view
+    XrPosef layerPose[2]; // the pose each eye's latest image belongs to
+    XrFovf layerFov[2];   // and its field of view
     bool layerOk[2] = {};
     // functions
     PFN_xrCreateInstance CreateInstance;
@@ -139,10 +143,12 @@ static bool vrLoadRuntime() {
     // like it, not for a process with administrator rights
     DWORD en = GetEnvironmentVariableW(L"XR_RUNTIME_JSON", json, MAX_PATH);
     bool fromEnv = en > 0 && en < MAX_PATH && !vrElevated();
-    if (fromEnv) logf("vr: the runtime's manifest comes from XR_RUNTIME_JSON");
-    else json[0] = 0;
+    if (fromEnv)
+        logf("vr: the runtime's manifest comes from XR_RUNTIME_JSON");
+    else
+        json[0] = 0;
     if (!fromEnv && RegGetValueW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Khronos\\OpenXR\\1", L"ActiveRuntime",
-                     RRF_RT_REG_SZ | RRF_SUBKEY_WOW6432KEY, nullptr, json, &sz) != ERROR_SUCCESS) {
+                                 RRF_RT_REG_SZ | RRF_SUBKEY_WOW6432KEY, nullptr, json, &sz) != ERROR_SUCCESS) {
         logf("vr: no active 32-bit OpenXR runtime in the registry");
         return false;
     }
@@ -180,8 +186,8 @@ static bool vrLoadRuntime() {
         logf("vr: runtime %s not loaded (%lu)", narrow(path.c_str()).c_str(), GetLastError());
         return false;
     }
-    auto negotiate = (PFN_xrNegotiateLoaderRuntimeInterface)GetProcAddress(g_vr.runtime,
-                                                                           "xrNegotiateLoaderRuntimeInterface");
+    auto negotiate =
+        (PFN_xrNegotiateLoaderRuntimeInterface)GetProcAddress(g_vr.runtime, "xrNegotiateLoaderRuntimeInterface");
     if (!negotiate) {
         logf("vr: runtime has no xrNegotiateLoaderRuntimeInterface");
         return false;
@@ -203,8 +209,8 @@ static bool vrLoadRuntime() {
         return false;
     }
     g_vr.gipa = rr.getInstanceProcAddr;
-    logf("vr: runtime %s loaded (interface %u, API %u.%u)", narrow(path.c_str()).c_str(),
-         rr.runtimeInterfaceVersion, XR_VERSION_MAJOR(rr.runtimeApiVersion), XR_VERSION_MINOR(rr.runtimeApiVersion));
+    logf("vr: runtime %s loaded (interface %u, API %u.%u)", narrow(path.c_str()).c_str(), rr.runtimeInterfaceVersion,
+         XR_VERSION_MAJOR(rr.runtimeApiVersion), XR_VERSION_MINOR(rr.runtimeApiVersion));
     return true;
 }
 
@@ -277,27 +283,33 @@ static void vrReadIni() {
     g_vr.hudTop = (float)_wtof(b);
     GetPrivateProfileStringW(L"vr", L"hud_bottom", L"0.77", b, 64, p.c_str());
     g_vr.hudBottom = (float)_wtof(b);
-    if (!(g_vr.hudTop >= 0 && g_vr.hudTop < g_vr.hudBottom && g_vr.hudBottom <= 1)) g_vr.hudTop = 0.12f, g_vr.hudBottom = 0.77f;
+    if (!(g_vr.hudTop >= 0 && g_vr.hudTop < g_vr.hudBottom && g_vr.hudBottom <= 1))
+        g_vr.hudTop = 0.12f, g_vr.hudBottom = 0.77f;
     GetPrivateProfileStringW(L"vr", L"hud_left", L"0.25", b, 64, p.c_str());
     g_vr.hudLeft = (float)_wtof(b);
     GetPrivateProfileStringW(L"vr", L"hud_right", L"0.72", b, 64, p.c_str());
     g_vr.hudRight = (float)_wtof(b);
-    if (!(g_vr.hudLeft >= 0 && g_vr.hudLeft < g_vr.hudRight && g_vr.hudRight <= 1)) g_vr.hudLeft = 0.25f, g_vr.hudRight = 0.72f;
+    if (!(g_vr.hudLeft >= 0 && g_vr.hudLeft < g_vr.hudRight && g_vr.hudRight <= 1))
+        g_vr.hudLeft = 0.25f, g_vr.hudRight = 0.72f;
     // the cross-hair with its range, pitch scale and weapon groups: a part about the picture's middle, shown smaller
     GetPrivateProfileStringW(L"vr", L"hud_cross_rect", L"0.39 0.415 0.61 0.585", b, 64, p.c_str());
-    if (swscanf_s(b, L"%f %f %f %f", g_vr.cross, g_vr.cross + 1, g_vr.cross + 2, g_vr.cross + 3) != 4) g_vr.cross[0] = g_vr.cross[2] = 0;
+    if (swscanf_s(b, L"%f %f %f %f", g_vr.cross, g_vr.cross + 1, g_vr.cross + 2, g_vr.cross + 3) != 4)
+        g_vr.cross[0] = g_vr.cross[2] = 0;
     GetPrivateProfileStringW(L"vr", L"hud_cross_scale", L"0.25", b, 64, p.c_str());
     g_vr.crossScale = (float)_wtof(b);
     if (!(g_vr.crossScale >= 0.1f && g_vr.crossScale <= 1.0f)) g_vr.crossScale = 0.25f;
     GetPrivateProfileStringW(L"vr", L"hud_twist_rect", L"0.42 0.585 0.58 0.665", b, 64, p.c_str());
-    if (swscanf_s(b, L"%f %f %f %f", g_vr.twist, g_vr.twist + 1, g_vr.twist + 2, g_vr.twist + 3) != 4) g_vr.twist[0] = g_vr.twist[2] = 0;
+    if (swscanf_s(b, L"%f %f %f %f", g_vr.twist, g_vr.twist + 1, g_vr.twist + 2, g_vr.twist + 3) != 4)
+        g_vr.twist[0] = g_vr.twist[2] = 0;
     GetPrivateProfileStringW(L"vr", L"hud_twist_shift", L"-0.045", b, 64, p.c_str());
     g_vr.twistDv = (float)_wtof(b);
     // this cockpit's own values (mech.inc) over the [vr] ones
     g_mechOn = GetPrivateProfileIntW(L"vr", L"mech_profiles", 1, p.c_str()) != 0;
     g_mechAuto = GetPrivateProfileIntW(L"vr", L"mech_auto_fit", 1, p.c_str()) != 0;
     {
-        MechValues gv = {g_vr.cockpitScale, g_vr.seatFwd, g_vr.seatUp, g_vr.panelX, g_vr.panelY, g_vr.hudNear, g_vr.hudPanelScale}, mv = gv;
+        MechValues gv = {g_vr.cockpitScale, g_vr.seatFwd, g_vr.seatUp,       g_vr.panelX,
+                         g_vr.panelY,       g_vr.hudNear, g_vr.hudPanelScale},
+                   mv = gv;
         const char *how = "the [vr] values";
         if (g_mechCur >= 0 && g_mechCur < g_mechN) mechReload(g_mechCur);
         if (mechValues(gv, &mv, &how)) {
@@ -310,11 +322,13 @@ static void vrReadIni() {
         }
         static int lastCur = -2;
         static float last[7];
-        float now[7] = {g_vr.cockpitScale, g_vr.seatFwd, g_vr.seatUp, g_vr.panelX, g_vr.panelY, g_vr.hudNear, g_vr.hudPanelScale};
+        float now[7] = {g_vr.cockpitScale, g_vr.seatFwd, g_vr.seatUp,       g_vr.panelX,
+                        g_vr.panelY,       g_vr.hudNear, g_vr.hudPanelScale};
         if (g_mechOn && (lastCur != g_mechCur || memcmp(last, now, sizeof now))) {
             lastCur = g_mechCur;
             memcpy(last, now, sizeof now);
-            logf("mech: profile %d in use (%s) - cockpit scale %.3f, seat %.2f m forward %.2f m up, panels %.2f m right %.2f m up at %.2f m, scale %.2f",
+            logf("mech: profile %d in use (%s) - cockpit scale %.3f, seat %.2f m forward %.2f m up, panels %.2f m "
+                 "right %.2f m up at %.2f m, scale %.2f",
                  g_mechCur + 1, how, now[0], now[1], now[2], now[3], now[4], now[5], now[6]);
         }
     }
@@ -357,7 +371,8 @@ static bool vrInit(IDXGISwapChain *swap) {
           vrGet(g_vr.ReleaseSwapchainImage, "xrReleaseSwapchainImage") && vrGet(g_vr.PollEvent, "xrPollEvent") &&
           vrGet(g_vr.BeginSession, "xrBeginSession") && vrGet(g_vr.EndSession, "xrEndSession") &&
           vrGet(g_vr.WaitFrame, "xrWaitFrame") && vrGet(g_vr.BeginFrame, "xrBeginFrame") &&
-          vrGet(g_vr.EndFrame, "xrEndFrame") && vrGet(g_vr.LocateViews, "xrLocateViews") && vrGet(g_vr.RequestExitSession, "xrRequestExitSession") &&
+          vrGet(g_vr.EndFrame, "xrEndFrame") && vrGet(g_vr.LocateViews, "xrLocateViews") &&
+          vrGet(g_vr.RequestExitSession, "xrRequestExitSession") &&
           vrGet(g_vr.GetD3D11GraphicsRequirementsKHR, "xrGetD3D11GraphicsRequirementsKHR")))
         return false;
 
@@ -415,12 +430,12 @@ static bool vrInit(IDXGISwapChain *swap) {
         uint32_t ni = 0;
         g_vr.EnumerateSwapchainImages(g_vr.sc[e], 0, &ni, nullptr);
         g_vr.img[e].assign(ni, {XR_TYPE_SWAPCHAIN_IMAGE_D3D11_KHR});
-        if (!vrCheck(g_vr.EnumerateSwapchainImages(g_vr.sc[e], ni, &ni,
-                                                    (XrSwapchainImageBaseHeader *)g_vr.img[e].data()),
-                     "xrEnumerateSwapchainImages"))
+        if (!vrCheck(
+                g_vr.EnumerateSwapchainImages(g_vr.sc[e], ni, &ni, (XrSwapchainImageBaseHeader *)g_vr.img[e].data()),
+                "xrEnumerateSwapchainImages"))
             return false;
     }
-    {   // the HUD layer
+    { // the HUD layer
         XrSwapchainCreateInfo ci = {XR_TYPE_SWAPCHAIN_CREATE_INFO};
         ci.usageFlags = XR_SWAPCHAIN_USAGE_TRANSFER_DST_BIT | XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT;
         ci.format = fmt;
@@ -443,8 +458,8 @@ static bool vrInit(IDXGISwapChain *swap) {
             logf("vr: no swap chain for the HUD layer");
         }
     }
-    logf("vr: session ready - swap chains %ux%u format %d, screen %.1f m wide at %.1f m, eye offset %.3f m",
-         g_vr.w, g_vr.h, (int)fmt, g_vr.width, g_vr.distance, g_vr.eyeOffset);
+    logf("vr: session ready - swap chains %ux%u format %d, screen %.1f m wide at %.1f m, eye offset %.3f m", g_vr.w,
+         g_vr.h, (int)fmt, g_vr.width, g_vr.distance, g_vr.eyeOffset);
     return true;
 }
 
@@ -497,8 +512,10 @@ static XrQuaternionf qfromm(const float *m) {
         q = {(m[2] + m[6]) / s, (m[5] + m[7]) / s, 0.25f * s, (m[3] - m[1]) / s};
     }
     float l = sqrtf(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w);
-    if (l > 1e-6f) q = {q.x / l, q.y / l, q.z / l, q.w / l};
-    else q = {0, 0, 0, 1};
+    if (l > 1e-6f)
+        q = {q.x / l, q.y / l, q.z / l, q.w / l};
+    else
+        q = {0, 0, 0, 1};
     return q;
 }
 
@@ -511,9 +528,9 @@ static void vrPoseToGame(const XrPosef &pose, float *R, float *t, float *raw) {
                     pose.position.z - g_vr.ref.position.z};
     XrVector3f pr = qrot(ri, d);
     float x = q.x, y = q.y, z = q.z, w = q.w;
-    float M[9] = {1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w),
-                  2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w),
-                  2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)};
+    float M[9] = {1 - 2 * (y * y + z * z), 2 * (x * y - z * w),     2 * (x * z + y * w),
+                  2 * (x * y + z * w),     1 - 2 * (x * x + z * z), 2 * (y * z - x * w),
+                  2 * (x * z - y * w),     2 * (y * z + x * w),     1 - 2 * (x * x + y * y)};
     // S M S with S = diag(1, 1, -1)
     const float sg[3] = {1, 1, -1};
     for (int i = 0; i < 3; ++i)
@@ -540,10 +557,11 @@ static void vrLocate(XrTime when) {
         g_vrPoseOk[0] = g_vrPoseOk[1] = false;
         return;
     }
-    if (float deg = e2eYawNow()) { // a test run turns the head (e2e.inc): both eyes about the point between them
+    if (float deg = e2eYawNow()) {      // a test run turns the head (e2e.inc): both eyes about the point between them
         float a = -deg * 0.0174532925f; // (about +y a positive angle turns to the left)
         XrQuaternionf q = {0, sinf(a / 2), 0, cosf(a / 2)};
-        XrVector3f mid = {(views[0].pose.position.x + views[1].pose.position.x) / 2, (views[0].pose.position.y + views[1].pose.position.y) / 2,
+        XrVector3f mid = {(views[0].pose.position.x + views[1].pose.position.x) / 2,
+                          (views[0].pose.position.y + views[1].pose.position.y) / 2,
                           (views[0].pose.position.z + views[1].pose.position.z) / 2};
         for (int e = 0; e < 2; ++e) {
             XrVector3f &p = views[e].pose.position;
@@ -614,15 +632,17 @@ static inline MechValues vrValues() {
 // A blue sheet is the one behind the menu of a paused battle (Esc): the HUD's parts - on monitors, on the glass, the
 // cross-hair made small and far - cut that menu to pieces. The whole HUD image is one flat screen then, straight
 // ahead ([vr] menu_scale; 0: off).
-static const float g_fadePts[6][2] = {{0.50f, 0.30f}, {0.36f, 0.40f}, {0.64f, 0.40f}, {0.36f, 0.70f}, {0.64f, 0.70f}, {0.30f, 0.55f}};
+static const float g_fadePts[6][2] = {{0.50f, 0.30f}, {0.36f, 0.40f}, {0.64f, 0.40f},
+                                      {0.36f, 0.70f}, {0.64f, 0.70f}, {0.30f, 0.55f}};
 static ID3D11Texture2D *g_fadeStage;
 static bool g_fadePending;
-static unsigned g_fadeCopyFrame = ~0u; // the frame whose HUD image waits to be read
+static unsigned g_fadeCopyFrame = ~0u;  // the frame whose HUD image waits to be read
 static unsigned g_fadeKnownFrame = ~0u; // the frame the last answer came in; none lately: the HUD is not shown yet
-static float g_fadeA;  // the sheet's alpha, 0: none
-static bool g_fadeMenu; // the sheet is a paused battle's (blue): its menu is up
-static unsigned g_sheetCleanFrame = ~0u; // the frame whose HUD image holds the sheet and the menu alone (main.cpp: hudSheetPost)
-static int g_fadePt;   // the point showing the sheet alone
+static float g_fadeA;                   // the sheet's alpha, 0: none
+static bool g_fadeMenu;                 // the sheet is a paused battle's (blue): its menu is up
+static unsigned g_sheetCleanFrame =
+    ~0u;             // the frame whose HUD image holds the sheet and the menu alone (main.cpp: hudSheetPost)
+static int g_fadePt; // the point showing the sheet alone
 static void fadeProbe(ID3D11DeviceContext *ctx, ID3D11Texture2D *hud) {
     D3D11_TEXTURE2D_DESC d;
     hud->GetDesc(&d);
@@ -636,7 +656,9 @@ static void fadeProbe(ID3D11DeviceContext *ctx, ID3D11Texture2D *hud) {
     }
     if (g_fadePending) { // the frame before's
         D3D11_MAPPED_SUBRESOURCE m;
-        if (SUCCEEDED(ORIG(MechPFN_Map, ctx, VT_Ctx_Map)(ctx, g_fadeStage, 0, D3D11_MAP_READ, D3D11_MAP_FLAG_DO_NOT_WAIT, &m)) && m.pData) {
+        if (SUCCEEDED(ORIG(MechPFN_Map, ctx, VT_Ctx_Map)(ctx, g_fadeStage, 0, D3D11_MAP_READ,
+                                                         D3D11_MAP_FLAG_DO_NOT_WAIT, &m)) &&
+            m.pData) {
             int lo = 255, at = 0;
             for (int i = 0; i < 6; ++i) {
                 int a = ((const uint8_t *)m.pData)[i * 4 + 3];
@@ -650,13 +672,19 @@ static void fadeProbe(ID3D11DeviceContext *ctx, ID3D11Texture2D *hud) {
             bool menu = kind == MC_SHEET_MENU && g_vr.menuScale > 0;
             { // (not off for a single frame without the sheet: the picture would jump to the HUD's parts and back)
                 static int off;
-                if (menu) off = 0;
-                else if (g_fadeMenu && ++off < 3) menu = true;
+                if (menu)
+                    off = 0;
+                else if (g_fadeMenu && ++off < 3)
+                    menu = true;
             }
-            if (g_frame - g_fadeCopyFrame <= 3 && (a > 0) != (g_fadeA > 0)) logf("hud: the game's fade sheet %s (alpha %.2f, frame %u)", a > 0 ? "begins" : "is gone", a, g_frame);
+            if (g_frame - g_fadeCopyFrame <= 3 && (a > 0) != (g_fadeA > 0))
+                logf("hud: the game's fade sheet %s (alpha %.2f, frame %u)", a > 0 ? "begins" : "is gone", a, g_frame);
             if (g_frame - g_fadeCopyFrame <= 3 && menu != g_fadeMenu)
-                logf(menu ? "hud: a paused battle's sheet (blue, alpha %.2f, frame %u) - the HUD image as one flat screen for its menu"
-                          : "hud: the paused battle's sheet is gone (alpha %.2f, frame %u) - the HUD in its parts again", lo / 255.0f, g_frame);
+                logf(menu
+                         ? "hud: a paused battle's sheet (blue, alpha %.2f, frame %u) - the HUD image as one flat "
+                           "screen for its menu"
+                         : "hud: the paused battle's sheet is gone (alpha %.2f, frame %u) - the HUD in its parts again",
+                     lo / 255.0f, g_frame);
             if (g_frame - g_fadeCopyFrame <= 3) { // not an old battle's last picture
                 g_fadeA = a, g_fadePt = at, g_fadeMenu = menu;
                 g_fadeKnownFrame = g_frame;
@@ -680,8 +708,8 @@ static void fadeProbe(ID3D11DeviceContext *ctx, ID3D11Texture2D *hud) {
 // up and the cross-hair costs one of the runtime's 16 layers, not four. (Made smaller inside the HUD's image it
 // cost none, but its range and texts could not be read: a layer keeps every pixel.)
 // Not while a small camera's window (the zoom window) lies in that part. true: the image is filled, the part emptied.
-static bool crossSplit(ID3D11DeviceContext *c, ID3D11ShaderResourceView *part, ID3D11Texture2D *crossTex, ID3D11Texture2D *hudTex, UINT x0, UINT y0,
-                       UINT w, UINT h, DXGI_FORMAT fmt); // cross.inc
+static bool crossSplit(ID3D11DeviceContext *c, ID3D11ShaderResourceView *part, ID3D11Texture2D *crossTex,
+                       ID3D11Texture2D *hudTex, UINT x0, UINT y0, UINT w, UINT h, DXGI_FORMAT fmt); // cross.inc
 static XrSwapchain g_crossSc = XR_NULL_HANDLE;
 static std::vector<XrSwapchainImageD3D11KHR> g_crossImg;
 static UINT g_crossW, g_crossH, g_crossX, g_crossY;
@@ -689,7 +717,8 @@ static bool g_crossShown; // the HUD's image shown now has the part emptied
 static bool vrCrossImage(ID3D11DeviceContext *ctx, ID3D11Texture2D *dst, ID3D11Texture2D *src, UINT dstW, UINT dstH) {
     const float *cr = g_vr.cross;
     if (g_vr.crossScale > 0.995f || !g_hudW || !g_hudH || !(cr[2] > cr[0] && cr[3] > cr[1])) return false;
-    UINT x0 = (UINT)(cr[0] * g_hudW), y0 = (UINT)(cr[1] * g_hudH), x1 = (UINT)(cr[2] * g_hudW), y1 = (UINT)(cr[3] * g_hudH);
+    UINT x0 = (UINT)(cr[0] * g_hudW), y0 = (UINT)(cr[1] * g_hudH), x1 = (UINT)(cr[2] * g_hudW),
+         y1 = (UINT)(cr[3] * g_hudH);
     if (x1 > dstW || y1 > dstH || x1 < x0 + 16 || y1 < y0 + 16) return false;
     if (g_hudCamFrame == g_frame)
         for (int i = 0; i < g_hudCamN; ++i) {
@@ -723,7 +752,8 @@ static bool vrCrossImage(ID3D11DeviceContext *ctx, ID3D11Texture2D *dst, ID3D11T
         if (ok) ok = XR_SUCCEEDED(g_vr.EnumerateSwapchainImages(g_crossSc, 0, &ni, nullptr)) && ni > 0;
         if (ok) {
             g_crossImg.assign(ni, {XR_TYPE_SWAPCHAIN_IMAGE_D3D11_KHR});
-            ok = XR_SUCCEEDED(g_vr.EnumerateSwapchainImages(g_crossSc, ni, &ni, (XrSwapchainImageBaseHeader *)g_crossImg.data()));
+            ok = XR_SUCCEEDED(
+                g_vr.EnumerateSwapchainImages(g_crossSc, ni, &ni, (XrSwapchainImageBaseHeader *)g_crossImg.data()));
         }
         if (ok) {
             std::vector<uint8_t> zero((size_t)w * h * 4);
@@ -733,17 +763,20 @@ static bool vrCrossImage(ID3D11DeviceContext *ctx, ID3D11Texture2D *dst, ID3D11T
             d.BindFlags = D3D11_BIND_SHADER_RESOURCE;
             ok = SUCCEEDED(g_dev->CreateTexture2D(&d, &init, &empty));
             // (without these two the whole part goes into the cross-hair's image, a target's mark with it)
-            if (ok && SUCCEEDED(g_dev->CreateTexture2D(&d, nullptr, &partTex)) && partTex && FAILED(g_dev->CreateShaderResourceView(partTex, nullptr, &partSrv)))
+            if (ok && SUCCEEDED(g_dev->CreateTexture2D(&d, nullptr, &partTex)) && partTex &&
+                FAILED(g_dev->CreateShaderResourceView(partTex, nullptr, &partSrv)))
                 partSrv = nullptr;
         }
         failed = !ok;
         if (failed) {
             if (g_crossSc != XR_NULL_HANDLE && g_vr.DestroySwapchain) g_vr.DestroySwapchain(g_crossSc);
             g_crossSc = XR_NULL_HANDLE;
-            logf("hud: the cross-hair stays at full size - no image for its own layer (%ux%u, format %d)", w, h, (int)fmt);
+            logf("hud: the cross-hair stays at full size - no image for its own layer (%ux%u, format %d)", w, h,
+                 (int)fmt);
             return false;
         }
-        logf("hud: the cross-hair at %.2f of its size, as a layer of its own (its part %ux%u, format %d)", g_vr.crossScale, w, h, (int)fmt);
+        logf("hud: the cross-hair at %.2f of its size, as a layer of its own (its part %ux%u, format %d)",
+             g_vr.crossScale, w, h, (int)fmt);
     }
     uint32_t idx = 0;
     XrSwapchainImageAcquireInfo ai = {XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO};
@@ -777,7 +810,7 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
         g_vrInitRunning = false;
         if (g_vr.ok) {
             g_vrActive = true;
-            g_eyeMode = 3;                // alternate the eyes from now on
+            g_eyeMode = 3; // alternate the eyes from now on
         } else {
             logf("vr: not started");
         }
@@ -793,10 +826,11 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
         lastMw5 = g_mechMw5; // (a cockpit of ours has a seat of its own)
         vrReadIni();
     }
-    {   // Ctrl+Home: the game camera becomes the head's current pose
+    { // Ctrl+Home: the game camera becomes the head's current pose
         static bool was;
         // (with Alt: a monitor's picture is turned, mw5.inc)
-        bool down = (GetAsyncKeyState(VK_CONTROL) & 0x8000) && !(GetAsyncKeyState(VK_MENU) & 0x8000) && (GetAsyncKeyState(VK_HOME) & 0x8000);
+        bool down = (GetAsyncKeyState(VK_CONTROL) & 0x8000) && !(GetAsyncKeyState(VK_MENU) & 0x8000) &&
+                    (GetAsyncKeyState(VK_HOME) & 0x8000);
         if (down && !was) {
             g_vr.baseP00 = g_vr.baseP11 = 0;
             g_vr.recenter = true;
@@ -804,10 +838,11 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
         }
         was = down;
     }
-    {   // Ctrl + Up / Down: seat forward / back, Ctrl + Right / Left: seat up / down, 5 cm a press; saved at once
+    { // Ctrl + Up / Down: seat forward / back, Ctrl + Right / Left: seat up / down, 5 cm a press; saved at once
         static bool was[4];
         // with Shift: the near HUD panels up / down / right / left, 2 cm a press
-        bool mod = (GetAsyncKeyState(VK_CONTROL) & 0x8000) && !(GetAsyncKeyState(VK_MENU) & 0x8000), shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+        bool mod = (GetAsyncKeyState(VK_CONTROL) & 0x8000) && !(GetAsyncKeyState(VK_MENU) & 0x8000),
+             shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
         const int keys[4] = {VK_UP, VK_DOWN, VK_RIGHT, VK_LEFT};
         for (int k = 0; k < 4; ++k) {
             bool down = mod && (GetAsyncKeyState(keys[k]) & 0x8000);
@@ -825,28 +860,33 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
                     if (k == 3) mv.seatUp -= 0.05f;
                 }
                 vrStoreValues(mv);
-                if (shift) logf("vr: panels %.2f m right, %.2f m up (saved)", mv.panelX, mv.panelY);
-                else logf("vr: seat %.2f m forward, %.2f m up (saved)", mv.seatFwd, mv.seatUp);
+                if (shift)
+                    logf("vr: panels %.2f m right, %.2f m up (saved)", mv.panelX, mv.panelY);
+                else
+                    logf("vr: seat %.2f m forward, %.2f m up (saved)", mv.seatFwd, mv.seatUp);
                 Beep((k < 2 ? 700 : 1000) + (shift ? 300 : 0), 40);
             }
             was[k] = down;
         }
     }
-    {   // Ctrl+F10: this cockpit fits as it is - its values become its own profile, and the measure for the others
+    { // Ctrl+F10: this cockpit fits as it is - its values become its own profile, and the measure for the others
         static bool was;
         bool down = (GetAsyncKeyState(VK_CONTROL) & 0x8000) && (GetAsyncKeyState(VK_F10) & 0x8000);
         if (down && !was) {
             bool ok = mechStore(vrValues());
-            logf(ok ? "mech: profile %d set by hand (the values in use)" : "mech: no cockpit recognised now - nothing stored", g_mechCur + 1);
+            logf(ok ? "mech: profile %d set by hand (the values in use)"
+                    : "mech: no cockpit recognised now - nothing stored",
+                 g_mechCur + 1);
             Beep(ok ? 1200 : 300, ok ? 60 : 200);
             if (ok) vrReadIni();
         }
         was = down;
     }
-    {   // Ctrl+Ins / Ctrl+Del: cockpit scale up / down by 5 % (larger = the cockpit looks smaller);
+    { // Ctrl+Ins / Ctrl+Del: cockpit scale up / down by 5 % (larger = the cockpit looks smaller);
         // with Shift: the world's scale (larger = the world looks smaller, the ground nearer). Saved at once
         static bool was[2];
-        bool ctrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000) && !(GetAsyncKeyState(VK_MENU) & 0x8000), shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+        bool ctrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000) && !(GetAsyncKeyState(VK_MENU) & 0x8000),
+             shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
         const int keys[2] = {VK_INSERT, VK_DELETE};
         for (int k = 0; k < 2; ++k) {
             bool down = ctrl && (GetAsyncKeyState(keys[k]) & 0x8000);
@@ -873,29 +913,35 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
     // Ctrl+PgUp: HUD farther, Ctrl+PgDn: nearer, Ctrl+End: at infinity; saved to mw4vr.ini at once
     {
         static bool was[3];
-        bool ctrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000) && !(GetAsyncKeyState(VK_MENU) & 0x8000); // (with Alt: the cockpit mesh, mw5.inc)
+        bool ctrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000) &&
+                    !(GetAsyncKeyState(VK_MENU) & 0x8000); // (with Alt: the cockpit mesh, mw5.inc)
         const int keys[3] = {VK_PRIOR, VK_NEXT, VK_END};
         for (int k = 0; k < 3; ++k) {
             bool down = ctrl && (GetAsyncKeyState(keys[k]) & 0x8000);
             if (down && !was[k]) {
                 float d = g_vr.hudDistance;
-                if (k == 2) d = 0;
-                else if (d <= 0.1f) d = k == 0 ? 0 : 200.0f; // from infinity, nearer starts at 200 m
-                else d = k == 0 ? d * 1.25f : d / 1.25f;
+                if (k == 2)
+                    d = 0;
+                else if (d <= 0.1f)
+                    d = k == 0 ? 0 : 200.0f; // from infinity, nearer starts at 200 m
+                else
+                    d = k == 0 ? d * 1.25f : d / 1.25f;
                 if (d > 250.0f) d = 0; // beyond 250 m: infinity
                 if (d != 0 && d < 1.0f) d = 1.0f;
                 wchar_t b[32];
                 swprintf(b, 32, L"%.2f", d);
                 WritePrivateProfileStringW(L"vr", L"hud_distance_m", b, (g_dir + L"mw4vr.ini").c_str());
                 vrReadIni(); // recomputes the shift from the saved value
-                if (d == 0) logf("vr: HUD at infinity (saved)");
-                else logf("vr: HUD at %.2f m (saved)", d);
+                if (d == 0)
+                    logf("vr: HUD at infinity (saved)");
+                else
+                    logf("vr: HUD at %.2f m (saved)", d);
                 Beep(d == 0 ? 400 : 500 + (int)(d * 4 > 800 ? 800 : d * 4), 60);
             }
             was[k] = down;
         }
     }
-    {   // Ctrl+F9: the labels of both eyes' passes of the next frame -> mw4vr_labels.txt (diagnosis)
+    { // Ctrl+F9: the labels of both eyes' passes of the next frame -> mw4vr_labels.txt (diagnosis)
         static bool was;
         bool down = (GetAsyncKeyState(VK_CONTROL) & 0x8000) && (GetAsyncKeyState(VK_F9) & 0x8000);
         if (down && !was) {
@@ -910,8 +956,8 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
 
     // the pose the finished frame was rendered with (chosen by buildK from the poses located last time)
     g_srcCamActive = g_srcCam && g_camHooked && g_camCal;
-    int renderedEye = g_srcCamActive ? (g_camEyeFrame == g_frame ? g_camEye : -1)
-                                     : (g_kOn && g_kFrame == g_frame ? g_kEye : -1);
+    int renderedEye =
+        g_srcCamActive ? (g_camEyeFrame == g_frame ? g_camEye : -1) : (g_kOn && g_kFrame == g_frame ? g_kEye : -1);
     XrPosef renderedPose = renderedEye >= 0 ? g_vr.used[renderedEye] : XrPosef{};
     bool renderedOk = renderedEye >= 0 && g_vr.usedOk[renderedEye];
 
@@ -938,7 +984,8 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
     g_dev->GetImmediateContext(&ctx);
     // (a test run, e2e.inc, looks at the eyes' images also while the runtime wants none: a headset on nobody's head
     // loses the focus after some seconds, and the run stood still until somebody touched it)
-    if ((fs.shouldRender || g_e2eOn) && SUCCEEDED(swap->GetBuffer(0, __uuidof(ID3D11Texture2D), (void **)&bb)) && bb && ctx) {
+    if ((fs.shouldRender || g_e2eOn) && SUCCEEDED(swap->GetBuffer(0, __uuidof(ID3D11Texture2D), (void **)&bb)) && bb &&
+        ctx) {
         D3D11_TEXTURE2D_DESC bd;
         bb->GetDesc(&bd);
         D3D11_BOX box = {0, 0, 0, min(bd.Width, g_vr.w), min(bd.Height, g_vr.h), 1};
@@ -975,16 +1022,19 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
             g_vr.have[e] = true;
         }
         // a test run's line for this frame (e2e.inc); one flat picture (a menu's screen) has no pair of eyes
-        if (bothNow) e2eFrame(ctx, g_eyeTex[0], g_eyeTex[1]);
-        else if (g_menuMode) e2eFrame(ctx, bb, nullptr);
+        if (bothNow)
+            e2eFrame(ctx, g_eyeTex[0], g_eyeTex[1]);
+        else if (g_menuMode)
+            e2eFrame(ctx, bb, nullptr);
         // diagnosis pictures (shot.inc): what went to the eyes just now, and the HUD layer's image
         shotFrame(ctx, bothNow ? g_eyeTex[0] : bb, bothNow ? g_eyeTex[1] : nullptr,
                   (g_hudLayerOn && g_hudTex && g_hudDrawnFrame == g_frame) ? g_hudTex : nullptr,
                   bothNow ? "both eyes of this frame" : "one picture, no eye pair in this frame");
     }
     // the HUD drawn in this frame
-    if (ctx && g_hudLayerOn && g_hudTex && g_hudDrawnFrame == g_frame) mw5HighlightDraw(ctx);     // the chosen part's frame
-    if (ctx && g_hudLayerOn && g_hudTex && g_hudDrawnFrame == g_frame) mw5HudCopy(ctx, g_hudTex); // for the own cockpit's monitors
+    if (ctx && g_hudLayerOn && g_hudTex && g_hudDrawnFrame == g_frame) mw5HighlightDraw(ctx); // the chosen part's frame
+    if (ctx && g_hudLayerOn && g_hudTex && g_hudDrawnFrame == g_frame)
+        mw5HudCopy(ctx, g_hudTex); // for the own cockpit's monitors
     if (ctx && g_hudLayerOn && g_hudTex && g_hudDrawnFrame == g_frame) fadeProbe(ctx, g_hudTex);
     if (ctx && fs.shouldRender && g_hudLayerOn && g_hudTex && g_hudDrawnFrame == g_frame) {
         uint32_t idx = 0;
@@ -998,10 +1048,13 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
             // (not under a paused battle's menu: it lies where the cross-hair is, and would be taken apart with it)
             g_crossShown = !g_fadeMenu && vrCrossImage(ctx, g_vr.hudImg[idx].texture, g_hudTex, hb.right, hb.bottom);
             noteDraw(ctx, g_vr.hudImg[idx].texture, min(g_hudW, g_vr.w), hb.bottom); // a note of ours (note.inc)
-            helpDraw(ctx, g_vr.hudImg[idx].texture, min(g_hudW, g_vr.w), hb.bottom, g_vr.hudLeft, g_vr.hudRight, g_vr.hudTop, g_vr.hudBottom);
+            helpDraw(ctx, g_vr.hudImg[idx].texture, min(g_hudW, g_vr.w), hb.bottom, g_vr.hudLeft, g_vr.hudRight,
+                     g_vr.hudTop, g_vr.hudBottom);
             XrSwapchainImageReleaseInfo ri = {XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
             g_vr.ReleaseSwapchainImage(g_vr.hudSc, &ri);
-            if (!g_vr.hudHave) logf("vr: HUD layer running (edge strips at %.1f m, the middle at %.1f m)", g_vr.hudNear, g_vr.hudDistance);
+            if (!g_vr.hudHave)
+                logf("vr: HUD layer running (edge strips at %.1f m, the middle at %.1f m)", g_vr.hudNear,
+                     g_vr.hudDistance);
             g_vr.hudHave = true;
         }
     }
@@ -1038,16 +1091,22 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
             pv[e].pose = g_vr.layerPose[e];
             // the mech turned since this eye's image was drawn: the image turns with it (about the reference),
             // so both eyes show the world in one place again
-            if (g_vr.mechReproject && g_camBothFrame != g_frame && g_srcCamActive && renderedEye >= 0 && e != renderedEye && g_camEyeBaseOk[0] &&
-                g_camEyeBaseOk[1] && g_vr.haveRef) {
+            if (g_vr.mechReproject && g_camBothFrame != g_frame && g_srcCamActive && renderedEye >= 0 &&
+                e != renderedEye && g_camEyeBaseOk[0] && g_camEyeBaseOk[1] && g_vr.haveRef) {
                 const float *Bn = g_camEyeBase[renderedEye], *Be = g_camEyeBase[e], *A = g_camA;
                 float Dl[9], T1[9], Dv[9];
                 for (int i = 0; i < 3; ++i)
-                    for (int j = 0; j < 3; ++j) Dl[i * 3 + j] = Bn[0 * 4 + i] * Be[0 * 4 + j] + Bn[1 * 4 + i] * Be[1 * 4 + j] + Bn[2 * 4 + i] * Be[2 * 4 + j];
+                    for (int j = 0; j < 3; ++j)
+                        Dl[i * 3 + j] = Bn[0 * 4 + i] * Be[0 * 4 + j] + Bn[1 * 4 + i] * Be[1 * 4 + j] +
+                                        Bn[2 * 4 + i] * Be[2 * 4 + j];
                 for (int i = 0; i < 3; ++i)
-                    for (int j = 0; j < 3; ++j) T1[i * 3 + j] = A[0 * 3 + i] * Dl[0 * 3 + j] + A[1 * 3 + i] * Dl[1 * 3 + j] + A[2 * 3 + i] * Dl[2 * 3 + j];
+                    for (int j = 0; j < 3; ++j)
+                        T1[i * 3 + j] =
+                            A[0 * 3 + i] * Dl[0 * 3 + j] + A[1 * 3 + i] * Dl[1 * 3 + j] + A[2 * 3 + i] * Dl[2 * 3 + j];
                 for (int i = 0; i < 3; ++i)
-                    for (int j = 0; j < 3; ++j) Dv[i * 3 + j] = T1[i * 3 + 0] * A[0 * 3 + j] + T1[i * 3 + 1] * A[1 * 3 + j] + T1[i * 3 + 2] * A[2 * 3 + j];
+                    for (int j = 0; j < 3; ++j)
+                        Dv[i * 3 + j] =
+                            T1[i * 3 + 0] * A[0 * 3 + j] + T1[i * 3 + 1] * A[1 * 3 + j] + T1[i * 3 + 2] * A[2 * 3 + j];
                 const float sg[3] = {1, 1, -1};
                 float Dx[9];
                 for (int i = 0; i < 3; ++i)
@@ -1056,11 +1115,13 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
                 if (dq.w > 0.94f || dq.w < -0.94f) { // less than 40 degrees: a turn, not a cut
                     XrQuaternionf rq = g_vr.ref.orientation;
                     XrQuaternionf wq = qmul(qmul(rq, dq), qconj(rq));
-                    XrVector3f dp = {pv[e].pose.position.x - g_vr.ref.position.x, pv[e].pose.position.y - g_vr.ref.position.y,
+                    XrVector3f dp = {pv[e].pose.position.x - g_vr.ref.position.x,
+                                     pv[e].pose.position.y - g_vr.ref.position.y,
                                      pv[e].pose.position.z - g_vr.ref.position.z};
                     XrVector3f np = qrot(wq, dp);
                     pv[e].pose.orientation = qmul(wq, pv[e].pose.orientation);
-                    pv[e].pose.position = {g_vr.ref.position.x + np.x, g_vr.ref.position.y + np.y, g_vr.ref.position.z + np.z};
+                    pv[e].pose.position = {g_vr.ref.position.x + np.x, g_vr.ref.position.y + np.y,
+                                           g_vr.ref.position.z + np.z};
                 }
             }
             pv[e].fov = g_vr.layerFov[e];
@@ -1089,7 +1150,8 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
     // the HUD: three strips of its image as quads fixed to the mech (the reference pose), each spanning
     // the game's field of view from there - the top and bottom strips (panels, radar) near, in the
     // cockpit; the middle (cross-hair, target marks) far ahead
-    if (nl && battle && g_hudLayerOn && g_vr.hudHave && g_vr.haveRef && fs.shouldRender && g_hudDrawnFrame + 3 >= g_frame) {
+    if (nl && battle && g_hudLayerOn && g_vr.hudHave && g_vr.haveRef && fs.shouldRender &&
+        g_hudDrawnFrame + 3 >= g_frame) {
         // rectangles of the HUD image (u0 v0 u1 v1): the far middle first, then the near frame around it -
         // top and bottom strips over the whole width, the side columns between them
         float T = g_vr.hudTop, B = g_vr.hudBottom, L = g_vr.hudLeft, R = g_vr.hudRight;
@@ -1116,7 +1178,8 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
             for (int i = 0; i < g_hudCamN && i < MC_CAMS; ++i) { // the small cameras' windows
                 const HudCamRect &r = g_hudCams[i];
                 float *o = hd.cam[hd.nCam++];
-                o[0] = (float)r.x / g_hudW, o[1] = (float)r.y / g_hudH, o[2] = (float)(r.x + r.w) / g_hudW, o[3] = (float)(r.y + r.h) / g_hudH;
+                o[0] = (float)r.x / g_hudW, o[1] = (float)r.y / g_hudH, o[2] = (float)(r.x + r.w) / g_hudW,
+                o[3] = (float)(r.y + r.h) / g_hudH;
             }
         hd.margin = g_vr.zoomWinMargin;
         // the own cockpit's monitors show the near frame, its glass what no monitor shows; the rest stays, far
@@ -1129,10 +1192,12 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
             mw5MonitorLists(hd, T);
             for (int g = 0; g < ng; ++g) {
                 float *r = gi[g].rc;
-                if (r[2] >= 1.0f && hd.UR > r[2]) r[2] = hd.UR; // at the picture's right edge: with what the wide HUD adds there
+                if (r[2] >= 1.0f && hd.UR > r[2])
+                    r[2] = hd.UR; // at the picture's right edge: with what the wide HUD adds there
                 memcpy(hd.glass[hd.nGlass++], r, sizeof hd.glass[0]);
                 mcTopSpan(hd.span, hd.nSpan, r, T);
-                if (r[1] < T) { // the lists with what hangs below them (the lance menu, the weapons): not the far columns' any more
+                if (r[1] < T) { // the lists with what hangs below them (the lance menu, the weapons): not the far
+                                // columns' any more
                     // one that reaches below the strip and into the middle (the weapon list's frame begins left of
                     // hud_right): the middle ends where it begins - middle and columns are shown alike here
                     if (r[3] > T + 0.01f && r[0] > 0.5f && r[0] < hd.R) hd.R = r[0];
@@ -1146,15 +1211,16 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
         hd.twistDv = g_vr.twistDv;
         static McRects hq_;
         mcHudRects(hd, hq_);
-        float (*rc)[5] = hq_.rc;
+        float(*rc)[5] = hq_.rc;
         int nr = hq_.n;
         // a battle's first pictures (the answer comes a frame late, and the first frame can last long): no HUD yet
-        if (g_fadeStage && (g_fadeKnownFrame == ~0u || g_frame - g_fadeKnownFrame > 4)) nr = 0;
+        if (g_fadeStage && (g_fadeKnownFrame == ~0u || g_frame - g_fadeKnownFrame > 4))
+            nr = 0;
         else if (g_fadeA > 0) { // the game's fade sheet: over the whole view, the HUD not
             nr = 0;
             float du = 3.0f / g_vr.w, dv = 3.0f / g_vr.h;
-            rc[0][0] = g_fadePts[g_fadePt][0] - du, rc[0][1] = g_fadePts[g_fadePt][1] - dv, rc[0][2] = g_fadePts[g_fadePt][0] + du,
-            rc[0][3] = g_fadePts[g_fadePt][1] + dv, rc[0][4] = 5;
+            rc[0][0] = g_fadePts[g_fadePt][0] - du, rc[0][1] = g_fadePts[g_fadePt][1] - dv,
+            rc[0][2] = g_fadePts[g_fadePt][0] + du, rc[0][3] = g_fadePts[g_fadePt][1] + dv, rc[0][4] = 5;
             nr = 1;
         } else if (g_fadeMenu) { // a paused battle's menu: the whole HUD image, one screen
             // Not an image that still has the HUD under the sheet (the menu's first frames, before the sheet's draw is
@@ -1169,7 +1235,7 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
                 nr = 1;
             }
         }
-        {   // Esc was pressed a moment ago: the menu of a paused battle comes up. Its sheet fades in from nothing, and
+        { // Esc was pressed a moment ago: the menu of a paused battle comes up. Its sheet fades in from nothing, and
             // until it can be told (some frames) the menu's lines stood small in the far middle with the cross-hair, in
             // wrong colours. No HUD for those moments; without a menu after them it is there again.
             static unsigned esc = ~0u;
@@ -1190,14 +1256,16 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
                 told = true;
                 break;
             }
-            if (rc[i][4] >= MC_GLASS) { // on the cockpit's glass: where its part's middle is seen from the seat, facing the seat
+            if (rc[i][4] >=
+                MC_GLASS) { // on the cockpit's glass: where its part's middle is seen from the seat, facing the seat
                 bool solid = rc[i][4] >= MC_GLASS_OPAQUE;
                 const GlassItem &it = gi[(int)rc[i][4] - (solid ? MC_GLASS_OPAQUE : MC_GLASS)];
                 float gp[3], gq[4], gd = it.dist;
                 mcGlassPose(it.right, it.up, gd, gp, gq);
                 float mu = mcGlassScale(it.width, gd, it.base[2] - it.base[0]), mv = mu * (float)g_vr.h / (float)g_vr.w;
                 XrQuaternionf lq = {gq[0], gq[1], gq[2], gq[3]};
-                XrVector3f off = qrot(lq, XrVector3f{mu * 0.5f * (u0 + u1 - it.base[0] - it.base[2]), -mv * 0.5f * (v0 + v1 - it.base[1] - it.base[3]), 0});
+                XrVector3f off = qrot(lq, XrVector3f{mu * 0.5f * (u0 + u1 - it.base[0] - it.base[2]),
+                                                     -mv * 0.5f * (v0 + v1 - it.base[1] - it.base[3]), 0});
                 XrVector3f local = {gp[0] + off.x, gp[1] + off.y, gp[2] + off.z};
                 XrQuaternionf qo = qmul(g_vr.ref.orientation, lq);
                 if (g_swayValid) { // it moves with the cockpit
@@ -1215,13 +1283,15 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
                 q.subImage.imageRect.offset = {(int32_t)(u0 * g_vr.w), (int32_t)(v0 * g_vr.h)};
                 q.subImage.imageRect.extent = {(int32_t)((u1 - u0) * g_vr.w), (int32_t)((v1 - v0) * g_vr.h)};
                 q.pose.orientation = qo;
-                q.pose.position = {g_vr.ref.position.x + wpos.x, g_vr.ref.position.y + wpos.y, g_vr.ref.position.z + wpos.z};
+                q.pose.position = {g_vr.ref.position.x + wpos.x, g_vr.ref.position.y + wpos.y,
+                                   g_vr.ref.position.z + wpos.z};
                 q.size = {mu * (u1 - u0), mv * (v1 - v0)};
                 layers[nl++] = (const XrCompositionLayerBaseHeader *)&q;
                 continue;
             }
             float D = isFar ? far_ : g_vr.hudNear;
-            float sc = isFar ? 1.0f : g_vr.hudPanelScale; // the middle spans the game's view: marks stay on their targets
+            float sc =
+                isFar ? 1.0f : g_vr.hudPanelScale; // the middle spans the game's view: marks stay on their targets
             XrCompositionLayerQuad &q = hq[i];
             q.type = XR_TYPE_COMPOSITION_LAYER_QUAD;
             q.layerFlags = opaque ? 0 : XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
@@ -1242,11 +1312,13 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
             }
             XrVector3f wpos = qrot(g_vr.ref.orientation, local);
             q.pose.orientation = qo;
-            q.pose.position = {g_vr.ref.position.x + wpos.x, g_vr.ref.position.y + wpos.y, g_vr.ref.position.z + wpos.z};
+            q.pose.position = {g_vr.ref.position.x + wpos.x, g_vr.ref.position.y + wpos.y,
+                               g_vr.ref.position.z + wpos.z};
             // the zoom window smaller, about its centre
             float ws = rc[i][4] == 3 ? g_vr.zoomWinScale : 1.0f;
             q.size = {W * (u1 - u0) * ws, H * (v1 - v0) * ws};
-            if (rc[i][4] == 6) { // straight ahead of the mech, as far as the near panels: nothing of the cockpit before it
+            if (rc[i][4] ==
+                6) { // straight ahead of the mech, as far as the near panels: nothing of the cockpit before it
                 float Dm = g_vr.hudNear, Wm = g_vr.menuScale * 2 * Dm / p0, Hm = g_vr.menuScale * 2 * Dm / p1;
                 XrVector3f c = qrot(g_vr.ref.orientation, XrVector3f{0, 0, -Dm});
                 q.pose.orientation = g_vr.ref.orientation;
@@ -1261,19 +1333,22 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
             layers[nl++] = (const XrCompositionLayerBaseHeader *)&q;
         }
         static XrCompositionLayerQuad cq;
-        if (crossNow && nl < VR_LAYERS) { // the cross-hair: where its part lies in the far middle, smaller about its own middle
+        if (crossNow &&
+            nl < VR_LAYERS) { // the cross-hair: where its part lies in the far middle, smaller about its own middle
             cq = {XR_TYPE_COMPOSITION_LAYER_QUAD};
-            float u0 = (float)g_crossX / g_vr.w, v0 = (float)g_crossY / g_vr.h, u1 = (float)(g_crossX + g_crossW) / g_vr.w,
-                  v1 = (float)(g_crossY + g_crossH) / g_vr.h;
+            float u0 = (float)g_crossX / g_vr.w, v0 = (float)g_crossY / g_vr.h,
+                  u1 = (float)(g_crossX + g_crossW) / g_vr.w, v1 = (float)(g_crossY + g_crossH) / g_vr.h;
             float W = 2 * far_ / p0, H = 2 * far_ / p1;
-            XrVector3f wpos = qrot(g_vr.ref.orientation, XrVector3f{0.5f * W * ((u0 + u1) - 1), 0.5f * H * (1 - (v0 + v1)), -far_});
+            XrVector3f wpos =
+                qrot(g_vr.ref.orientation, XrVector3f{0.5f * W * ((u0 + u1) - 1), 0.5f * H * (1 - (v0 + v1)), -far_});
             cq.layerFlags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
             cq.space = g_vr.space;
             cq.eyeVisibility = XR_EYE_VISIBILITY_BOTH;
             cq.subImage.swapchain = g_crossSc;
             cq.subImage.imageRect.extent = {(int32_t)g_crossW, (int32_t)g_crossH};
             cq.pose.orientation = g_vr.ref.orientation;
-            cq.pose.position = {g_vr.ref.position.x + wpos.x, g_vr.ref.position.y + wpos.y, g_vr.ref.position.z + wpos.z};
+            cq.pose.position = {g_vr.ref.position.x + wpos.x, g_vr.ref.position.y + wpos.y,
+                                g_vr.ref.position.z + wpos.z};
             cq.size = {W * (u1 - u0) * g_vr.crossScale, H * (v1 - v0) * g_vr.crossScale};
             layers[nl++] = (const XrCompositionLayerBaseHeader *)&cq;
         }
@@ -1285,8 +1360,10 @@ static void vrOnPresent(IDXGISwapChain *swap, int eye) {
     ei.layers = layers;
     vrCheck(g_vr.EndFrame(g_vr.session, &ei), "xrEndFrame");
     // poses for the next frame (rendered now, shown one period later)
-    if (track) vrLocate(fs.predictedDisplayTime + fs.predictedDisplayPeriod);
-    else g_vrPoseOk[0] = g_vrPoseOk[1] = false;
+    if (track)
+        vrLocate(fs.predictedDisplayTime + fs.predictedDisplayPeriod);
+    else
+        g_vrPoseOk[0] = g_vrPoseOk[1] = false;
     if (++g_vr.frames == 1) logf("vr: first frame submitted");
 }
 

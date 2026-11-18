@@ -35,7 +35,8 @@ struct McFrustum {
 // The game's planes pl (made from the mech's own view, matrix base) made anew for the view out, the side
 // planes at the tangent given but never narrower than 1.6 (58 degrees: the headset's widest side is 55).
 // The near plane comes half as near (the head moves in the cockpit). false: pl is not laid out as known.
-static inline bool mcFrustumPlanes(const float *pl, const float *base, const float *out, const float *A, float tangent, McFrustum *res) {
+static inline bool mcFrustumPlanes(const float *pl, const float *base, const float *out, const float *A, float tangent,
+                                   McFrustum *res) {
     float fb[3], pb[3] = {base[3], base[7], base[11]};
     mcViewAxis(base, A, 2, fb);
     res->d0 = mcDot3(pl, fb);
@@ -70,14 +71,18 @@ static inline bool mcFrustumPlanes(const float *pl, const float *base, const flo
 // [vr] hud_extra_width as read: 1 (not wider) for anything outside 1..1.3
 static inline float mcWideFactor(float k) { return k <= 1.3f ? fmaxf(k, 1.0f) : 1.0f; }
 // the layer texture's width for a picture w wide: a multiple of 8
-static inline unsigned mcWideWidth(unsigned w, float k) { return k > 1.001f ? ((unsigned)(w * k + 0.5f) + 7) & ~7u : w; }
+static inline unsigned mcWideWidth(unsigned w, float k) {
+    return k > 1.001f ? ((unsigned)(w * k + 0.5f) + 7) & ~7u : w;
+}
 
 // ---- the parts of the HUD image shown as quads (vr.inc) ----
 // u, v: 0..1 over the game's picture (u beyond 1 with the wide HUD), v down.
 
 enum { MC_RECTS = 32, MC_SPANS = 8, MC_CAMS = 4 };
 enum { MC_NEAR = 0, MC_FAR = 1, MC_NEAR_OPAQUE = 2, MC_FAR_OPAQUE = 3, MC_FAR_UP = 4, MC_FADE = 5, MC_FAR_SMALL = 6 };
-enum { MC_SHOWN = 15 }; // as many parts every runtime shows beside the world's layer (a runtime may show more: mcHudRects' shown)
+enum {
+    MC_SHOWN = 15
+}; // as many parts every runtime shows beside the world's layer (a runtime may show more: mcHudRects' shown)
 // a part on the cockpit's glass: MC_GLASS + its number; a camera's window in it, opaque: MC_GLASS_OPAQUE + its number
 enum { MC_GLASSES = 8, MC_GLASS = 8, MC_GLASS_OPAQUE = 16 };
 struct McRects {
@@ -93,7 +98,9 @@ static inline void mcAdd(McRects &q, float u0, float v0, float u1, float v1, flo
     }
 }
 
-static inline bool mcMeet(const float *c, float u0, float v0, float u1, float v1) { return c[0] < u1 && c[2] > u0 && c[1] < v1 && c[3] > v0; }
+static inline bool mcMeet(const float *c, float u0, float v0, float u1, float v1) {
+    return c[0] < u1 && c[2] > u0 && c[1] < v1 && c[3] > v0;
+}
 
 // a rectangle without what the rectangle c covers of it (c null: all of it): above, below, left, right
 static inline void mcAddCut(McRects &q, const float *c, float u0, float v0, float u1, float v1, float kind) {
@@ -116,8 +123,9 @@ static inline void mcMoveOut(McRects &q, const float *c, float kind) {
         if (r[4] != MC_FAR) continue;
         float u0 = r[0], v0 = r[1], u1 = r[2], v1 = r[3];
         if (!mcMeet(c, u0, v0, u1, v1)) continue;
-        float a0 = fmaxf(c[0], u0), a1 = fmaxf(c[1], v0), a2 = fminf(c[2], u1), a3 = fminf(c[3], v1); // what the two share
-        r[3] = a1; // what lies above it; then below, left, right
+        float a0 = fmaxf(c[0], u0), a1 = fmaxf(c[1], v0), a2 = fminf(c[2], u1),
+              a3 = fminf(c[3], v1); // what the two share
+        r[3] = a1;                  // what lies above it; then below, left, right
         mcAdd(q, u0, a3, u1, v1, MC_FAR);
         mcAdd(q, u0, a1, a0, a3, MC_FAR);
         mcAdd(q, a2, a1, u1, a3, MC_FAR);
@@ -135,27 +143,31 @@ static inline void mcTopSpan(float (*iv)[2], int &n, const float *r, float T) {
 }
 
 // a monitor's second part a in the left side column (u < L): how far down it reaches, if further than v
-static inline float mcLeftAlt(const float *a, float L, float v) { return a[2] > a[0] && a[3] > a[1] && a[0] < L ? fmaxf(a[3], v) : v; }
+static inline float mcLeftAlt(const float *a, float L, float v) {
+    return a[2] > a[0] && a[3] > a[1] && a[0] < L ? fmaxf(a[3], v) : v;
+}
 
 // the same for a part a in the right side column (u > R)
-static inline float mcRightAlt(const float *a, float R, float v) { return a[2] > a[0] && a[3] > a[1] && a[2] > R ? fmaxf(a[3], v) : v; }
+static inline float mcRightAlt(const float *a, float R, float v) {
+    return a[2] > a[0] && a[3] > a[1] && a[2] > R ? fmaxf(a[3], v) : v;
+}
 
 struct McHud {
-    float T, B, L, R;   // the far middle: marks stay on their targets there
-    float UR;           // the image's right edge (beyond 1: the wide HUD)
-    int nCam;           // the small cameras' windows this frame (at most MC_CAMS); one about the middle is the zoom window
+    float T, B, L, R; // the far middle: marks stay on their targets there
+    float UR;         // the image's right edge (beyond 1: the wide HUD)
+    int nCam; // the small cameras' windows this frame (at most MC_CAMS); one about the middle is the zoom window
     float cam[MC_CAMS][4];
-    float margin;       // cut away around the zoom window (the game's frame of it)
-    bool screens;       // the cockpit's monitors show the near frame
-    int nSpan;          // what they show of the top strip (mcTopSpan; at most MC_SPANS)
+    float margin; // cut away around the zoom window (the game's frame of it)
+    bool screens; // the cockpit's monitors show the near frame
+    int nSpan;    // what they show of the top strip (mcTopSpan; at most MC_SPANS)
     float span[MC_SPANS][2];
-    float leftAlt;      // and of the left column (mcLeftAlt)
-    float rightAlt;     // and of the right one (mcRightAlt)
-    float twist[4];     // the torso mark, shown higher
+    float leftAlt;  // and of the left column (mcLeftAlt)
+    float rightAlt; // and of the right one (mcRightAlt)
+    float twist[4]; // the torso mark, shown higher
     float twistDv;
-    int nGlass;         // parts shown on the cockpit's glass (at most MC_GLASSES)
+    int nGlass; // parts shown on the cockpit's glass (at most MC_GLASSES)
     float glass[MC_GLASSES][4];
-    float cross[4];     // the cross-hair with what belongs to it, shown smaller about its middle (empty: as it is)
+    float cross[4]; // the cross-hair with what belongs to it, shown smaller about its middle (empty: as it is)
 };
 
 // the point u v lies in the rectangle r (not on its edge)
@@ -165,8 +177,10 @@ static inline bool mcHolds(const float *r, float u, float v) { return r[0] < u &
 static inline float mcTurnNorm(float d) {
     if (!(d > -1e6f && d < 1e6f)) return 0;
     d = fmodf(d, 360.0f);
-    if (d > 180) d -= 360;
-    else if (d <= -180) d += 360;
+    if (d > 180)
+        d -= 360;
+    else if (d <= -180)
+        d += 360;
     return d;
 }
 
@@ -251,12 +265,14 @@ static inline void mcHudRectsWith(const McHud &h, McRects &q, bool shrink) {
         if (cu > 0.3f && cu < 0.7f) continue;
         mcAdd(q, h.cam[i][0], h.cam[i][1], h.cam[i][2], h.cam[i][3], MC_NEAR_OPAQUE);
     }
-    for (int g = 0; g < h.nGlass; ++g) { // the parts on the glass, each with the windows in it (the target's view) over it
+    for (int g = 0; g < h.nGlass;
+         ++g) { // the parts on the glass, each with the windows in it (the target's view) over it
         const float *r = h.glass[g];
         mcAdd(q, r[0], r[1], r[2], r[3], (float)(MC_GLASS + g));
         for (int i = 0; i < h.nCam; ++i) {
             const float *c = h.cam[i];
-            if (mcHolds(r, 0.5f * (c[0] + c[2]), 0.5f * (c[1] + c[3]))) mcAdd(q, c[0], c[1], c[2], c[3], (float)(MC_GLASS_OPAQUE + g));
+            if (mcHolds(r, 0.5f * (c[0] + c[2]), 0.5f * (c[1] + c[3])))
+                mcAdd(q, c[0], c[1], c[2], c[3], (float)(MC_GLASS_OPAQUE + g));
         }
     }
 }
@@ -312,9 +328,13 @@ static inline void mcGridMark(McGrid &g, int c, int r, float d) {
 
 // a point (metres right, up, ahead of the seat) in cells: across, up
 static inline float mcGridX(const float *v) { return (atan2f(v[0], v[2]) / MC_RAD - MC_GAZ0) / MC_GSTEP; }
-static inline float mcGridY(const float *v) { return (atan2f(v[1], sqrtf(v[0] * v[0] + v[2] * v[2])) / MC_RAD - MC_GEL0) / MC_GSTEP; }
+static inline float mcGridY(const float *v) {
+    return (atan2f(v[1], sqrtf(v[0] * v[0] + v[2] * v[2])) / MC_RAD - MC_GEL0) / MC_GSTEP;
+}
 // which side of the line from a to b the point p lies on (0: on it)
-static inline float mcGridSide(float ax, float ay, float bx, float by, float px, float py) { return (bx - ax) * (py - ay) - (by - ay) * (px - ax); }
+static inline float mcGridSide(float ax, float ay, float bx, float by, float px, float py) {
+    return (bx - ax) * (py - ay) - (by - ay) * (px - ax);
+}
 
 // a triangle of the mesh: the cells its corners lie in and those whose direction it covers. One reaching beside or
 // behind the seat is left out.
@@ -328,16 +348,20 @@ static inline void mcGridTri(McGrid &g, const float *a, const float *b, const fl
     int cEnd = (int)floorf(fmaxf(xa, fmaxf(xb, xc))), rEnd = (int)floorf(fmaxf(ya, fmaxf(yb, yc)));
     for (int r = (int)ceilf(fminf(ya, fminf(yb, yc))); r <= rEnd; ++r)
         for (int cc = (int)ceilf(fminf(xa, fminf(xb, xc))); cc <= cEnd; ++cc) {
-            float e0 = mcGridSide(xa, ya, xb, yb, (float)cc, (float)r), e1 = mcGridSide(xb, yb, xc, yc, (float)cc, (float)r);
+            float e0 = mcGridSide(xa, ya, xb, yb, (float)cc, (float)r),
+                  e1 = mcGridSide(xb, yb, xc, yc, (float)cc, (float)r);
             float e2 = mcGridSide(xc, yc, xa, ya, (float)cc, (float)r);
-            if (fminf(e0, fminf(e1, e2)) * fmaxf(e0, fmaxf(e1, e2)) >= 0) mcGridMark(g, cc, r, d); // on one side of all three
+            if (fminf(e0, fminf(e1, e2)) * fmaxf(e0, fmaxf(e1, e2)) >= 0)
+                mcGridMark(g, cc, r, d); // on one side of all three
         }
 }
 
 // the cells a rectangle w x h degrees about right / up reaches into: c0 r0 c1 r1
 static inline void mcGridCells(float right, float up, float w, float h, int *q) {
-    q[0] = (int)floorf((right - 0.5f * w - MC_GAZ0) / MC_GSTEP), q[1] = (int)floorf((up - 0.5f * h - MC_GEL0) / MC_GSTEP);
-    q[2] = (int)floorf((right + 0.5f * w - MC_GAZ0) / MC_GSTEP), q[3] = (int)floorf((up + 0.5f * h - MC_GEL0) / MC_GSTEP);
+    q[0] = (int)floorf((right - 0.5f * w - MC_GAZ0) / MC_GSTEP),
+    q[1] = (int)floorf((up - 0.5f * h - MC_GEL0) / MC_GSTEP);
+    q[2] = (int)floorf((right + 0.5f * w - MC_GAZ0) / MC_GSTEP),
+    q[3] = (int)floorf((up + 0.5f * h - MC_GEL0) / MC_GSTEP);
 }
 
 // the view is open all over that rectangle (and the grid covers it)
@@ -366,8 +390,8 @@ static inline float mcGridRim(const McGrid &g, float right, float up, float w, f
 // The open place for a part w x h degrees nearest to wantR / wantU, less than reach degrees from there, that keeps
 // clear of the rectangles taken (right0 up0 right1 up1 each). false: there is none. (No place is about the grid's
 // first row or column.)
-static inline bool mcGridFit(const McGrid &g, float w, float h, float wantR, float wantU, float reach, const float (*taken)[4], int nTaken, float *right,
-                             float *up) {
+static inline bool mcGridFit(const McGrid &g, float w, float h, float wantR, float wantU, float reach,
+                             const float (*taken)[4], int nTaken, float *right, float *up) {
     bool found = false;
     float best = reach * reach;
     for (int r = 1; r != MC_GH; ++r)
@@ -448,7 +472,9 @@ static inline bool mcNameOk(const wchar_t *s) {
     wchar_t before = L' ';
     for (; s[n]; ++n) {
         wchar_t c = s[n];
-        if (n >= 63 || c < 32 || c == L'\\' || c == L'/' || c == L':' || c == L'*' || c == L'?' || c == L'"' || c == L'<' || c == L'>' || c == L'|') return false;
+        if (n >= 63 || c < 32 || c == L'\\' || c == L'/' || c == L':' || c == L'*' || c == L'?' || c == L'"' ||
+            c == L'<' || c == L'>' || c == L'|')
+            return false;
         if (c == L'.' && before == L'.') return false;
         before = c;
     }
@@ -460,6 +486,8 @@ static inline bool mcNameOk(const wchar_t *s) {
 // loader reads. The largest real cockpit has some 13,000 vertices in a part and pictures of 1024.
 enum { MC_GROUP_VERTS = 500000, MC_GROUP_INDICES = 3000000, MC_GROUP_TEX = 4096 };
 static inline unsigned mcGroupBytes(unsigned nv, unsigned ni, unsigned cs, unsigned es) {
-    if (nv < 1 || nv > MC_GROUP_VERTS || ni < 3 || ni > MC_GROUP_INDICES || cs < 1 || cs > MC_GROUP_TEX || es > MC_GROUP_TEX) return 0;
+    if (nv < 1 || nv > MC_GROUP_VERTS || ni < 3 || ni > MC_GROUP_INDICES || cs < 1 || cs > MC_GROUP_TEX ||
+        es > MC_GROUP_TEX)
+        return 0;
     return nv * 32 + ni * 4 + cs * cs * 6 + es * es * 6;
 }

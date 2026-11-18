@@ -14,21 +14,21 @@
 // the two meshes are not alike, a seat that fits the one does not fit the other.
 // Included into main.cpp before the draw hooks; vr.inc applies and stores the values.
 
-static volatile bool g_mechOn;            // [vr] mech_profiles=1
-static volatile bool g_mechAuto = true;   // [vr] mech_auto_fit=1
+static volatile bool g_mechOn;          // [vr] mech_profiles=1
+static volatile bool g_mechAuto = true; // [vr] mech_auto_fit=1
 enum { MG_AZ = 20, MG_EL = 18, MG_N = MG_AZ * MG_EL, MG_SAMPLES = 15, MECH_MAX = 64 };
 static const float MG_AZ0 = -40.0f, MG_EL0 = -48.0f, MG_STEP = 4.0f;
-static float g_mgFrame[MG_N];             // this frame's grid (metres, 0 = nothing)
+static float g_mgFrame[MG_N]; // this frame's grid (metres, 0 = nothing)
 static int g_mgTris, g_mgBad, g_mgDraws;
 static float g_mgSamples[MG_SAMPLES][MG_N];
 static int g_mgSampleN;
-static bool g_mechSearching;              // samples are being collected
-static McSeat g_mechSeat;                 // seen from outside (third person)? (core.h)
-static int g_mechCkTris;                  // triangles of the game's cockpit in this frame's left-eye pass
-static bool g_mechMw5;                    // a cockpit of our own is in use (mw5.inc tells): its seat counts
-static bool g_mechSeated;                 // the game draws its cockpit: the camera sits in the mech (not a mission's intro)
-static unsigned g_mechBattleFrame;        // the battle's first frame
-static unsigned g_mechNextFrame;          // the next frame to measure
+static bool g_mechSearching;       // samples are being collected
+static McSeat g_mechSeat;          // seen from outside (third person)? (core.h)
+static int g_mechCkTris;           // triangles of the game's cockpit in this frame's left-eye pass
+static bool g_mechMw5;             // a cockpit of our own is in use (mw5.inc tells): its seat counts
+static bool g_mechSeated;          // the game draws its cockpit: the camera sits in the mech (not a mission's intro)
+static unsigned g_mechBattleFrame; // the battle's first frame
+static unsigned g_mechNextFrame;   // the next frame to measure
 static unsigned g_mechLastCamFrame = ~0u;
 
 struct MechProfile {
@@ -136,7 +136,8 @@ static void mechLoad() {
             while (*q == L',' || *q == L' ') ++q;
         }
         if (k != MG_N) {
-            logf("mech: profile %d in mw4vr_mechs.ini has no usable signature (%d of %d values) - left out", i + 1, k, (int)MG_N);
+            logf("mech: profile %d in mw4vr_mechs.ini has no usable signature (%d of %d values) - left out", i + 1, k,
+                 (int)MG_N);
             // keeps its number: an empty signature matches nothing
             for (int j = 0; j < MG_N; ++j) p.sig[j] = 0;
         }
@@ -265,7 +266,7 @@ enum { SWV_MAX = 1500 };
 static float g_swvCur[SWV_MAX][3], g_swvPrev[SWV_MAX][3];
 static float g_swvPairP[SWV_MAX][3], g_swvPairQ[SWV_MAX][3];
 static int g_swvCurN, g_swvPrevN, g_swvAllN; // AllN: with the vertices at the view's edges (is there a cockpit at all?)
-static float g_swvTh[3], g_swvTau[3]; // the sum: p' = p + tau + th x p
+static float g_swvTh[3], g_swvTau[3];        // the sum: p' = p + tau + th x p
 
 // false: the game drew no cockpit in this frame
 static bool swvOnPresent() {
@@ -281,7 +282,7 @@ static bool swvOnPresent() {
         // with every turn of the head others are there, in another order (compared by order, the cockpit moved
         // with the head). Each vertex is the nearest one of the frame before, if within 3 cm - a step moves the
         // cockpit some millimetres a frame, and its vertices lie further apart.
-        static float (*const P)[3] = g_swvPairP, (*const Q)[3] = g_swvPairQ;
+        static float(*const P)[3] = g_swvPairP, (*const Q)[3] = g_swvPairQ;
         int m = 0;
         for (int i = 0; i < n; ++i) {
             const float *q = g_swvCur[i];
@@ -310,14 +311,22 @@ static bool swvOnPresent() {
                     for (int c = 0; c < 3; ++c) A[a * 3 + c] += (a == c ? rr : 0) - r[a] * r[c];
                 b[0] += r[1] * d[2] - r[2] * d[1], b[1] += r[2] * d[0] - r[0] * d[2], b[2] += r[0] * d[1] - r[1] * d[0];
             }
-            double det = A[0] * (A[4] * A[8] - A[5] * A[7]) - A[1] * (A[3] * A[8] - A[5] * A[6]) + A[2] * (A[3] * A[7] - A[4] * A[6]);
+            double det = A[0] * (A[4] * A[8] - A[5] * A[7]) - A[1] * (A[3] * A[8] - A[5] * A[6]) +
+                         A[2] * (A[3] * A[7] - A[4] * A[6]);
             double w[3] = {0, 0, 0};
             if (fabs(det) > 1e-9) {
-                w[0] = (b[0] * (A[4] * A[8] - A[5] * A[7]) - A[1] * (b[1] * A[8] - A[5] * b[2]) + A[2] * (b[1] * A[7] - A[4] * b[2])) / det;
-                w[1] = (A[0] * (b[1] * A[8] - A[5] * b[2]) - b[0] * (A[3] * A[8] - A[5] * A[6]) + A[2] * (A[3] * b[2] - b[1] * A[6])) / det;
-                w[2] = (A[0] * (A[4] * b[2] - b[1] * A[7]) - A[1] * (A[3] * b[2] - b[1] * A[6]) + b[0] * (A[3] * A[7] - A[4] * A[6])) / det;
+                w[0] = (b[0] * (A[4] * A[8] - A[5] * A[7]) - A[1] * (b[1] * A[8] - A[5] * b[2]) +
+                        A[2] * (b[1] * A[7] - A[4] * b[2])) /
+                       det;
+                w[1] = (A[0] * (b[1] * A[8] - A[5] * b[2]) - b[0] * (A[3] * A[8] - A[5] * A[6]) +
+                        A[2] * (A[3] * b[2] - b[1] * A[6])) /
+                       det;
+                w[2] = (A[0] * (A[4] * b[2] - b[1] * A[7]) - A[1] * (A[3] * b[2] - b[1] * A[6]) +
+                        b[0] * (A[3] * A[7] - A[4] * A[6])) /
+                       det;
             }
-            double dl = sqrt(dm[0] * dm[0] + dm[1] * dm[1] + dm[2] * dm[2]), wl = sqrt(w[0] * w[0] + w[1] * w[1] + w[2] * w[2]);
+            double dl = sqrt(dm[0] * dm[0] + dm[1] * dm[1] + dm[2] * dm[2]),
+                   wl = sqrt(w[0] * w[0] + w[1] * w[1] + w[2] * w[2]);
             if (dl < 0.03 && wl < 0.03) { // a step, not a cut to another view
                 // about the origin: d + w x (p - pc) = (d - w x pc) + w x p
                 g_swvTh[0] += (float)w[0], g_swvTh[1] += (float)w[1], g_swvTh[2] += (float)w[2];
@@ -339,7 +348,8 @@ static bool swvOnPresent() {
         static int told;
         if (frames % 900 == 0 && told < 6) {
             ++told;
-            logf("sway: from the game's cockpit - %d vertices inside the view, %d found again in the frame before; %u of the last 900 frames compared; largest shift %.1f mm",
+            logf("sway: from the game's cockpit - %d vertices inside the view, %d found again in the frame before; %u "
+                 "of the last 900 frames compared; largest shift %.1f mm",
                  g_swvCurN, pairsLast, matched, most * 1000);
             matched = 0, most = 0;
         }
@@ -368,8 +378,8 @@ static bool swvOnPresent() {
 
 // the vertices are read from the buffers' own memory; nothing here has a destructor (SEH)
 // collect: the left eye's pass (the sway, the cockpit's shape). Returns how many of the cockpit's triangles it read.
-static int mgRead(const uint8_t *vbase, UINT vbytes, UINT stride, UINT voff, INT baseV, const uint8_t *ibase, UINT ibytes,
-                  UINT ioff, bool idx32, UINT start, UINT count, float W, float H, bool collect) {
+static int mgRead(const uint8_t *vbase, UINT vbytes, UINT stride, UINT voff, INT baseV, const uint8_t *ibase,
+                  UINT ibytes, UINT ioff, bool idx32, UINT start, UINT count, float W, float H, bool collect) {
     const float *R = g_vrR[0], *T = g_vrT[0];
     int found = 0;
     __try {
@@ -429,7 +439,8 @@ static int mgRead(const uint8_t *vbase, UINT vbytes, UINT stride, UINT voff, INT
             ++found;
             if (!collect) continue;
             g_swvAllN += 3;
-            for (int k = 0; k < 3; ++k) // for the sway (above): not what the clipping made at the view's edges and its near plane
+            for (int k = 0; k < 3;
+                 ++k) // for the sway (above): not what the clipping made at the view's edges and its near plane
                 if (!edge[k] && g_swvCurN < SWV_MAX) memcpy(g_swvCur[g_swvCurN++], pos[k], sizeof pos[k]);
             if (!g_mechMeasure) continue;
             mgTriangle(v[0], v[1], v[2]);
@@ -441,7 +452,8 @@ static int mgRead(const uint8_t *vbase, UINT vbytes, UINT stride, UINT voff, INT
     return found;
 }
 
-typedef HRESULT(STDMETHODCALLTYPE *MechPFN_Map)(ID3D11DeviceContext *, ID3D11Resource *, UINT, D3D11_MAP, UINT, D3D11_MAPPED_SUBRESOURCE *);
+typedef HRESULT(STDMETHODCALLTYPE *MechPFN_Map)(ID3D11DeviceContext *, ID3D11Resource *, UINT, D3D11_MAP, UINT,
+                                                D3D11_MAPPED_SUBRESOURCE *);
 typedef void(STDMETHODCALLTYPE *MechPFN_Unmap)(ID3D11DeviceContext *, ID3D11Resource *, UINT);
 
 // a CPU-path draw of an eye's pass of the main camera. Returns how many triangles of the game's cockpit it draws.
@@ -469,11 +481,15 @@ static int mechDraw(ID3D11DeviceContext *c, bool indexed, UINT count, UINT start
     if (ok) {
         // the buffers' memory as it is (nothing is written)
         D3D11_MAPPED_SUBRESOURCE mv = {}, mi = {};
-        bool mvOk = SUCCEEDED(ORIG(MechPFN_Map, c, VT_Ctx_Map)(c, vb, 0, D3D11_MAP_WRITE_NO_OVERWRITE, 0, &mv)) && mv.pData;
-        bool miOk = !indexed || (SUCCEEDED(ORIG(MechPFN_Map, c, VT_Ctx_Map)(c, ib, 0, D3D11_MAP_WRITE_NO_OVERWRITE, 0, &mi)) && mi.pData);
+        bool mvOk =
+            SUCCEEDED(ORIG(MechPFN_Map, c, VT_Ctx_Map)(c, vb, 0, D3D11_MAP_WRITE_NO_OVERWRITE, 0, &mv)) && mv.pData;
+        bool miOk =
+            !indexed ||
+            (SUCCEEDED(ORIG(MechPFN_Map, c, VT_Ctx_Map)(c, ib, 0, D3D11_MAP_WRITE_NO_OVERWRITE, 0, &mi)) && mi.pData);
         if (mvOk && miOk) {
-            found = mgRead((const uint8_t *)mv.pData, vd.ByteWidth, stride, voff, baseV, indexed ? (const uint8_t *)mi.pData : nullptr,
-                           id.ByteWidth, ioff, ifmt == DXGI_FORMAT_R32_UINT, start, count, vp.Width, vp.Height, collect);
+            found = mgRead((const uint8_t *)mv.pData, vd.ByteWidth, stride, voff, baseV,
+                           indexed ? (const uint8_t *)mi.pData : nullptr, id.ByteWidth, ioff,
+                           ifmt == DXGI_FORMAT_R32_UINT, start, count, vp.Width, vp.Height, collect);
             ++g_mgDraws;
         }
         if (indexed && miOk && mi.pData) ORIG(MechPFN_Unmap, c, VT_Ctx_Unmap)(c, ib, 0);
@@ -543,7 +559,8 @@ static void mechIdentify() {
                 WritePrivateProfileStringW(sec, L"name", model, mechIni().c_str());
             }
         }
-        logf("mech: cockpit recognised - profile %d '%s' (%s, difference %.3f), %s; console %.2f m, top %.0f deg, window middle %.0f deg",
+        logf("mech: cockpit recognised - profile %d '%s' (%s, difference %.3f), %s; console %.2f m, top %.0f deg, "
+             "window middle %.0f deg",
              best + 1, narrow(p.name).c_str(), byName ? "by the mech's name" : "by its shape", bd < 1e8f ? bd : -1.0f,
              p.tuned ? "set by hand" : "fitted from the others", p.dash, p.top, p.centre);
         return;
@@ -556,13 +573,16 @@ static void mechIdentify() {
     MechProfile &p = g_mechs[g_mechN];
     memset(&p, 0, sizeof p);
     memcpy(p.sig, sig, sizeof sig);
-    if (model[0]) wcscpy_s(p.name, model), wcscpy_s(p.model, model);
-    else swprintf(p.name, 48, L"cockpit %d", g_mechN + 1);
+    if (model[0])
+        wcscpy_s(p.name, model), wcscpy_s(p.model, model);
+    else
+        swprintf(p.name, 48, L"cockpit %d", g_mechN + 1);
     p.cockpitScale = 1, p.panelDist = 1.5f, p.panelScale = 0.6f;
     mechMeasures(p);
     g_mechCur = g_mechN++;
     mechWriteNew(g_mechCur);
-    logf("mech: a new cockpit - profile %d (%d cells; nearest known one differs by %.3f); console %.2f m, top %.0f deg, window middle %.0f deg",
+    logf("mech: a new cockpit - profile %d (%d cells; nearest known one differs by %.3f); console %.2f m, top %.0f "
+         "deg, window middle %.0f deg",
          g_mechCur + 1, valid, bd < 1e8f ? bd : -1.0f, p.dash, p.top, p.centre);
     Beep(500, 40);
 }
@@ -579,7 +599,8 @@ static void mechOnPresent(bool inBattle, bool zoomed) {
     static unsigned skipped;
     if (inBattle && !zoomed && g_doubleDraw && g_camBothFrame != g_frame) ++skipped;
     if (inBattle && !zoomed && g_doubleDraw && g_camBothFrame == g_frame) {
-        bool was = g_mechSeat.outside, ahead = g_vrPoseOk[0] && g_vrR[0][8] > 0.94f; // (within 20 degrees of straight ahead)
+        bool was = g_mechSeat.outside,
+             ahead = g_vrPoseOk[0] && g_vrR[0][8] > 0.94f; // (within 20 degrees of straight ahead)
         mcSeatStep(g_mechSeat, ckTris, ahead);
         // what the judgement rests on, for the log: how much of the game's cockpit there is while the head looks ahead
         static int least = 1 << 30, most = -1, told, toldSum;
@@ -591,12 +612,17 @@ static void mechOnPresent(bool inBattle, bool zoomed) {
             if (ckTris >= MC_NO_COCKPIT_TRIS && ckTris < MC_COCKPIT_TRIS) ++little;
         }
         if (was != g_mechSeat.outside && told++ < 300)
-            logf(g_mechSeat.outside ? "mech: frame %u - the game draws no cockpit although the head looks ahead (%d triangles now): seen from outside, ours is not drawn"
-                                    : "mech: frame %u - the game draws its cockpit again (%d triangles): back in the mech", g_frame, ckTris);
+            logf(g_mechSeat.outside
+                     ? "mech: frame %u - the game draws no cockpit although the head looks ahead (%d triangles now): "
+                       "seen from outside, ours is not drawn"
+                     : "mech: frame %u - the game draws its cockpit again (%d triangles): back in the mech",
+                 g_frame, ckTris);
         if (g_frame - sumFrame >= 2700 && judged) { // every half minute
             if (toldSum++ < 60)
-                logf("mech: the game's cockpit, head ahead, %u frames (%s now): %d to %d triangles, %u frames with a little of it (%d to %d), %u frames without the camera's passes",
-                     judged, g_mechSeat.outside ? "outside" : "inside", least, most, little, (int)MC_NO_COCKPIT_TRIS, MC_COCKPIT_TRIS - 1, skipped);
+                logf("mech: the game's cockpit, head ahead, %u frames (%s now): %d to %d triangles, %u frames with a "
+                     "little of it (%d to %d), %u frames without the camera's passes",
+                     judged, g_mechSeat.outside ? "outside" : "inside", least, most, little, (int)MC_NO_COCKPIT_TRIS,
+                     MC_COCKPIT_TRIS - 1, skipped);
             sumFrame = g_frame, judged = little = skipped = 0, least = 1 << 30, most = -1;
         }
     }
@@ -637,9 +663,11 @@ static void mechOnPresent(bool inBattle, bool zoomed) {
     }
     if (((measured && g_mgTris >= 30) || (cockpitNow && inBattle)) && !g_mechSeated) {
         g_mechSeated = true;
-        logf("mech: frame %u - the game draws its cockpit: the camera sits in the mech (%u frames into the battle)", g_frame, g_frame - g_mechBattleFrame);
+        logf("mech: frame %u - the game draws its cockpit: the camera sits in the mech (%u frames into the battle)",
+             g_frame, g_frame - g_mechBattleFrame);
     }
-    if (inBattle && !g_mechSeated && !g_mechSearching && g_frame - g_mechBattleFrame > 2700) { // never seen for half a minute: not held back for ever
+    if (inBattle && !g_mechSeated && !g_mechSearching &&
+        g_frame - g_mechBattleFrame > 2700) { // never seen for half a minute: not held back for ever
         g_mechSeated = true;
         logf("mech: frame %u - no cockpit of the game's seen in this battle; ours is shown all the same", g_frame);
     }
@@ -650,7 +678,8 @@ static void mechOnPresent(bool inBattle, bool zoomed) {
             int cells = 0;
             for (int k = 0; k < MG_N; ++k)
                 if (g_mgFrame[k] > 0) ++cells;
-            logf("mech: measured frame %u - %d draws, %d cockpit triangles, %d cells, %d unreadable", g_frame, g_mgDraws, g_mgTris, cells, g_mgBad);
+            logf("mech: measured frame %u - %d draws, %d cockpit triangles, %d cells, %d unreadable", g_frame,
+                 g_mgDraws, g_mgTris, cells, g_mgBad);
         }
         if (g_mgTris >= 30 && g_mgSampleN < MG_SAMPLES) memcpy(g_mgSamples[g_mgSampleN++], g_mgFrame, sizeof g_mgFrame);
         if (g_mgSampleN >= MG_SAMPLES) mechIdentify();
@@ -677,7 +706,9 @@ static bool mechValues(const MechValues &g, MechValues *out, const char **how) {
     const MechProfile &p = g_mechs[g_mechCur];
     if (p.tuned) {
         bool own = g_mechMw5 && p.seat5;
-        *out = {p.cockpitScale, own ? p.seat5Fwd : p.seatFwd, own ? p.seat5Up : p.seatUp, p.panelX, p.panelY, p.panelDist, p.panelScale};
+        *out = {
+            p.cockpitScale, own ? p.seat5Fwd : p.seatFwd, own ? p.seat5Up : p.seatUp, p.panelX, p.panelY, p.panelDist,
+            p.panelScale};
         *how = "set by hand";
         return true;
     }
@@ -690,8 +721,8 @@ static bool mechValues(const MechValues &g, MechValues *out, const char **how) {
         double w = 1.0 / (0.1 + fabs(log((double)p.dash / r.dash)));
         double ratio = (double)p.dash / r.dash;
         float D = r.panelDist;
-        k += w * r.cockpitScale * ratio;        // the console as far away as there
-        sf += w * r.seatFwd * ratio;            // the seat moved in proportion
+        k += w * r.cockpitScale * ratio; // the console as far away as there
+        sf += w * r.seatFwd * ratio;     // the seat moved in proportion
         su += w * r.seatUp * ratio;
         px += w * (r.panelX + (tanf(p.centre * 0.0174533f) - tanf(r.centre * 0.0174533f)) * D);
         py += w * (r.panelY + (tanf(p.top * 0.0174533f) - tanf(r.top * 0.0174533f)) * D);

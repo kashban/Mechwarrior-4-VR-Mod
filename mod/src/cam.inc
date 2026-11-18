@@ -8,21 +8,21 @@
 // by comparing the matrix with g_vWorldToClip of the same frame. Included into main.cpp after head.inc.
 
 static const uintptr_t CAM_DRAW = GM_CAMERA_DRAW; // CameraElement::Draw (mw4hook_abi.inc)
-static void *g_camOrig;                       // where its jmp went (mw4hook's detour)
-static volatile bool g_camHooked, g_srcCam;   // hook installed; [vr] source_camera=1
-static float g_camA[9];                       // view-space basis vectors in camera-local coordinates (columns)
-static volatile bool g_camCal;                // g_camA known
-static float g_camLast[12];                   // the main camera's matrix as the game left it (this frame)
+static void *g_camOrig;                           // where its jmp went (mw4hook's detour)
+static volatile bool g_camHooked, g_srcCam;       // hook installed; [vr] source_camera=1
+static float g_camA[9];                           // view-space basis vectors in camera-local coordinates (columns)
+static volatile bool g_camCal;                    // g_camA known
+static float g_camLast[12];                       // the main camera's matrix as the game left it (this frame)
 static unsigned g_camLastFrame = ~0u;
 static void *g_camMain;                       // the main camera's object
 static float g_camWritten[12], g_camBase[12]; // what we wrote last time, and the game's matrix under it
 static volatile int g_camEye = -1;            // the eye the main camera was moved for, this frame
 static unsigned g_camEyeFrame = ~0u;
 static volatile LONG g_statCamMoves, g_statCamCalls;
-static float g_camEyeBase[2][12];             // the game's matrix under each eye's latest image
+static float g_camEyeBase[2][12]; // the game's matrix under each eye's latest image
 static bool g_camEyeBaseOk[2];
 enum { CAM_ANC = 5 };
-static float g_camAnc[CAM_ANC][12];           // the camera element's ancestors' local -> world matrices, this frame
+static float g_camAnc[CAM_ANC][12]; // the camera element's ancestors' local -> world matrices, this frame
 static uint8_t *g_camAncPtr[CAM_ANC];
 static int g_camAncN;
 static unsigned g_camAncFrame = ~0u;
@@ -46,7 +46,8 @@ static void camCalibrate() {
         static unsigned logs;
         if (logs < 8 && g_frame % 300 == 0) {
             ++logs;
-            logf("cam: not calibrated yet - main camera last seen in frame %d (now %u), right axis %d, P11 %.3f, camera calls %ld",
+            logf("cam: not calibrated yet - main camera last seen in frame %d (now %u), right axis %d, P11 %.3f, "
+                 "camera calls %ld",
                  (int)g_camLastFrame, g_frame, (int)g_haveRight, g_P11, g_statCamCalls);
         }
         return;
@@ -69,7 +70,8 @@ static void camCalibrate() {
         if (best < 0 || fabsf(bd) < 0.98f) {
             static int fails;
             if (fails++ < 5)
-                logf("cam: calibration failed for axis %d (best dot %.3f) - matrix [%.3f %.3f %.3f %.1f | %.3f %.3f %.3f %.1f | %.3f %.3f %.3f %.1f], "
+                logf("cam: calibration failed for axis %d (best dot %.3f) - matrix [%.3f %.3f %.3f %.1f | %.3f %.3f "
+                     "%.3f %.1f | %.3f %.3f %.3f %.1f], "
                      "right %.3f %.3f %.3f up %.3f %.3f %.3f fwd %.3f %.3f %.3f",
                      k, bd, m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7], m[8], m[9], m[10], m[11], g_right[0],
                      g_right[1], g_right[2], g_up[0], g_up[1], g_up[2], g_fwd[0], g_fwd[1], g_fwd[2]);
@@ -87,16 +89,16 @@ static void camCalibrate() {
          ax[2], m[3], m[7], m[11]);
 }
 
-static volatile bool g_camInMain;              // the main camera is being drawn (its projection is the one to learn)
-static volatile bool g_doubleDraw = true;     // [vr] double_draw: the main camera drawn once per eye in every frame
-static volatile LONG g_tonemapCount;          // "tonemap into the frame" labels seen (the camera's picture is in the frame)
-static unsigned g_camBothFrame = ~0u;         // the frame both eyes were drawn in
-static bool eyeGrab(int e);                   // hud.inc: the frame as it is -> this eye's texture
+static volatile bool g_camInMain;         // the main camera is being drawn (its projection is the one to learn)
+static volatile bool g_doubleDraw = true; // [vr] double_draw: the main camera drawn once per eye in every frame
+static volatile LONG g_tonemapCount;      // "tonemap into the frame" labels seen (the camera's picture is in the frame)
+static unsigned g_camBothFrame = ~0u;     // the frame both eyes were drawn in
+static bool eyeGrab(int e);               // hud.inc: the frame as it is -> this eye's texture
 
 // diagnosis: the annotation labels inside the main camera's Draw, for each eye's pass of one frame,
 // written to mw4vr_labels.txt (Ctrl+F9, and once some seconds after both eyes are first drawn)
-static volatile bool g_mechMeasure;           // mech.inc: this frame's left-eye pass is measured
-static volatile int g_camPassEye = -1;        // the eye whose pass of the main camera is being drawn
+static volatile bool g_mechMeasure;    // mech.inc: this frame's left-eye pass is measured
+static volatile int g_camPassEye = -1; // the eye whose pass of the main camera is being drawn
 static volatile bool g_lblDump;
 static volatile int g_lblEye;
 static std::string g_lblBuf[2];
@@ -109,9 +111,11 @@ static void lblWrite() {
     }
     FILE *f = fileOpen((g_dir + L"mw4vr_labels.txt").c_str(), L"ab");
     if (!f) return;
-    fprintf(f, "==== frame %u, left eye's pass ====\n%s==== frame %u, right eye's pass ====\n%s\n", g_frame, a.c_str(), g_frame, b.c_str());
+    fprintf(f, "==== frame %u, left eye's pass ====\n%s==== frame %u, right eye's pass ====\n%s\n", g_frame, a.c_str(),
+            g_frame, b.c_str());
     fclose(f);
-    logf("cam: labels of both eyes' passes written to mw4vr_labels.txt (%u / %u bytes)", (unsigned)a.size(), (unsigned)b.size());
+    logf("cam: labels of both eyes' passes written to mw4vr_labels.txt (%u / %u bytes)", (unsigned)a.size(),
+         (unsigned)b.size());
 }
 
 // Diagnosis ([vr] cam_dump=1): the game's code is packed on disk. Once in a battle its image as it runs is written to
@@ -142,12 +146,16 @@ static void camDump(uint8_t *cam) {
                 std::vector<uint8_t> page(0x1000);
                 DWORD ok = 0;
                 for (DWORD o = 0; o < size; o += 0x1000) {
-                    if (camRead(base + o, page.data(), 0x1000)) ++ok;
-                    else memset(page.data(), 0, 0x1000);
+                    if (camRead(base + o, page.data(), 0x1000))
+                        ++ok;
+                    else
+                        memset(page.data(), 0, 0x1000);
                     fwrite(page.data(), 1, 0x1000, f);
                 }
                 fclose(f);
-                logf("cam: the game's image written to mw4vr_dump_exe.bin (base %p, %lu bytes, %lu of %lu pages readable)", base, size, ok, size / 0x1000);
+                logf("cam: the game's image written to mw4vr_dump_exe.bin (base %p, %lu bytes, %lu of %lu pages "
+                     "readable)",
+                     base, size, ok, size / 0x1000);
             }
         }
     }
@@ -156,7 +164,8 @@ static void camDump(uint8_t *cam) {
     FILE *f = fileOpen((g_dir + name).c_str(), L"wb");
     if (f) {
         uint8_t *e = cam;
-        uint8_t buf[0x400]; // (outside the loop: an older cppcheck takes the next element's address, read from it, for a pointer into it)
+        uint8_t buf[0x400]; // (outside the loop: an older cppcheck takes the next element's address, read from it, for
+                            // a pointer into it)
         for (int lvl = 0; e && lvl < 8; ++lvl) {
             if (!camRead(e, buf, sizeof buf)) {
                 fprintf(f, "element %d at %p: not readable\n", lvl, e);
@@ -173,7 +182,8 @@ static void camDump(uint8_t *cam) {
             for (int o = 0; o < 0x400; o += 16) {
                 const uint32_t *u = (const uint32_t *)(buf + o);
                 const float *v = (const float *)(buf + o);
-                fprintf(f, " +%03x: %08x %08x %08x %08x | %12.5g %12.5g %12.5g %12.5g\n", o, u[0], u[1], u[2], u[3], v[0], v[1], v[2], v[3]);
+                fprintf(f, " +%03x: %08x %08x %08x %08x | %12.5g %12.5g %12.5g %12.5g\n", o, u[0], u[1], u[2], u[3],
+                        v[0], v[1], v[2], v[3]);
             }
             e = *(uint8_t **)(buf + EL_PARENT);
         }
@@ -200,8 +210,7 @@ static void camLocalRestore() {
             memcpy(g_camLocalCam + EL_LOCAL, g_camLocalOrig, 48);
             memcpy(g_camLocalCam + EL_LOCAL_COPY, g_camLocalOrig, 48);
         }
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-    }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {}
     logf("cam: the camera element's own matrix is the game's again, frame %u", g_frame);
     g_camLocalCam = nullptr;
 }
@@ -224,7 +233,8 @@ static void camLocalWrite(uint8_t *cam, const float *Rc, const float *tc) {
         memcpy(g_camLocalOrig, cam + EL_LOCAL, 48);
         g_camLocalCam = cam;
         const float *o = g_camLocalOrig;
-        logf("cam: the head's pose goes into the camera element's own matrix (cam_local=1), frame %u; the game's: [%.3f %.3f %.3f %.2f | %.3f %.3f %.3f %.2f | %.3f %.3f %.3f %.2f]",
+        logf("cam: the head's pose goes into the camera element's own matrix (cam_local=1), frame %u; the game's: "
+             "[%.3f %.3f %.3f %.2f | %.3f %.3f %.3f %.2f | %.3f %.3f %.3f %.2f]",
              g_frame, o[0], o[1], o[2], o[3], o[4], o[5], o[6], o[7], o[8], o[9], o[10], o[11]);
     }
     float h[12], l[12];
@@ -257,7 +267,8 @@ static void camPlanesWrite(uint8_t *cam, const float *base, const float *out) {
     McFrustum fr;
     if (!mcFrustumPlanes(pl, base, out, g_camA, *(float *)(cam + CAM_TANGENTS), &fr)) {
         // the layout as it is known: plane 0 looks along the mech's view, plane 1 against it
-        if (told++ < 3) logf("cam: the frustum planes at +0x1ac are not as expected (%.3f %.3f) - left alone", fr.d0, fr.d1);
+        if (told++ < 3)
+            logf("cam: the frustum planes at +0x1ac are not as expected (%.3f %.3f) - left alone", fr.d0, fr.d1);
         return;
     }
     if (!g_camPlanesIn) memcpy(g_camPlanesSaved, pl, sizeof g_camPlanesSaved);
@@ -265,7 +276,8 @@ static void camPlanesWrite(uint8_t *cam, const float *base, const float *out) {
     memcpy(pl, fr.planes, sizeof fr.planes);
     if (told == 0) {
         told = 100;
-        logf("cam: frustum planes made from the head's view (cam_planes=1): far %.0f, near %.2f, tangent %.3f", fr.farD, fr.nearD, fr.t);
+        logf("cam: frustum planes made from the head's view (cam_planes=1): far %.0f, near %.2f, tangent %.3f", fr.farD,
+             fr.nearD, fr.t);
     }
 }
 static void camPlanesRestore(uint8_t *cam) {
@@ -282,11 +294,11 @@ static void camPreEye(uint8_t *cam, int eyeOv) {
             ++logs;
             __try {
                 const float *vp = (const float *)(cam + CAM_VIEWPORT), *mm = (const float *)(cam + EL_WORLD);
-                logf("cam: Draw %p frame %u viewport %.3f %.3f %.3f %.3f | +0x80 [%.3f %.3f %.3f %.1f | %.3f %.3f %.3f %.1f | %.3f %.3f %.3f %.1f]",
+                logf("cam: Draw %p frame %u viewport %.3f %.3f %.3f %.3f | +0x80 [%.3f %.3f %.3f %.1f | %.3f %.3f %.3f "
+                     "%.1f | %.3f %.3f %.3f %.1f]",
                      cam, g_frame, vp[0], vp[1], vp[2], vp[3], mm[0], mm[1], mm[2], mm[3], mm[4], mm[5], mm[6], mm[7],
                      mm[8], mm[9], mm[10], mm[11]);
-            } __except (EXCEPTION_EXECUTE_HANDLER) {
-            }
+            } __except (EXCEPTION_EXECUTE_HANDLER) {}
         }
     }
     if (!cam || !camIsMain(cam)) return;
@@ -299,8 +311,7 @@ static void camPreEye(uint8_t *cam, int eyeOv) {
     if (g_camLocal < 0) camLocalIni();
     __try {
         camLocalBase(cam, base);
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-    }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {}
     g_camMain = cam;
     memcpy(g_camLast, base, sizeof base);
     g_camLastFrame = g_frame;
@@ -328,9 +339,11 @@ static void camPreEye(uint8_t *cam, int eyeOv) {
     const float *A = g_camA, *R = g_vrR[eye], *t = g_vrT[eye];
     float AR[9], Rc[9], tc[3];
     for (int i = 0; i < 3; ++i)
-        for (int j = 0; j < 3; ++j) AR[i * 3 + j] = A[i * 3 + 0] * R[0 * 3 + j] + A[i * 3 + 1] * R[1 * 3 + j] + A[i * 3 + 2] * R[2 * 3 + j];
+        for (int j = 0; j < 3; ++j)
+            AR[i * 3 + j] = A[i * 3 + 0] * R[0 * 3 + j] + A[i * 3 + 1] * R[1 * 3 + j] + A[i * 3 + 2] * R[2 * 3 + j];
     for (int i = 0; i < 3; ++i)
-        for (int j = 0; j < 3; ++j) Rc[i * 3 + j] = AR[i * 3 + 0] * A[j * 3 + 0] + AR[i * 3 + 1] * A[j * 3 + 1] + AR[i * 3 + 2] * A[j * 3 + 2];
+        for (int j = 0; j < 3; ++j)
+            Rc[i * 3 + j] = AR[i * 3 + 0] * A[j * 3 + 0] + AR[i * 3 + 1] * A[j * 3 + 1] + AR[i * 3 + 2] * A[j * 3 + 2];
     for (int i = 0; i < 3; ++i) tc[i] = A[i * 3 + 0] * t[0] + A[i * 3 + 1] * t[1] + A[i * 3 + 2] * t[2];
     if (g_camLocal > 0 && eyeOv <= 0) { // once per frame: the middle between the eyes, for the game's next update
         float tm[3], tcm[3];
@@ -345,7 +358,8 @@ static void camPreEye(uint8_t *cam, int eyeOv) {
     float out[12];
     for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 3; ++j)
-            out[i * 4 + j] = base[i * 4 + 0] * Rc[0 * 3 + j] + base[i * 4 + 1] * Rc[1 * 3 + j] + base[i * 4 + 2] * Rc[2 * 3 + j];
+            out[i * 4 + j] =
+                base[i * 4 + 0] * Rc[0 * 3 + j] + base[i * 4 + 1] * Rc[1 * 3 + j] + base[i * 4 + 2] * Rc[2 * 3 + j];
         out[i * 4 + 3] = base[i * 4 + 3] + base[i * 4 + 0] * tc[0] + base[i * 4 + 1] * tc[1] + base[i * 4 + 2] * tc[2];
     }
     memcpy(m, out, sizeof out);
@@ -375,7 +389,10 @@ static void camKeepKey() {
     if (down && !was) {
         g_camKeep = (g_camKeep + 1) % 3;
         logf("cam: keep mode %d (%s), frame %u", (int)g_camKeep,
-             g_camKeep == 0 ? "the game's matrix back after the Draw" : g_camKeep == 1 ? "the head's matrix stays" : "the head's matrix from Present to the next Draw", g_frame);
+             g_camKeep == 0   ? "the game's matrix back after the Draw"
+             : g_camKeep == 1 ? "the head's matrix stays"
+                              : "the head's matrix from Present to the next Draw",
+             g_frame);
         for (int i = 0; i <= g_camKeep; ++i) Beep(900 + 300 * g_camKeep, 70), Sleep(60);
     }
     was = down;
@@ -386,8 +403,7 @@ static void camAtPresent() {
     __try {
         float *m = (float *)((uint8_t *)g_camMain + EL_WORLD);
         if (memcmp(m, g_camBase, sizeof g_camBase) == 0) memcpy(m, g_camWritten, sizeof g_camWritten);
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-    }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {}
 }
 
 static void __stdcall camPost(uint8_t *cam) {
@@ -450,7 +466,8 @@ static int __cdecl camDraw(uint8_t *cam, void *edxv, void *arg) {
                 // this frame goes on with one eye; after some tries the old way for good
                 if (++fails == 300) {
                     g_doubleDraw = false;
-                    logf("cam: both eyes per frame not possible (the camera's picture is not in the frame when it returns, tonemap %d) - alternating",
+                    logf("cam: both eyes per frame not possible (the camera's picture is not in the frame when it "
+                         "returns, tonemap %d) - alternating",
                          (int)(g_tonemapCount != before));
                 }
                 g_camEye = 0;
@@ -495,7 +512,8 @@ static void camInstall() {
     uint8_t *p = (uint8_t *)CAM_DRAW;
     __try {
         if (p[0] != 0xE9) {
-            logf("cam: CameraElement::Draw at %p does not start with mw4hook's jmp (%02x %02x %02x %02x %02x) - not hooked",
+            logf("cam: CameraElement::Draw at %p does not start with mw4hook's jmp (%02x %02x %02x %02x %02x) - not "
+                 "hooked",
                  p, p[0], p[1], p[2], p[3], p[4]);
             g_camHooked = true; // do not try again
             g_srcCam = false;

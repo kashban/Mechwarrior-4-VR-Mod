@@ -118,7 +118,8 @@ struct Input : IDirectInput7A {
         Each e = {cb, ref, false, 0};
         if (type == DIDEVTYPE_DEVICE) return DI_OK; // the class that damages the heap: none
         if (type != 0) return r->EnumDevices(type, each, &e, flags);
-        static const DWORD safe[3] = {DIDEVTYPE_MOUSE, DIDEVTYPE_KEYBOARD, DIDEVTYPE_JOYSTICK}; // the order DirectInput lists in
+        static const DWORD safe[3] = {DIDEVTYPE_MOUSE, DIDEVTYPE_KEYBOARD,
+                                      DIDEVTYPE_JOYSTICK}; // the order DirectInput lists in
         for (int i = 0; i < 3 && !e.stopped; ++i) {
             HRESULT hr = r->EnumDevices(safe[i], each, &e, flags);
             if (FAILED(hr)) return hr;
@@ -128,16 +129,20 @@ struct Input : IDirectInput7A {
     STDMETHOD(GetDeviceStatus)(REFGUID g) override { return r->GetDeviceStatus(g); }
     STDMETHOD(RunControlPanel)(HWND w, DWORD flags) override { return r->RunControlPanel(w, flags); }
     STDMETHOD(Initialize)(HINSTANCE inst, DWORD version) override { return r->Initialize(inst, version); }
-    STDMETHOD(FindDevice)(REFGUID cls, LPCSTR name, GUID *instance) override { return r->FindDevice(cls, name, instance); }
+    STDMETHOD(FindDevice)(REFGUID cls, LPCSTR name, GUID *instance) override {
+        return r->FindDevice(cls, name, instance);
+    }
     STDMETHOD(CreateDeviceEx)(REFGUID g, REFIID iid, void **dev, IUnknown *outer) override {
         HRESULT hr = r->CreateDeviceEx(g, iid, dev, outer);
-        if (SUCCEEDED(hr) && dev && !outer && (iid == IID_IDirectInputDeviceA || iid == IID_IDirectInputDevice2A || iid == IID_IDirectInputDevice7A))
+        if (SUCCEEDED(hr) && dev && !outer &&
+            (iid == IID_IDirectInputDeviceA || iid == IID_IDirectInputDevice2A || iid == IID_IDirectInputDevice7A))
             keep(g, *dev);
         return hr;
     }
 };
 
-extern "C" HRESULT WINAPI MW4VR_DirectInputCreateEx(HINSTANCE inst, DWORD version, REFIID iid, void **out, IUnknown *outer) {
+extern "C" HRESULT WINAPI MW4VR_DirectInputCreateEx(HINSTANCE inst, DWORD version, REFIID iid, void **out,
+                                                    IUnknown *outer) {
     typedef HRESULT(WINAPI * Fn)(HINSTANCE, DWORD, REFIID, void **, IUnknown *);
     Fn fn = (Fn)real("DirectInputCreateEx");
     if (!fn) return DIERR_GENERIC;
@@ -155,14 +160,16 @@ extern "C" HRESULT WINAPI MW4VR_DirectInputCreateEx(HINSTANCE inst, DWORD versio
 }
 
 // the older ways in: passed on (the game does not use them)
-extern "C" HRESULT WINAPI MW4VR_DirectInputCreateA(HINSTANCE inst, DWORD version, IDirectInputA **out, IUnknown *outer) {
+extern "C" HRESULT WINAPI MW4VR_DirectInputCreateA(HINSTANCE inst, DWORD version, IDirectInputA **out,
+                                                   IUnknown *outer) {
     typedef HRESULT(WINAPI * Fn)(HINSTANCE, DWORD, IDirectInputA **, IUnknown *);
     Fn fn = (Fn)real("DirectInputCreateA");
     say("DirectInputCreateA version %lx: passed on as it is", version);
     return fn ? fn(inst, version, out, outer) : DIERR_GENERIC;
 }
 
-extern "C" HRESULT WINAPI MW4VR_DirectInputCreateW(HINSTANCE inst, DWORD version, IDirectInputW **out, IUnknown *outer) {
+extern "C" HRESULT WINAPI MW4VR_DirectInputCreateW(HINSTANCE inst, DWORD version, IDirectInputW **out,
+                                                   IUnknown *outer) {
     typedef HRESULT(WINAPI * Fn)(HINSTANCE, DWORD, IDirectInputW **, IUnknown *);
     Fn fn = (Fn)real("DirectInputCreateW");
     say("DirectInputCreateW version %lx: passed on as it is", version);
@@ -174,8 +181,10 @@ BOOL WINAPI DllMain(HINSTANCE self, DWORD why, void *) {
         DisableThreadLibraryCalls(self);
         DWORD n = GetModuleFileNameA(self, g_log, sizeof g_log);
         char *slash = n && n < sizeof g_log ? strrchr(g_log, '\\') : 0;
-        if (slash && slash - g_log + 20 < (int)sizeof g_log) lstrcpyA(slash + 1, "mw4vr_dinput.log");
-        else g_log[0] = 0;
+        if (slash && slash - g_log + 20 < (int)sizeof g_log)
+            lstrcpyA(slash + 1, "mw4vr_dinput.log");
+        else
+            g_log[0] = 0;
     }
     return TRUE;
 }

@@ -15,7 +15,7 @@ static std::vector<uint32_t> g_helpBits; // BGRA, top row first
 static UINT g_helpW, g_helpH;
 
 struct HelpLine {
-    const wchar_t *key;  // nullptr: a heading
+    const wchar_t *key; // nullptr: a heading
     const wchar_t *what;
 };
 static const HelpLine g_helpText[] = {
@@ -71,8 +71,10 @@ static void helpBuild(UINT w, UINT h) {
     HGDIOBJ oldBm = SelectObject(dc, bm), oldFont = GetCurrentObject(dc, OBJ_FONT);
     HFONT font = nullptr, bold = nullptr;
     for (int tries = 0; tries < 6; ++tries) { // the font so small that no line is cut off
-        font = CreateFontW(-size, 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, 0, 0, ANTIALIASED_QUALITY, 0, L"Segoe UI");
-        bold = CreateFontW(-size, 0, 0, 0, FW_BOLD, 0, 0, 0, DEFAULT_CHARSET, 0, 0, ANTIALIASED_QUALITY, 0, L"Segoe UI");
+        font =
+            CreateFontW(-size, 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, 0, 0, ANTIALIASED_QUALITY, 0, L"Segoe UI");
+        bold =
+            CreateFontW(-size, 0, 0, 0, FW_BOLD, 0, 0, 0, DEFAULT_CHARSET, 0, 0, ANTIALIASED_QUALITY, 0, L"Segoe UI");
         if (!font || !bold) break;
         float over = 1;
         for (int i = 0; i < HELP_LINES; ++i) {
@@ -81,7 +83,8 @@ static void helpBuild(UINT w, UINT h) {
             SelectObject(dc, t.key ? font : bold);
             if (GetTextExtentPoint32W(dc, t.what, (int)wcslen(t.what), &s))
                 over = max(over, (float)s.cx / (float)((int)w - left - (t.key ? mid : left)));
-            if (t.key && GetTextExtentPoint32W(dc, t.key, (int)wcslen(t.key), &s)) over = max(over, (float)s.cx / (float)(mid - left - left / 2 - 6));
+            if (t.key && GetTextExtentPoint32W(dc, t.key, (int)wcslen(t.key), &s))
+                over = max(over, (float)s.cx / (float)(mid - left - left / 2 - 6));
         }
         if (over <= 1 || size < 9) break;
         SelectObject(dc, oldFont);
@@ -126,7 +129,8 @@ static void helpBuild(UINT w, UINT h) {
 }
 
 // into the HUD layer's picture tex (w x h used of it), while the page is up: its far middle
-static void helpDraw(ID3D11DeviceContext *ctx, ID3D11Texture2D *tex, UINT w, UINT h, float L, float R, float T, float B) {
+static void helpDraw(ID3D11DeviceContext *ctx, ID3D11Texture2D *tex, UINT w, UINT h, float L, float R, float T,
+                     float B) {
     if (!g_helpOn || !ctx || !tex || w < 400 || h < 400) return;
     float part = g_helpSize / 100.0f; // of the far middle's width and height
     UINT bw = (UINT)((R - L) * w * part) & ~1u, bh = (UINT)((B - T) * h * part) & ~1u;
@@ -172,11 +176,14 @@ static int helpClockModule(HMODULE m) {
             const uint8_t *re = (const uint8_t *)mi.BaseAddress + mi.RegionSize;
             if (re > end) re = end;
             bool readable = mi.State == MEM_COMMIT && !(mi.Protect & (PAGE_GUARD | PAGE_NOACCESS)) &&
-                            (mi.Protect & (PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY));
+                            (mi.Protect & (PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_READ |
+                                           PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY));
             // (not the code itself: an address in an instruction is not a slot)
-            bool data = readable && !(mi.Protect & (PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY));
+            bool data =
+                readable && !(mi.Protect & (PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY));
             if (data)
-                for (uintptr_t *q = (uintptr_t *)(((uintptr_t)p + 3) & ~(uintptr_t)3); (const uint8_t *)(q + 1) <= re; ++q)
+                for (uintptr_t *q = (uintptr_t *)(((uintptr_t)p + 3) & ~(uintptr_t)3); (const uint8_t *)(q + 1) <= re;
+                     ++q)
                     for (int k = 0; k < 3; ++k)
                         if (from[k] && *q == from[k]) {
                             DWORD old;
@@ -188,8 +195,7 @@ static int helpClockModule(HMODULE m) {
                         }
             p = re;
         }
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-    }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {}
     return n;
 }
 
@@ -208,7 +214,8 @@ static void helpClocks() {
     g_helpGtc = k32 ? (HelpPFN_Ms)GetProcAddress(k32, "GetTickCount") : nullptr;
     g_helpTgt = mm ? (HelpPFN_Ms)GetProcAddress(mm, "timeGetTime") : nullptr;
     int game = helpClockModule(GetModuleHandleW(nullptr)), hook = helpClockModule(GetModuleHandleW(L"mw4hook.dll"));
-    logf("help: the clocks of the game (%d places) and of mw4hook (%d places) are wrapped - time stands still for them while the keys' page is up%s",
+    logf("help: the clocks of the game (%d places) and of mw4hook (%d places) are wrapped - time stands still for them "
+         "while the keys' page is up%s",
          game, hook, game ? "" : " (none found in the game: it will see the page's time as one long frame)");
 }
 
@@ -221,8 +228,10 @@ static void helpForgetKeys() {
     MSG m, ups[64];
     int n = 0, dropped = 0;
     for (int i = 0; i < 4096 && PeekMessageW(&m, nullptr, WM_KEYFIRST, WM_KEYLAST, PM_REMOVE); ++i) {
-        if ((m.message == WM_KEYUP || m.message == WM_SYSKEYUP) && n < 64) ups[n++] = m;
-        else ++dropped;
+        if ((m.message == WM_KEYUP || m.message == WM_SYSKEYUP) && n < 64)
+            ups[n++] = m;
+        else
+            ++dropped;
     }
     for (int i = 0; i < n; ++i) PostMessageW(ups[i].hwnd, ups[i].message, ups[i].wParam, ups[i].lParam);
     int di = -2;
@@ -231,19 +240,25 @@ static void helpForgetKeys() {
     Fn fn = d ? (Fn)GetProcAddress(d, "MW4VR_FlushKeys") : nullptr;
     if (fn) di = fn();
     logf("help: keys typed meanwhile forgotten: %d window messages, DirectInput %s (%d)", dropped,
-         di == -2 ? "not ours - nothing done" : di < 0 ? "has no buffer to empty" : "events", di);
+         di == -2 ? "not ours - nothing done"
+         : di < 0 ? "has no buffer to empty"
+                  : "events",
+         di);
 }
 
 // Ctrl+F1, once a frame: the page on / off (on only in a battle, where it can be seen); Esc closes it too
 static void helpKey(bool battle) {
     static bool was, wasEsc;
-    bool down = (GetAsyncKeyState(VK_CONTROL) & 0x8000) && !(GetAsyncKeyState(VK_MENU) & 0x8000) && (GetAsyncKeyState(VK_F1) & 0x8000);
+    bool down = (GetAsyncKeyState(VK_CONTROL) & 0x8000) && !(GetAsyncKeyState(VK_MENU) & 0x8000) &&
+                (GetAsyncKeyState(VK_F1) & 0x8000);
     bool esc = (GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0;
     if (esc && !wasEsc && g_helpOn) g_helpOn = false, Beep(400, 40);
     wasEsc = esc;
     if (down && !was) {
-        if (g_helpOn) g_helpOn = false;
-        else if (battle) g_helpOn = true;
+        if (g_helpOn)
+            g_helpOn = false;
+        else if (battle)
+            g_helpOn = true;
         if (g_helpOn || !battle) Beep(g_helpOn ? 1000 : 400, 40);
     }
     was = down;

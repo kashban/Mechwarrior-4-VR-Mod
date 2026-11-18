@@ -6,7 +6,7 @@
 // (Until v11.57 the cockpit's element was looked for in the game's scene graph; for some mechs that
 // search found only elements at the camera, none that moves.)
 
-static volatile bool g_swayOn;                 // [vr] hud_sway=1
+static volatile bool g_swayOn; // [vr] hud_sway=1
 static float g_swayGain = 1.0f;
 // the sway (view space: x right, y up, z forward; game metres): p' = R p + T
 static float g_swayR[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1}, g_swayT[3];

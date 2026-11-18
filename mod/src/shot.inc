@@ -7,8 +7,8 @@
 
 static ID3D11Texture2D *g_shotStage;
 static D3D11_TEXTURE2D_DESC g_shotStageD;
-static int g_shotOne;          // a single picture is due
-static int g_shotSeries;       // frames of the series left
+static int g_shotOne;    // a single picture is due
+static int g_shotSeries; // frames of the series left
 static unsigned g_shotCount;
 
 static float shotHalf(uint16_t h) {
@@ -30,11 +30,13 @@ static inline uint8_t shotLin(float v) { // linear light -> display
 
 // the texture's pixels, every step-th of them, as BGR rows top-down into out (appended at column x0 of a
 // picture ow wide: out must hold ow * (height / step) * 3 bytes); false: this format is not read
-static bool shotRead(ID3D11DeviceContext *ctx, ID3D11Texture2D *src, UINT step, uint8_t *out, UINT ow, UINT x0, UINT w, UINT h) {
+static bool shotRead(ID3D11DeviceContext *ctx, ID3D11Texture2D *src, UINT step, uint8_t *out, UINT ow, UINT x0, UINT w,
+                     UINT h) {
     D3D11_TEXTURE2D_DESC d;
     src->GetDesc(&d);
     if (d.SampleDesc.Count != 1) return false;
-    if (!g_shotStage || g_shotStageD.Width != d.Width || g_shotStageD.Height != d.Height || g_shotStageD.Format != d.Format) {
+    if (!g_shotStage || g_shotStageD.Width != d.Width || g_shotStageD.Height != d.Height ||
+        g_shotStageD.Format != d.Format) {
         if (g_shotStage) g_shotStage->Release();
         g_shotStage = nullptr;
         D3D11_TEXTURE2D_DESC n = d;
@@ -45,7 +47,8 @@ static bool shotRead(ID3D11DeviceContext *ctx, ID3D11Texture2D *src, UINT step, 
     }
     ctx->CopySubresourceRegion(g_shotStage, 0, 0, 0, 0, src, 0, nullptr);
     D3D11_MAPPED_SUBRESOURCE m;
-    if (FAILED(ORIG(MechPFN_Map, ctx, VT_Ctx_Map)(ctx, g_shotStage, 0, D3D11_MAP_READ, 0, &m)) || !m.pData) return false;
+    if (FAILED(ORIG(MechPFN_Map, ctx, VT_Ctx_Map)(ctx, g_shotStage, 0, D3D11_MAP_READ, 0, &m)) || !m.pData)
+        return false;
     bool ok = true;
     int f = (int)d.Format;
     for (UINT y = 0; y < h && ok; ++y) {
@@ -61,7 +64,8 @@ static bool shotRead(ID3D11DeviceContext *ctx, ID3D11Texture2D *src, UINT step, 
                 o[0] = p[0], o[1] = p[1], o[2] = p[2];
             } else if (f >= 23 && f <= 25) { // R10G10B10A2
                 uint32_t v = *(const uint32_t *)(row + sx * 4);
-                o[2] = (uint8_t)((v & 1023) >> 2), o[1] = (uint8_t)(((v >> 10) & 1023) >> 2), o[0] = (uint8_t)(((v >> 20) & 1023) >> 2);
+                o[2] = (uint8_t)((v & 1023) >> 2), o[1] = (uint8_t)(((v >> 10) & 1023) >> 2),
+                o[0] = (uint8_t)(((v >> 20) & 1023) >> 2);
             } else if (f == 9 || f == 10) { // R16G16B16A16 float
                 const uint16_t *p = (const uint16_t *)(row + sx * 8);
                 o[2] = shotLin(shotHalf(p[0])), o[1] = shotLin(shotHalf(p[1])), o[0] = shotLin(shotHalf(p[2]));
@@ -70,7 +74,8 @@ static bool shotRead(ID3D11DeviceContext *ctx, ID3D11Texture2D *src, UINT step, 
                 o[2] = (uint8_t)(p[0] >> 8), o[1] = (uint8_t)(p[1] >> 8), o[0] = (uint8_t)(p[2] >> 8);
             } else if (f == 26) { // R11G11B10 float
                 uint32_t v = *(const uint32_t *)(row + sx * 4);
-                o[2] = shotLin(shotUFloat(v & 2047, 6)), o[1] = shotLin(shotUFloat((v >> 11) & 2047, 6)), o[0] = shotLin(shotUFloat(v >> 22, 5));
+                o[2] = shotLin(shotUFloat(v & 2047, 6)), o[1] = shotLin(shotUFloat((v >> 11) & 2047, 6)),
+                o[0] = shotLin(shotUFloat(v >> 22, 5));
             } else {
                 ok = false;
                 break;
@@ -86,8 +91,16 @@ static bool shotWriteBmp(const wchar_t *path, const uint8_t *bgr, UINT w, UINT h
     if (!f) return false;
     UINT pitch = (w * 3 + 3) & ~3u, size = pitch * h;
 #pragma pack(push, 1)
-    struct { uint16_t bm; uint32_t fileSize; uint32_t res; uint32_t off; uint32_t hdr; int32_t w, h; uint16_t planes, bpp; uint32_t comp, img, xp, yp, used, imp; } hd =
-        {0x4d42, 54 + size, 0, 54, 40, (int32_t)w, -(int32_t)h, 1, 24, 0, size, 2835, 2835, 0, 0};
+    struct {
+        uint16_t bm;
+        uint32_t fileSize;
+        uint32_t res;
+        uint32_t off;
+        uint32_t hdr;
+        int32_t w, h;
+        uint16_t planes, bpp;
+        uint32_t comp, img, xp, yp, used, imp;
+    } hd = {0x4d42, 54 + size, 0, 54, 40, (int32_t)w, -(int32_t)h, 1, 24, 0, size, 2835, 2835, 0, 0};
 #pragma pack(pop)
     fwrite(&hd, 54, 1, f);
     const uint8_t pad[4] = {};
@@ -100,7 +113,8 @@ static bool shotWriteBmp(const wchar_t *path, const uint8_t *bgr, UINT w, UINT h
 }
 
 // one texture, or two side by side (b may be null), into <dir>\<name>
-static bool shotSave(ID3D11DeviceContext *ctx, ID3D11Texture2D *a, ID3D11Texture2D *b, UINT maxW, const wchar_t *name, int *fmt) {
+static bool shotSave(ID3D11DeviceContext *ctx, ID3D11Texture2D *a, ID3D11Texture2D *b, UINT maxW, const wchar_t *name,
+                     int *fmt) {
     D3D11_TEXTURE2D_DESC d;
     a->GetDesc(&d);
     *fmt = (int)d.Format;
@@ -114,7 +128,8 @@ static bool shotSave(ID3D11DeviceContext *ctx, ID3D11Texture2D *a, ID3D11Texture
     if (b) {
         D3D11_TEXTURE2D_DESC d2;
         b->GetDesc(&d2);
-        if (d2.Width != d.Width || d2.Height != d.Height || !shotRead(ctx, b, step, px.data(), ow, w, w, h)) return false;
+        if (d2.Width != d.Width || d2.Height != d.Height || !shotRead(ctx, b, step, px.data(), ow, w, w, h))
+            return false;
     }
     std::wstring dir = g_dir + L"mw4vr_shots";
     CreateDirectoryW(dir.c_str(), nullptr);
@@ -138,7 +153,8 @@ static void shotKeys() {
 }
 
 // with the frame's pictures at hand: l / r this frame's eyes (r null: one picture for both, in l), hud or null
-static void shotFrame(ID3D11DeviceContext *ctx, ID3D11Texture2D *l, ID3D11Texture2D *r, ID3D11Texture2D *hud, const char *what) {
+static void shotFrame(ID3D11DeviceContext *ctx, ID3D11Texture2D *l, ID3D11Texture2D *r, ID3D11Texture2D *hud,
+                      const char *what) {
     bool one = g_shotOne != 0, ser = false;
     if (g_shotSeries > 0) {
         ser = (g_shotSeries % 4) == 0;

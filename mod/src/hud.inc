@@ -4,23 +4,24 @@
 // the HUD goes to the headset as quads fixed to the mech (vr.inc). Included into main.cpp before
 // the OMSetRenderTargets hooks.
 
-static volatile bool g_hudLayerOn;             // set by vr.inc: tracking at the camera and [vr] hud_layer=1
+static volatile bool g_hudLayerOn; // set by vr.inc: tracking at the camera and [vr] hud_layer=1
 static ID3D11Texture2D *g_hudTex;
 static ID3D11RenderTargetView *g_hudRtv;
-static ID3D11RenderTargetView *g_hudFrameRtv;  // the game's target, replaced while the HUD pass runs (a reference held)
-static ID3D11RenderTargetView *g_hudKnownRtv;  // the game's frame target as last seen in a HUD pass (a reference held)
+static ID3D11RenderTargetView *g_hudFrameRtv; // the game's target, replaced while the HUD pass runs (a reference held)
+static ID3D11RenderTargetView *g_hudKnownRtv; // the game's frame target as last seen in a HUD pass (a reference held)
 static UINT g_hudW, g_hudH;
 static unsigned g_hudClearedFrame = ~0u, g_hudDrawnFrame = ~0u;
-static bool g_hudInternal;                     // our own OMSetRenderTargets calls pass the hook untouched
+static bool g_hudInternal; // our own OMSetRenderTargets calls pass the hook untouched
 
 // The game lays its HUD out wider than a square picture: the weapon list and the damage display run past
 // the right edge. The layer texture is therefore wider than the frame ([vr] hud_extra_width, 1 = not): a
 // pixel of the game is a pixel of the texture, and what lay beyond the edge is drawn as well - the HUD
 // pass's full viewport is widened and its vertex shaders get the wider picture's 2 / width (main.cpp).
 // The depth buffer has the frame's size and cannot go with the wider texture: the HUD is drawn without.
-static UINT g_hudTexW;                         // the layer texture's width (>= g_hudW, the frame's)
-static volatile bool g_hudWideLive;            // the frame constants are known: the part beyond the edge is drawn
-static ID3D11DepthStencilView *g_hudGameDsv;   // what the game wants as depth while the layer is the target (a reference held)
+static UINT g_hudTexW;              // the layer texture's width (>= g_hudW, the frame's)
+static volatile bool g_hudWideLive; // the frame constants are known: the part beyond the edge is drawn
+static ID3D11DepthStencilView
+    *g_hudGameDsv; // what the game wants as depth while the layer is the target (a reference held)
 static UINT hudWideW(UINT w) {
     static float k = -1;
     if (k < 0) {
@@ -61,7 +62,9 @@ static void frameCbSeen(void *r, const void *p) {
         return;
     }
     memcpy(g_frameCb[r].v, f, 48);
-    if (!g_hudWideLive) logf("hud: frame constants seen (buffer %p: %.6f %.6f %.3f %.3f) - the HUD is drawn %u wide", r, f[0], f[1], f[2], f[3], g_hudTexW);
+    if (!g_hudWideLive)
+        logf("hud: frame constants seen (buffer %p: %.6f %.6f %.3f %.3f) - the HUD is drawn %u wide", r, f[0], f[1],
+             f[2], f[3], g_hudTexW);
     g_hudWideLive = true;
 }
 
@@ -125,8 +128,8 @@ static void hudBegin(ID3D11DeviceContext *c) {
                 if (SUCCEEDED(hr)) hr = g_dev->CreateRenderTargetView(g_hudTex, nullptr, &g_hudRtv);
                 g_hudW = d.Width;
                 g_hudH = d.Height;
-                logf("hud: layer texture %ux%u (frame %ux%u) format %d samples %u -> 0x%08lx", n.Width, d.Height, d.Width, d.Height,
-                     (int)d.Format, d.SampleDesc.Count, hr);
+                logf("hud: layer texture %ux%u (frame %ux%u) format %d samples %u -> 0x%08lx", n.Width, d.Height,
+                     d.Width, d.Height, (int)d.Format, d.SampleDesc.Count, hr);
             }
             if (g_hudRtv) {
                 if (g_hudClearedFrame != g_frame) {
@@ -167,8 +170,10 @@ static void hudBeginKnown(ID3D11DeviceContext *c) {
     ID3D11RenderTargetView *cur = nullptr;
     ID3D11DepthStencilView *dsv = nullptr;
     c->OMGetRenderTargets(1, &cur, &dsv);
-    if (cur == g_hudKnownRtv) hudSetOurs(c, dsv);
-    else if (hudWide()) hudKeepDsv(nullptr);
+    if (cur == g_hudKnownRtv)
+        hudSetOurs(c, dsv);
+    else if (hudWide())
+        hudKeepDsv(nullptr);
     if (cur) cur->Release();
     if (dsv) dsv->Release();
 }

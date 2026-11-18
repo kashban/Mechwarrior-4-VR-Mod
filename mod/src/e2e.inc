@@ -25,18 +25,19 @@ static std::vector<float> g_e2eShots;
 static size_t g_e2eShotNext;
 struct E2eKey {
     float at, hold;
-    int vk;    // a virtual key; -1 / -2: the left / right mouse button; -3: the pointer is moved
+    int vk;       // a virtual key; -1 / -2: the left / right mouse button; -3: the pointer is moved
     float mx, my; // -3: where to, parts of the picture
-    int state; // 0 waits, 1 is down, 2 done
+    int state;    // 0 waits, 1 is down, 2 done
     char name[8];
 };
 static std::vector<E2eKey> g_e2eKeys;
 
 static int e2eCockpit(wchar_t *name, int n); // main.cpp, after mw5.inc: 1 - a cockpit of our own is drawn
-static void e2ePass(int e, int *v);          // an eye's pass: CPU-path draws, at which ours was drawn, the game's cockpit's triangles there
-static void e2eState(int *v);                // main.cpp: 1 - a paused battle's menu is up; the draws of the frame; of those, the
-                                             // indirect ones into the HUD's image while the menu is up (how much the menu shows);
-                                             // 1 - the menu's picture of this frame has no HUD under the sheet
+static void
+e2ePass(int e, int *v); // an eye's pass: CPU-path draws, at which ours was drawn, the game's cockpit's triangles there
+static void e2eState(int *v); // main.cpp: 1 - a paused battle's menu is up; the draws of the frame; of those, the
+                              // indirect ones into the HUD's image while the menu is up (how much the menu shows);
+                              // 1 - the menu's picture of this frame has no HUD under the sheet
 
 static int e2eVk(const wchar_t *s, size_t n) {
     if (n == 1 && iswalnum(s[0])) return towupper(s[0]);
@@ -72,20 +73,23 @@ static void e2eSend(const E2eKey &k, bool down) {
         POINT pt = {(LONG)(k.mx * rc.right), (LONG)(k.my * rc.bottom)};
         ClientToScreen(w, &pt);
         BOOL ok = SetCursorPos(pt.x, pt.y);
-        logf("e2e: the pointer to %.3f, %.3f of the picture (screen %ld, %ld)%s", k.mx, k.my, pt.x, pt.y, ok ? "" : " - NOT MOVED");
+        logf("e2e: the pointer to %.3f, %.3f of the picture (screen %ld, %ld)%s", k.mx, k.my, pt.x, pt.y,
+             ok ? "" : " - NOT MOVED");
         return;
     }
     INPUT in = {};
     if (k.vk < 0) {
         in.type = INPUT_MOUSE;
-        in.mi.dwFlags = k.vk == -1 ? (down ? MOUSEEVENTF_LEFTDOWN : MOUSEEVENTF_LEFTUP) : (down ? MOUSEEVENTF_RIGHTDOWN : MOUSEEVENTF_RIGHTUP);
+        in.mi.dwFlags = k.vk == -1 ? (down ? MOUSEEVENTF_LEFTDOWN : MOUSEEVENTF_LEFTUP)
+                                   : (down ? MOUSEEVENTF_RIGHTDOWN : MOUSEEVENTF_RIGHTUP);
     } else { // by its scan code: that is what DirectInput reads
         in.type = INPUT_KEYBOARD;
         in.ki.wScan = (WORD)MapVirtualKeyW((UINT)k.vk, MAPVK_VK_TO_VSC);
         in.ki.dwFlags = KEYEVENTF_SCANCODE | (down ? 0 : KEYEVENTF_KEYUP);
     }
     UINT sent = SendInput(1, &in, sizeof in);
-    logf("e2e: %s %s at %.2f s%s", k.name, down ? "down" : "up", g_e2eSeat ? (float)(GetTickCount64() - g_e2eSeat) / 1000.0f : -1.0f, sent ? "" : " - NOT SENT");
+    logf("e2e: %s %s at %.2f s%s", k.name, down ? "down" : "up",
+         g_e2eSeat ? (float)(GetTickCount64() - g_e2eSeat) / 1000.0f : -1.0f, sent ? "" : " - NOT SENT");
 }
 
 static void e2eInit() {
@@ -147,11 +151,12 @@ static void e2eInit() {
         logf("e2e: mw4vr_e2e.csv cannot be written - no test");
         return;
     }
-    fprintf(g_e2eCsv, "frame,ms,t,seated,own,yaw,lr,lg,lb,rr,rg,rb,sx,sy,sz,ld,lo,lk,rd,ro,rk,outside,menu,draws,hud,flat,clean,cockpit\n");
+    fprintf(g_e2eCsv, "frame,ms,t,seated,own,yaw,lr,lg,lb,rr,rg,rb,sx,sy,sz,ld,lo,lk,rd,ro,rk,outside,menu,draws,hud,"
+                      "flat,clean,cockpit\n");
     g_e2eStart = GetTickCount64();
     g_e2eOn = true;
-    logf("e2e: test run - plan %ls, %u turns of the head, %u pictures, %u keys", plan, (unsigned)g_e2eYaw.size(), (unsigned)g_e2eShots.size(),
-         (unsigned)g_e2eKeys.size());
+    logf("e2e: test run - plan %ls, %u turns of the head, %u pictures, %u keys", plan, (unsigned)g_e2eYaw.size(),
+         (unsigned)g_e2eShots.size(), (unsigned)g_e2eKeys.size());
 }
 
 // seconds since the camera first sat in the mech; below 0: not yet
@@ -165,7 +170,9 @@ static float e2eYawNow() {
     if (t <= g_e2eYaw.front().first) return t < 0 ? 0 : g_e2eYaw.front().second;
     for (size_t i = 1; i < g_e2eYaw.size(); ++i) {
         const auto &a = g_e2eYaw[i - 1], &b = g_e2eYaw[i];
-        if (t <= b.first) return b.first > a.first ? a.second + (b.second - a.second) * (t - a.first) / (b.first - a.first) : b.second;
+        if (t <= b.first)
+            return b.first > a.first ? a.second + (b.second - a.second) * (t - a.first) / (b.first - a.first)
+                                     : b.second;
     }
     return g_e2eYaw.back().second;
 }
@@ -175,8 +182,10 @@ static void e2eKeysStep() {
     if (!g_e2eOn || !g_e2eSeat) return;
     float t = (float)(GetTickCount64() - g_e2eSeat) / 1000.0f;
     for (E2eKey &k : g_e2eKeys) {
-        if (k.state == 0 && t >= k.at) e2eSend(k, true), k.state = 1;
-        else if (k.state == 1 && t >= k.at + k.hold) e2eSend(k, false), k.state = 2;
+        if (k.state == 0 && t >= k.at)
+            e2eSend(k, true), k.state = 1;
+        else if (k.state == 1 && t >= k.at + k.hold)
+            e2eSend(k, false), k.state = 2;
     }
 }
 
@@ -223,9 +232,12 @@ static void e2eFrame(ID3D11DeviceContext *ctx, ID3D11Texture2D *l, ID3D11Texture
     int own = e2eCockpit(name, 64);
     int pl[3], pr[3], st[4];
     e2ePass(0, pl), e2ePass(1, pr), e2eState(st);
-    fprintf(g_e2eCsv, "%u,%llu,%.3f,%d,%d,%.2f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%.4f,%.4f,%.4f,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%ls\n", g_frame, GetTickCount64() - g_e2eStart, t,
-            in ? 1 : 0, own, e2eYawNow(), a[0], a[1], a[2], b[0], b[1], b[2], g_swayValid ? g_swayT[0] : 0.0f,
-            g_swayValid ? g_swayT[1] : 0.0f, g_swayValid ? g_swayT[2] : 0.0f, pl[0], pl[1], pl[2], pr[0], pr[1], pr[2],
-            g_mechSeat.outside ? 1 : 0, st[0], st[1], st[2], flat ? 1 : 0, st[3], name);
+    fprintf(g_e2eCsv,
+            "%u,%llu,%.3f,%d,%d,%.2f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%.4f,%.4f,%.4f,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%"
+            "ls\n",
+            g_frame, GetTickCount64() - g_e2eStart, t, in ? 1 : 0, own, e2eYawNow(), a[0], a[1], a[2], b[0], b[1], b[2],
+            g_swayValid ? g_swayT[0] : 0.0f, g_swayValid ? g_swayT[1] : 0.0f, g_swayValid ? g_swayT[2] : 0.0f, pl[0],
+            pl[1], pl[2], pr[0], pr[1], pr[2], g_mechSeat.outside ? 1 : 0, st[0], st[1], st[2], flat ? 1 : 0, st[3],
+            name);
     if ((g_frame & 31) == 0) fflush(g_e2eCsv);
 }

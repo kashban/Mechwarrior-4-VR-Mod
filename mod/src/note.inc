@@ -20,7 +20,8 @@ static void noteShow(const wchar_t *text, int seconds = 5) {
         if (dc) DeleteDC(dc);
         return;
     }
-    HFONT font = CreateFontW(-44, 0, 0, 0, FW_SEMIBOLD, 0, 0, 0, DEFAULT_CHARSET, 0, 0, ANTIALIASED_QUALITY, 0, L"Segoe UI");
+    HFONT font =
+        CreateFontW(-44, 0, 0, 0, FW_SEMIBOLD, 0, 0, 0, DEFAULT_CHARSET, 0, 0, ANTIALIASED_QUALITY, 0, L"Segoe UI");
     HGDIOBJ oldBm = SelectObject(dc, bm), oldFont = font ? SelectObject(dc, font) : nullptr;
     RECT r = {0, 0, NOTE_W, NOTE_H};
     HBRUSH back = CreateSolidBrush(RGB(16, 24, 16));

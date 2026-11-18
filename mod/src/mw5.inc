@@ -19,8 +19,8 @@ struct Mw5Group {
     ID3D11Buffer *vb, *ib;
     UINT nIdx;
     ID3D11ShaderResourceView *clr, *ems;
-    int screen;   // 0: the mesh; n + 1: monitor n, shown with a part of the game's HUD
-    float aspect; // a monitor's width / height
+    int screen;      // 0: the mesh; n + 1: monitor n, shown with a part of the game's HUD
+    float aspect;    // a monitor's width / height
     float centre[3]; // its middle in the mesh
     bool paint;      // painted metal: drawn with the patches, the wear and the gloss of MW5's own
 };
@@ -30,27 +30,32 @@ static volatile int g_m5Looked; // the monitor the pilot looks at (n + 1; 0: non
 // the cockpit's glass: [cockpit] glass_<name> = degrees right, degrees up, width in degrees (width 0: not shown).
 #define M5_PARTS 6
 static const wchar_t *const g_m5PartKey[M5_PARTS] = {L"radar", L"target", L"damage", L"lance", L"weapons", L"top"};
-static const wchar_t *const g_m5PartName[M5_PARTS] = {L"radar", L"target", L"damage", L"lance list", L"weapons", L"top strip"};
-static const float g_m5Part[M5_PARTS][4] = {{0.320f, 0.770f, 0.690f, 0.990f}, {0.000f, 0.772f, 0.180f, 1.000f}, {0.820f, 0.772f, 1.005f, 1.000f},
-                                            {0.000f, 0.000f, 0.243f, 0.108f}, {0.716f, 0.000f, 1.000f, 0.124f}, {0.243f, 0.000f, 0.716f, 0.120f}};
+static const wchar_t *const g_m5PartName[M5_PARTS] = {L"radar",      L"target",  L"damage",
+                                                      L"lance list", L"weapons", L"top strip"};
+static const float g_m5Part[M5_PARTS][4] = {{0.320f, 0.770f, 0.690f, 0.990f}, {0.000f, 0.772f, 0.180f, 1.000f},
+                                            {0.820f, 0.772f, 1.005f, 1.000f}, {0.000f, 0.000f, 0.243f, 0.108f},
+                                            {0.716f, 0.000f, 1.000f, 0.124f}, {0.243f, 0.000f, 0.716f, 0.120f}};
 static const float g_m5LanceMenu = 0.435f; // the lance list with its open orders menu reaches this far down
-static const float g_m5WeaponsLeft = 0.700f; // where the weapon list's frame begins (its part for a monitor begins inside it)
-static const float g_m5GlassDef[M5_PARTS][3] = {{0, -17, 11}, {-26, -14, 8}, {26, -14, 8}, {-32, 20, 9}, {32, 20, 11}, {0, 22, 15}};
-static float g_m5Glass[M5_PARTS][4];     // degrees right, up, width; metres away
-static bool g_m5GlassSaved[M5_PARTS];    // set by hand (in the cockpit's file); the others are placed automatically
-static float g_m5GlassDistDef = 1.2f;    // [cockpit] glass_distance_m: a part's distance where nothing else says
-static std::vector<float> g_m5Pos;       // the mesh's vertices (x y z each) and triangles, for finding its windows
+static const float g_m5WeaponsLeft =
+    0.700f; // where the weapon list's frame begins (its part for a monitor begins inside it)
+static const float g_m5GlassDef[M5_PARTS][3] = {{0, -17, 11}, {-26, -14, 8}, {26, -14, 8},
+                                                {-32, 20, 9}, {32, 20, 11},  {0, 22, 15}};
+static float g_m5Glass[M5_PARTS][4];  // degrees right, up, width; metres away
+static bool g_m5GlassSaved[M5_PARTS]; // set by hand (in the cockpit's file); the others are placed automatically
+static float g_m5GlassDistDef = 1.2f; // [cockpit] glass_distance_m: a part's distance where nothing else says
+static std::vector<float> g_m5Pos;    // the mesh's vertices (x y z each) and triangles, for finding its windows
 static std::vector<uint32_t> g_m5Tri;
 static void mw5GlassFit();
 static bool g_m5GlassOn = true; // [vr] mw5_glass
-static bool g_m5All;            // Ctrl+Alt+Shift+8: the keys change all parts together (the row without a cockpit of ours)
-static int g_m5GlassLast = -1;  // the part chosen (Ctrl+Alt+Shift+1..6) or placed last: what the Ctrl+Alt+Shift keys change
-static ULONGLONG g_m5HiUntil;   // until then that part is framed in the HUD picture, to show which one the keys change
+static bool g_m5All; // Ctrl+Alt+Shift+8: the keys change all parts together (the row without a cockpit of ours)
+static int g_m5GlassLast =
+    -1; // the part chosen (Ctrl+Alt+Shift+1..6) or placed last: what the Ctrl+Alt+Shift keys change
+static ULONGLONG g_m5HiUntil; // until then that part is framed in the HUD picture, to show which one the keys change
 static void mw5HiTouch() { g_m5HiUntil = GetTickCount64() + 6000; }
 #define MW5_GROUPS 40
 static Mw5Group g_m5[MW5_GROUPS];
 static int g_m5N;
-static int g_mw5State;             // 0: not loaded yet, 1: ready, -1: failed (stays off)
+static int g_mw5State; // 0: not loaded yet, 1: ready, -1: failed (stays off)
 static volatile bool g_mw5On;
 static bool g_mw5IniRead;
 static wchar_t g_mw5Name[64];
@@ -80,8 +85,8 @@ static float g_m5Alt[MW5_SCREENS][6];  // a second part (u0 v0 u1 v1) and its pr
 static float g_m5Turn[MW5_SCREENS];    // degrees the monitor's picture is turned clockwise within the monitor
 static float g_m5ScreenGain = 1, g_m5RedBoost = 6;
 static int g_mw5ScreensWanted = 1;
-static bool g_mw5Own;       // this cockpit has a settings file of its own
-static int g_mw5Mech = -2;  // the mech profile the cockpit was chosen for (-1: none known)
+static bool g_mw5Own;      // this cockpit has a settings file of its own
+static int g_mw5Mech = -2; // the mech profile the cockpit was chosen for (-1: none known)
 
 static std::wstring mw5OwnIni() { return g_dir + L"mw4vr_cockpits\\" + g_mw5Name + L".ini"; }
 
@@ -188,7 +193,7 @@ static inline bool mw5Active() { return g_mw5On && g_mw5State == 1 && !mw5Waitin
 // below the view ahead ([vr] hud_part_<name> = degrees right, up, width, metres away), moved with the same keys.
 // The top strip (the compass) not: it is above the view, in the picture's upper quarter, as the game has it.
 static bool g_m5PlainOn = true;
-static const float g_m5PlainDef[M5_PARTS][4] = {{0, -24, 11, 1.2f}, {-15, -24, 8, 1.2f}, {15, -24, 8, 1.2f},
+static const float g_m5PlainDef[M5_PARTS][4] = {{0, -24, 11, 1.2f},  {-15, -24, 8, 1.2f}, {15, -24, 8, 1.2f},
                                                 {-27, -24, 9, 1.2f}, {28, -24, 11, 1.2f}, {0, 28, 15, 1.2f}};
 static float g_m5Plain[M5_PARTS][4];
 // Seen from outside (the third-person view, a mission's intro) the row has places of its own, the same for every
@@ -233,8 +238,10 @@ static void mw5CockpitPutF(const wchar_t *key, float v) {
     wchar_t b[32], k[48];
     swprintf(b, 32, L"%.3f", v);
     swprintf(k, 48, L"mw5_%ls", key);
-    if (g_mw5Own) WritePrivateProfileStringW(L"cockpit", key, b, mw5OwnIni().c_str());
-    else WritePrivateProfileStringW(L"vr", k, b, (g_dir + L"mw4vr.ini").c_str());
+    if (g_mw5Own)
+        WritePrivateProfileStringW(L"cockpit", key, b, mw5OwnIni().c_str());
+    else
+        WritePrivateProfileStringW(L"vr", k, b, (g_dir + L"mw4vr.ini").c_str());
 }
 
 static float mw5GetF(const wchar_t *key, float def) {
@@ -248,7 +255,8 @@ static void mw5ReadIni() {
     if (!g_mw5IniRead) {
         GetPrivateProfileStringW(L"vr", L"mw5_cockpit", L"", g_mw5Name, 64, ini.c_str());
         if (g_mw5Name[0] && !mcNameOk(g_mw5Name)) { // (it goes into paths)
-            logf("mw5: [vr] mw5_cockpit '%ls' is not a cockpit's name (a file's name alone, no path) - no cockpit", g_mw5Name);
+            logf("mw5: [vr] mw5_cockpit '%ls' is not a cockpit's name (a file's name alone, no path) - no cockpit",
+                 g_mw5Name);
             g_mw5Name[0] = 0;
         }
     }
@@ -270,7 +278,8 @@ static void mw5ReadIni() {
     if (!(g_mw5DepthFront >= 0.9f && g_mw5DepthFront <= 0.98f)) g_mw5DepthFront = 0.92f;
     g_mw5LinearOut = GetPrivateProfileIntW(L"vr", L"mw5_linear_output", 0, ini.c_str());
     g_mw5Reversed = GetPrivateProfileIntW(L"vr", L"mw5_reversed_depth", 1, ini.c_str());
-    g_mw5ScreensWanted = GetPrivateProfileIntW(L"vr", L"mw5_screens", 1, ini.c_str()) && mw5CockpitF(L"screens", 1) != 0;
+    g_mw5ScreensWanted =
+        GetPrivateProfileIntW(L"vr", L"mw5_screens", 1, ini.c_str()) && mw5CockpitF(L"screens", 1) != 0;
     g_m5ScreenGain = mw5GetF(L"mw5_screen_gain", 1);
     g_m5RedBoost = mw5GetF(L"mw5_screen_red_boost", 6);
     for (int i = 0; i < MW5_SCREENS; ++i) { // mw5_screen_<n> = u0 v0 u1 v1 (of the HUD image, 0..1)
@@ -283,7 +292,8 @@ static void mw5ReadIni() {
         swprintf(k, 32, L"screen_%d_alt", i);
         mw5CockpitStr(k, b, 96);
         float *a = g_m5Alt[i];
-        if (swscanf_s(b, L"%f %f %f %f %f %f", a, a + 1, a + 2, a + 3, a + 4, a + 5) != 6) a[0] = a[1] = a[2] = a[3] = a[4] = a[5] = 0;
+        if (swscanf_s(b, L"%f %f %f %f %f %f", a, a + 1, a + 2, a + 3, a + 4, a + 5) != 6)
+            a[0] = a[1] = a[2] = a[3] = a[4] = a[5] = 0;
         // screen_<n>_turn = degrees: the picture turned clockwise within the monitor (a monitor that hangs askew)
         swprintf(k, 32, L"screen_%d_turn", i);
         mw5CockpitStr(k, b, 96);
@@ -292,7 +302,8 @@ static void mw5ReadIni() {
     g_m5GlassOn = GetPrivateProfileIntW(L"vr", L"mw5_glass", 1, ini.c_str()) != 0;
     g_m5GlassDistDef = mw5CockpitF(L"glass_distance_m", 1.2f);
     if (!(g_m5GlassDistDef >= 0.3f && g_m5GlassDistDef <= 20)) g_m5GlassDistDef = 1.2f;
-    for (int i = 0; i < M5_PARTS; ++i) { // glass_<part> = degrees right, up, width [metres away]; none: placed automatically
+    for (int i = 0; i < M5_PARTS;
+         ++i) { // glass_<part> = degrees right, up, width [metres away]; none: placed automatically
         wchar_t k[32], b[96];
         swprintf(k, 32, L"glass_%ls", g_m5PartKey[i]);
         mw5CockpitStr(k, b, 96);
@@ -310,8 +321,9 @@ static void mw5ReadIni() {
         std::wstring file;
         wchar_t sec[32];
         b[0] = 0;
-        if (mw5PlainWhere(&file, sec)) GetPrivateProfileStringW(sec, k, L"", b, 96, file.c_str()); // this mech's own place
-        if (!b[0]) GetPrivateProfileStringW(L"vr", k, L"", b, 96, ini.c_str());                    // else the one for all
+        if (mw5PlainWhere(&file, sec))
+            GetPrivateProfileStringW(sec, k, L"", b, 96, file.c_str());         // this mech's own place
+        if (!b[0]) GetPrivateProfileStringW(L"vr", k, L"", b, 96, ini.c_str()); // else the one for all
         float *g = g_m5Plain[i];
         memcpy(g, g_m5PlainDef[i], sizeof g_m5PlainDef[i]);
         float v[4];
@@ -340,8 +352,9 @@ static void mw5ReadIni() {
     static wchar_t told[64];
     if (wcscmp(told, g_mw5Name)) {
         wcscpy_s(told, g_mw5Name);
-        logf("mw5: cockpit '%ls' (%s), settings from %s, size %.2f, eye %.2f m right %.2f m up %.2f m forward", g_mw5Name,
-             g_mw5On ? "on" : "off - Ctrl+F11", g_mw5Own ? "its own file" : "mw4vr.ini", g_mw5Scale, g_mw5Eye[0], g_mw5Eye[1], g_mw5Eye[2]);
+        logf("mw5: cockpit '%ls' (%s), settings from %s, size %.2f, eye %.2f m right %.2f m up %.2f m forward",
+             g_mw5Name, g_mw5On ? "on" : "off - Ctrl+F11", g_mw5Own ? "its own file" : "mw4vr.ini", g_mw5Scale,
+             g_mw5Eye[0], g_mw5Eye[1], g_mw5Eye[2]);
     }
 }
 
@@ -358,7 +371,9 @@ static ID3D11ShaderResourceView *mw5Texture(FILE *f, UINT size) {
         sub.push_back({px.data() + off, s * 4, 0});
         off += (size_t)s * s * 4;
     }
-    D3D11_TEXTURE2D_DESC td = {size, size, levels, 1, DXGI_FORMAT_R8G8B8A8_UNORM, {1, 0}, D3D11_USAGE_IMMUTABLE, D3D11_BIND_SHADER_RESOURCE, 0, 0};
+    D3D11_TEXTURE2D_DESC td = {
+        size, size, levels, 1, DXGI_FORMAT_R8G8B8A8_UNORM, {1, 0}, D3D11_USAGE_IMMUTABLE, D3D11_BIND_SHADER_RESOURCE,
+        0,    0};
     ID3D11Texture2D *t = nullptr;
     if (FAILED(g_dev->CreateTexture2D(&td, sub.data(), &t)) || !t) return nullptr;
     ID3D11ShaderResourceView *v = nullptr;
@@ -375,10 +390,13 @@ static void mw5LoadDetail() {
     FILE *f = fileOpen(path.c_str(), L"rb");
     char magic[4];
     uint32_t size = 0;
-    if (f && fread(magic, 1, 4, f) == 4 && !memcmp(magic, "MWD1", 4) && fread(&size, 4, 1, f) == 1 && size >= 4 && size <= 4096 && !(size & (size - 1)))
+    if (f && fread(magic, 1, 4, f) == 4 && !memcmp(magic, "MWD1", 4) && fread(&size, 4, 1, f) == 1 && size >= 4 &&
+        size <= 4096 && !(size & (size - 1)))
         g_m5Detail = mw5Texture(f, size);
     if (f) fclose(f);
-    logf(g_m5Detail ? "mw5: painted metal from mw4vr_paint.mwd (%u)" : "mw5: no mw4vr_paint.mwd - painted metal stays plainly coloured", size);
+    logf(g_m5Detail ? "mw5: painted metal from mw4vr_paint.mwd (%u)"
+                    : "mw5: no mw4vr_paint.mwd - painted metal stays plainly coloured",
+         size);
 }
 
 // what is loaded goes
@@ -402,15 +420,21 @@ static bool mw5ReadFile(FILE *f, const std::wstring &path) {
     char magic[4];
     uint32_t n = 0;
     unsigned total = 0;
-    if (fread(magic, 1, 4, f) == 4 && !memcmp(magic, "MWC1", 4) && fread(&n, 4, 1, f) == 1 && n >= 1 && n <= MW5_GROUPS) {
+    if (fread(magic, 1, 4, f) == 4 && !memcmp(magic, "MWC1", 4) && fread(&n, 4, 1, f) == 1 && n >= 1 &&
+        n <= MW5_GROUPS) {
         ok = true;
         for (uint32_t i = 0; i < n && ok; ++i) {
-            struct { char name[48]; uint32_t nv, ni, cs, es; float k; } h;
+            struct {
+                char name[48];
+                uint32_t nv, ni, cs, es;
+                float k;
+            } h;
             ok = fread(&h, sizeof h, 1, f) == 1;
             unsigned bytes = ok ? mcGroupBytes(h.nv, h.ni, h.cs, h.es) : 0;
             if (ok && (!bytes || bytes > MW5_FILE_BYTES - total)) {
                 h.name[47] = 0;
-                logf("mw5:   part %u '%s' is refused: %u vertices, %u indices, pictures %u / %u (%u MB so far)", i, h.name, h.nv, h.ni, h.cs, h.es, total >> 20);
+                logf("mw5:   part %u '%s' is refused: %u vertices, %u indices, pictures %u / %u (%u MB so far)", i,
+                     h.name, h.nv, h.ni, h.cs, h.es, total >> 20);
                 ok = false;
             }
             if (!ok) break;
@@ -432,7 +456,8 @@ static bool mw5ReadFile(FILE *f, const std::wstring &path) {
                 const float *vp = (const float *)(v.data() + (size_t)k * 32);
                 g_m5Pos.insert(g_m5Pos.end(), vp, vp + 3);
             }
-            for (uint32_t k = 0; k < h.ni; ++k) g_m5Tri.push_back(base + *(const uint32_t *)(ix.data() + (size_t)k * 4));
+            for (uint32_t k = 0; k < h.ni; ++k)
+                g_m5Tri.push_back(base + *(const uint32_t *)(ix.data() + (size_t)k * 4));
             for (uint32_t k = 0; k < h.nv; ++k) {
                 const float *vp = (const float *)(v.data() + (size_t)k * 32);
                 for (int a = 0; a < 3; ++a) g.centre[a] += vp[a] / (float)h.nv;
@@ -440,7 +465,8 @@ static bool mw5ReadFile(FILE *f, const std::wstring &path) {
             h.name[47] = 0;
             g.paint = !strncmp(h.name, "PAINT:", 6);
             if (!strncmp(h.name, "SCREEN:", 7)) {
-                g.screen = mcScreen(h.name + 7, MW5_SCREENS); // (0: none of the cockpit's monitors - a part like any other)
+                g.screen =
+                    mcScreen(h.name + 7, MW5_SCREENS); // (0: none of the cockpit's monitors - a part like any other)
                 g.aspect = h.k > 0.05f ? h.k : 1;
                 if (g.screen) ++g_m5Screens;
             }
@@ -448,7 +474,8 @@ static bool mw5ReadFile(FILE *f, const std::wstring &path) {
             if (h.es) g.ems = mw5Texture(f, h.es);
             ok = SUCCEEDED(h1) && SUCCEEDED(h2) && g.vb && g.ib && g.clr && (!h.es || g.ems);
             h.name[47] = 0;
-            logf("mw5:   %s - %u vertices, %u triangles, textures %u / %u%s", h.name, h.nv, h.ni / 3, h.cs, h.es, ok ? "" : " - FAILED");
+            logf("mw5:   %s - %u vertices, %u triangles, textures %u / %u%s", h.name, h.nv, h.ni / 3, h.cs, h.es,
+                 ok ? "" : " - FAILED");
             if (ok) ++g_m5N;
         }
     } else {
@@ -483,10 +510,12 @@ static bool mw5LoadFile() {
 static bool mw5CreateStates() {
     if (!g_compile || !g_dev) return false;
     ID3DBlob *vc = nullptr, *pc = nullptr, *err = nullptr;
-    HRESULT hr = g_compile(g_m5Hlsl, sizeof(g_m5Hlsl) - 1, "mw5_vs", nullptr, nullptr, "vs", "vs_5_0", 1 << 15, 0, &vc, &err);
+    HRESULT hr =
+        g_compile(g_m5Hlsl, sizeof(g_m5Hlsl) - 1, "mw5_vs", nullptr, nullptr, "vs", "vs_5_0", 1 << 15, 0, &vc, &err);
     if (SUCCEEDED(hr)) {
         if (err) err->Release(), err = nullptr;
-        hr = g_compile(g_m5Hlsl, sizeof(g_m5Hlsl) - 1, "mw5_ps", nullptr, nullptr, "ps", "ps_5_0", 1 << 15, 0, &pc, &err);
+        hr = g_compile(g_m5Hlsl, sizeof(g_m5Hlsl) - 1, "mw5_ps", nullptr, nullptr, "ps", "ps_5_0", 1 << 15, 0, &pc,
+                       &err);
     }
     if (FAILED(hr) || !vc || !pc) {
         logf("mw5: shaders failed to compile (0x%08lx): %s", hr, err ? (const char *)err->GetBufferPointer() : "");
@@ -495,8 +524,10 @@ static bool mw5CreateStates() {
         return false;
     }
     if (err) err->Release();
-    HRESULT h1 = ORIG(PFN_CreateShader, g_dev, VT_Dev_CreateVertexShader)(g_dev, vc->GetBufferPointer(), vc->GetBufferSize(), nullptr, (void **)&g_m5VS);
-    HRESULT h2 = ORIG(PFN_CreateShader, g_dev, VT_Dev_CreatePixelShader)(g_dev, pc->GetBufferPointer(), pc->GetBufferSize(), nullptr, (void **)&g_m5PS);
+    HRESULT h1 = ORIG(PFN_CreateShader, g_dev, VT_Dev_CreateVertexShader)(
+        g_dev, vc->GetBufferPointer(), vc->GetBufferSize(), nullptr, (void **)&g_m5VS);
+    HRESULT h2 = ORIG(PFN_CreateShader, g_dev, VT_Dev_CreatePixelShader)(
+        g_dev, pc->GetBufferPointer(), pc->GetBufferSize(), nullptr, (void **)&g_m5PS);
     const D3D11_INPUT_ELEMENT_DESC il[3] = {
         {"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
         {"NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0},
@@ -529,8 +560,11 @@ static bool mw5CreateStates() {
         HRESULT h = g_dev->CreateDepthStencilState(&ds, &g_m5DS[r]);
         if (FAILED(h)) h8 = h;
     }
-    bool ok = SUCCEEDED(h1) && SUCCEEDED(h2) && SUCCEEDED(h3) && SUCCEEDED(h4) && SUCCEEDED(h5) && SUCCEEDED(h6) && SUCCEEDED(h7) && SUCCEEDED(h8);
-    if (!ok) logf("mw5: states not created (%08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx)", h1, h2, h3, h4, h5, h6, h7, h8);
+    bool ok = SUCCEEDED(h1) && SUCCEEDED(h2) && SUCCEEDED(h3) && SUCCEEDED(h4) && SUCCEEDED(h5) && SUCCEEDED(h6) &&
+              SUCCEEDED(h7) && SUCCEEDED(h8);
+    if (!ok)
+        logf("mw5: states not created (%08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx)", h1, h2, h3, h4, h5, h6, h7,
+             h8);
     return ok;
 }
 
@@ -542,7 +576,9 @@ static void mw5Load() {
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         logf("mw5: exception 0x%08lx while loading", GetExceptionCode());
     }
-    logf(g_mw5State == 1 ? "mw5: cockpit '%ls' loaded, %d parts" : "mw5: cockpit '%ls' not usable - the game's own cockpit stays", g_mw5Name, g_m5N);
+    logf(g_mw5State == 1 ? "mw5: cockpit '%ls' loaded, %d parts"
+                         : "mw5: cockpit '%ls' not usable - the game's own cockpit stays",
+         g_mw5Name, g_m5N);
 }
 
 // the monitors show the HUD (the near HUD quads are then left out, vr.inc)
@@ -552,7 +588,8 @@ static bool mw5ScreensOn() { return mw5Active() && g_mw5ScreensWanted && g_m5Scr
 static bool mw5PartOnMonitor(int p) {
     const float *r = g_m5Part[p];
     for (int i = 0; i < g_m5N && mw5ScreensOn(); ++i)
-        if (g_m5[i].screen && mcHolds(g_m5Rect[g_m5[i].screen - 1], 0.5f * (r[0] + r[2]), 0.5f * (r[1] + r[3]))) return true;
+        if (g_m5[i].screen && mcHolds(g_m5Rect[g_m5[i].screen - 1], 0.5f * (r[0] + r[2]), 0.5f * (r[1] + r[3])))
+            return true;
     return false;
 }
 
@@ -560,7 +597,8 @@ static bool mw5PartOnMonitor(int p) {
 static int mw5MonitorOf(int p) {
     const float *r = g_m5Part[p];
     for (int i = 0; i < g_m5N && mw5ScreensOn(); ++i)
-        if (g_m5[i].screen && mcHolds(g_m5Rect[g_m5[i].screen - 1], 0.5f * (r[0] + r[2]), 0.5f * (r[1] + r[3]))) return g_m5[i].screen - 1;
+        if (g_m5[i].screen && mcHolds(g_m5Rect[g_m5[i].screen - 1], 0.5f * (r[0] + r[2]), 0.5f * (r[1] + r[3])))
+            return g_m5[i].screen - 1;
     return -1;
 }
 
@@ -623,11 +661,13 @@ static void mw5HudCopy(ID3D11DeviceContext *c, ID3D11Texture2D *hud) {
         if (g_m5Hud) g_m5Hud->Release();
         g_m5HudSrv = nullptr, g_m5Hud = nullptr;
         D3D11_TEXTURE2D_DESC n = d;
-        n.MipLevels = 1, n.ArraySize = 1, n.Usage = D3D11_USAGE_DEFAULT, n.BindFlags = D3D11_BIND_SHADER_RESOURCE, n.CPUAccessFlags = 0, n.MiscFlags = 0;
+        n.MipLevels = 1, n.ArraySize = 1, n.Usage = D3D11_USAGE_DEFAULT, n.BindFlags = D3D11_BIND_SHADER_RESOURCE,
+        n.CPUAccessFlags = 0, n.MiscFlags = 0;
         HRESULT hr = g_dev->CreateTexture2D(&n, nullptr, &g_m5Hud);
         if (SUCCEEDED(hr)) hr = g_dev->CreateShaderResourceView(g_m5Hud, nullptr, &g_m5HudSrv);
         g_m5HudW = d.Width, g_m5HudH = d.Height;
-        logf("mw5: HUD image for %d monitors, %ux%u format %d -> 0x%08lx", g_m5Screens, d.Width, d.Height, (int)d.Format, hr);
+        logf("mw5: HUD image for %d monitors, %ux%u format %d -> 0x%08lx", g_m5Screens, d.Width, d.Height,
+             (int)d.Format, hr);
         if (FAILED(hr)) {
             if (g_m5Hud) g_m5Hud->Release();
             g_m5Hud = nullptr, g_m5HudSrv = nullptr;
@@ -642,7 +682,8 @@ static void mw5HudCopy(ID3D11DeviceContext *c, ID3D11Texture2D *hud) {
 // cockpit was drawn (0: not), and how many of the game's cockpit's triangles that draw had
 static unsigned g_m5PassFrame[2] = {~0u, ~0u};
 static int g_m5PassDraws[2], g_m5PassOrd[2], g_m5PassCk[2];
-static unsigned g_m5AllDraws; // every Draw / DrawIndexed of the immediate context, counted on (which draw of the frame is this one?)
+static unsigned g_m5AllDraws; // every Draw / DrawIndexed of the immediate context, counted on (which draw of the frame
+                              // is this one?)
 struct M5Seq {
     unsigned at; // g_m5AllDraws
     int ck;      // the game's cockpit's triangles
@@ -663,23 +704,28 @@ static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw, int ckTris) {
         if (trFrame[e] != ~0u && !trDrew[e] && g_mw5State == 1 && toldMiss < 40) {
             ++toldMiss;
             const int *k = trCk[e];
-            logf("mw5: frame %u, eye %d: OUR COCKPIT WAS NOT DRAWN - %d CPU-path draws in the pass, cockpit triangles in the first 8: %d %d %d %d %d %d %d %d (next pass seen %u frames later)",
+            logf("mw5: frame %u, eye %d: OUR COCKPIT WAS NOT DRAWN - %d CPU-path draws in the pass, cockpit triangles "
+                 "in the first 8: %d %d %d %d %d %d %d %d (next pass seen %u frames later)",
                  trFrame[e], e, trDraws[e], k[0], k[1], k[2], k[3], k[4], k[5], k[6], k[7], g_frame - trFrame[e]);
         }
         if (trFrame[e] != ~0u && g_frame - trFrame[e] > 1 && g_frame - trFrame[e] < 30 && toldMiss < 40) {
             ++toldMiss;
-            logf("mw5: eye %d: no CPU-path draw at all in its passes of the %u frames before frame %u - our cockpit was not drawn in them", e,
-                 g_frame - trFrame[e] - 1, g_frame);
+            logf("mw5: eye %d: no CPU-path draw at all in its passes of the %u frames before frame %u - our cockpit "
+                 "was not drawn in them",
+                 e, g_frame - trFrame[e] - 1, g_frame);
         }
         static int toldSeq;
-        if (trFrame[e] != ~0u && trDraws[e] > 12 && toldSeq < 8) { // a pass with many more CPU-path draws than usual: which, where
+        if (trFrame[e] != ~0u && trDraws[e] > 12 &&
+            toldSeq < 8) { // a pass with many more CPU-path draws than usual: which, where
             ++toldSeq;
             char s[1600] = "";
             for (int i = 0; i < trDraws[e] && i < 32; ++i) {
                 const M5Seq &q = seq[e][i];
-                snprintf(s + strlen(s), sizeof s - strlen(s), " [%u ck%d rt%04x w%d%s]", q.at - seq[e][0].at, q.ck, (unsigned)((uintptr_t)q.rtv & 0xffff), q.vpW, q.ours ? " OURS" : "");
+                snprintf(s + strlen(s), sizeof s - strlen(s), " [%u ck%d rt%04x w%d%s]", q.at - seq[e][0].at, q.ck,
+                         (unsigned)((uintptr_t)q.rtv & 0xffff), q.vpW, q.ours ? " OURS" : "");
             }
-            logf("mw5: frame %u, eye %d: %d CPU-path draws in the pass (draw of the frame, counted from the first; cockpit triangles; target; viewport):%s",
+            logf("mw5: frame %u, eye %d: %d CPU-path draws in the pass (draw of the frame, counted from the first; "
+                 "cockpit triangles; target; viewport):%s",
                  trFrame[e], e, trDraws[e], s);
         }
         trFrame[e] = g_frame, trDraws[e] = 0, trDrew[e] = false;
@@ -700,7 +746,7 @@ static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw, int ckTris) {
     if (g_m5PassFrame[e] != g_frame) g_m5PassFrame[e] = g_frame, g_m5PassOrd[e] = 0, g_m5PassCk[e] = 0;
     g_m5PassDraws[e] = trDraws[e];
     static unsigned done[2] = {~0u, ~0u}; // the frame ours was drawn in for this eye
-    static int others[2], again[2];       // CPU-path draws not of the game's cockpit since then; times ours was drawn again
+    static int others[2], again[2]; // CPU-path draws not of the game's cockpit since then; times ours was drawn again
     if (done[e] == g_frame && !gameCockpit) ++others[e];
     // Where in the pass? Where the game draws its own cockpit: it puts that in the right place among its other
     // draws, and a CPU-path draw that comes earlier in some frames is not taken for it. (It is the pass's first
@@ -716,7 +762,8 @@ static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw, int ckTris) {
             static int told;
             if (ckFrame[e] != g_frame && told < 6) {
                 ++told;
-                logf("mw5: frame %u, eye %d: the game's cockpit is CPU-path draw %d of the pass - ours is drawn there", g_frame, e, ord[e]);
+                logf("mw5: frame %u, eye %d: the game's cockpit is CPU-path draw %d of the pass - ours is drawn there",
+                     g_frame, e, ord[e]);
             }
             ckFrame[e] = g_frame;
         } else if (expected) {
@@ -733,7 +780,9 @@ static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw, int ckTris) {
         static int toldAgain;
         if (toldAgain < 6) {
             ++toldAgain;
-            logf("mw5: frame %u, eye %d: the game's cockpit comes again after %d other CPU-path draws - ours is drawn again", g_frame, e, others[e]);
+            logf("mw5: frame %u, eye %d: the game's cockpit comes again after %d other CPU-path draws - ours is drawn "
+                 "again",
+                 g_frame, e, others[e]);
         }
     } else {
         again[e] = 0;
@@ -785,8 +834,11 @@ static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw, int ckTris) {
     D3D11_DEPTH_STENCIL_DESC dd = {};
     if (oDS) {
         oDS->GetDesc(&dd);
-        if (dd.DepthEnable && (dd.DepthFunc == D3D11_COMPARISON_GREATER || dd.DepthFunc == D3D11_COMPARISON_GREATER_EQUAL)) rev = 1;
-        if (dd.DepthEnable && (dd.DepthFunc == D3D11_COMPARISON_LESS || dd.DepthFunc == D3D11_COMPARISON_LESS_EQUAL)) rev = 0;
+        if (dd.DepthEnable &&
+            (dd.DepthFunc == D3D11_COMPARISON_GREATER || dd.DepthFunc == D3D11_COMPARISON_GREATER_EQUAL))
+            rev = 1;
+        if (dd.DepthEnable && (dd.DepthFunc == D3D11_COMPARISON_LESS || dd.DepthFunc == D3D11_COMPARISON_LESS_EQUAL))
+            rev = 0;
     }
     static bool told;
     if (!told) {
@@ -805,8 +857,10 @@ static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw, int ckTris) {
         D3D11_VIEWPORT vp[1] = {};
         UINT nvp = 1;
         c->RSGetViewports(&nvp, vp);
-        logf("mw5: first draw - targets%s, depth view %s, game depth state: enable %d write %d func %d -> %s depth; viewport %.0f x %.0f",
-             s, dsv ? "yes" : "NO", (int)dd.DepthEnable, (int)dd.DepthWriteMask, (int)dd.DepthFunc, rev ? "reversed" : "forward", vp[0].Width, vp[0].Height);
+        logf("mw5: first draw - targets%s, depth view %s, game depth state: enable %d write %d func %d -> %s depth; "
+             "viewport %.0f x %.0f",
+             s, dsv ? "yes" : "NO", (int)dd.DepthEnable, (int)dd.DepthWriteMask, (int)dd.DepthFunc,
+             rev ? "reversed" : "forward", vp[0].Width, vp[0].Height);
         if (dsv) dsv->Release();
     }
 
@@ -823,9 +877,12 @@ static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw, int ckTris) {
     }
     float o[3];
     for (int i = 0; i < 3; ++i)
-        o[i] = -S * (D[i * 3] * g_mw5Eye[0] + D[i * 3 + 1] * g_mw5Eye[1] + D[i * 3 + 2] * g_mw5Eye[2]) + d[i] - T[i] - raw[i] * g_cockpitDelta;
+        o[i] = -S * (D[i * 3] * g_mw5Eye[0] + D[i * 3 + 1] * g_mw5Eye[1] + D[i * 3 + 2] * g_mw5Eye[2]) + d[i] - T[i] -
+               raw[i] * g_cockpitDelta;
     for (int i = 0; i < 3; ++i) {
-        for (int j = 0; j < 3; ++j) cb[i * 4 + j] = (R[0 * 3 + i] * D[0 * 3 + j] + R[1 * 3 + i] * D[1 * 3 + j] + R[2 * 3 + i] * D[2 * 3 + j]) * S;
+        for (int j = 0; j < 3; ++j)
+            cb[i * 4 + j] =
+                (R[0 * 3 + i] * D[0 * 3 + j] + R[1 * 3 + i] * D[1 * 3 + j] + R[2 * 3 + i] * D[2 * 3 + j]) * S;
         cb[i * 4 + 3] = R[0 * 3 + i] * o[0] + R[1 * 3 + i] * o[1] + R[2 * 3 + i] * o[2];
     }
     cb[15] = 1;
@@ -838,13 +895,15 @@ static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw, int ckTris) {
             if (!g_m5[i].screen) continue;
             const float *q = g_m5[i].centre;
             float p[3];
-            for (int a = 0; a < 3; ++a) p[a] = cb[a * 4] * q[0] + cb[a * 4 + 1] * q[1] + cb[a * 4 + 2] * q[2] + cb[a * 4 + 3];
+            for (int a = 0; a < 3; ++a)
+                p[a] = cb[a * 4] * q[0] + cb[a * 4 + 1] * q[1] + cb[a * 4 + 2] * q[2] + cb[a * 4 + 3];
             float l = sqrtf(p[0] * p[0] + p[1] * p[1] + p[2] * p[2]);
             if (p[2] > 0 && l > 0 && p[2] / l > best) best = p[2] / l, looked = g_m5[i].screen;
         }
         g_m5Looked = looked;
     }
-    // the mesh has a near plane of its own, 2 cm of the cockpit: the game's (1 m of its world) cuts the ceiling above the head
+    // the mesh has a near plane of its own, 2 cm of the cockpit: the game's (1 m of its world) cuts the ceiling above
+    // the head
     cb[16] = g_P00, cb[17] = g_P11, cb[18] = min(g_near, 0.02f * S), cb[19] = (float)rev;
     cb[20] = 0.25f, cb[21] = 0.85f, cb[22] = 0.45f; // the lamp: above, a little ahead and to the right
     cb[23] = g_mw5DepthFront;
@@ -922,7 +981,8 @@ static void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw, int ckTris) {
     c->OMSetBlendState(oBlend, oFactor, oMask);
     c->OMSetDepthStencilState(oDS, oRef);
     c->RSSetState(oRS);
-    IUnknown *rel[] = {oIL, oVB, oIB, oVS, oPS, oVCB, oPCB, oSRV[0], oSRV[1], oSRV[2], oSRV[3], oSamp, oBlend, oDS, oRS};
+    IUnknown *rel[] = {oIL,     oVB,     oIB,     oVS,   oPS,    oVCB, oPCB, oSRV[0],
+                       oSRV[1], oSRV[2], oSRV[3], oSamp, oBlend, oDS,  oRS};
     for (IUnknown *u : rel)
         if (u) u->Release();
 }
@@ -932,7 +992,9 @@ static void mw5Switch(const wchar_t *name) {
     if (!_wcsicmp(name, g_mw5Name) && g_mw5State >= 0) return;
     if (!mcNameOk(name)) { // (it goes into paths: the cockpit's file, its settings)
         static int told;
-        if (told++ < 5) logf("mw5: '%ls' is not a cockpit's name (a file's name alone, no path) - the cockpit stays as it is", name);
+        if (told++ < 5)
+            logf("mw5: '%ls' is not a cockpit's name (a file's name alone, no path) - the cockpit stays as it is",
+                 name);
         return;
     }
     mw5Free();
@@ -953,7 +1015,8 @@ static std::vector<std::wstring> mw5Files() {
         v.push_back(n.substr(0, n.size() - 4));
     } while (FindNextFileW(h, &fd));
     FindClose(h);
-    std::sort(v.begin(), v.end(), [](const std::wstring &a, const std::wstring &b) { return _wcsicmp(a.c_str(), b.c_str()) < 0; });
+    std::sort(v.begin(), v.end(),
+              [](const std::wstring &a, const std::wstring &b) { return _wcsicmp(a.c_str(), b.c_str()) < 0; });
     return v;
 }
 
@@ -975,11 +1038,14 @@ static void mw5ForMech() {
                 while (*p == L' ') ++p;
                 size_t n = wcslen(p);
                 while (n && p[n - 1] == L' ') p[--n] = 0;
-                if (n && n < 64 && mcNameOk(p) && GetFileAttributesW((g_dir + L"mw4vr_cockpits\\" + p + L".mwc").c_str()) != INVALID_FILE_ATTRIBUTES) wcscpy_s(name, 64, p);
+                if (n && n < 64 && mcNameOk(p) &&
+                    GetFileAttributesW((g_dir + L"mw4vr_cockpits\\" + p + L".mwc").c_str()) != INVALID_FILE_ATTRIBUTES)
+                    wcscpy_s(name, 64, p);
                 if (!e) break;
                 p = e + 1;
             }
-            if (!name[0]) GetPrivateProfileStringW(L"vr", L"mw5_cockpit", L"", name, 64, (g_dir + L"mw4vr.ini").c_str());
+            if (!name[0])
+                GetPrivateProfileStringW(L"vr", L"mw5_cockpit", L"", name, 64, (g_dir + L"mw4vr.ini").c_str());
             if (name[0] && _wcsicmp(name, g_mw5Name)) {
                 logf("mw5: cockpit '%ls' for the mech '%ls' by its name, before its profile is known", name, model);
                 mw5Switch(name);
@@ -1007,7 +1073,9 @@ static void mw5ForMech() {
             while (*p == L' ') ++p;
             size_t n = wcslen(p);
             while (n && p[n - 1] == L' ') p[--n] = 0;
-            if (n && n < 64 && mcNameOk(p) && GetFileAttributesW((g_dir + L"mw4vr_cockpits\\" + p + L".mwc").c_str()) != INVALID_FILE_ATTRIBUTES) wcscpy_s(name, 64, p);
+            if (n && n < 64 && mcNameOk(p) &&
+                GetFileAttributesW((g_dir + L"mw4vr_cockpits\\" + p + L".mwc").c_str()) != INVALID_FILE_ATTRIBUTES)
+                wcscpy_s(name, 64, p);
             if (!e) break;
             p = e + 1;
         }
@@ -1019,8 +1087,10 @@ static void mw5ForMech() {
     }
     if (!name[0]) return;
     wchar_t note[160];
-    if (model[0]) swprintf(note, 160, L"Mech: %ls   Cockpit: %ls", model, name);
-    else swprintf(note, 160, L"Cockpit: %ls  (mech %d)", name, g_mechCur + 1);
+    if (model[0])
+        swprintf(note, 160, L"Mech: %ls   Cockpit: %ls", model, name);
+    else
+        swprintf(note, 160, L"Cockpit: %ls  (mech %d)", name, g_mechCur + 1);
     noteShow(note);
     if (!_wcsicmp(name, g_mw5Name)) return;
     logf("mw5: cockpit '%ls' for mech profile %d '%ls' (%s)", name, g_mechCur + 1, model, from);
@@ -1042,14 +1112,20 @@ static void mw5Next(int step) {
     const std::wstring &name = v[pick];
     wchar_t sec[32];
     swprintf(sec, 32, L"mech_%d", g_mechCur + 1);
-    if (g_mechCur >= 0) WritePrivateProfileStringW(sec, L"mw5_cockpit", name.c_str(), mechIni().c_str());
-    else WritePrivateProfileStringW(L"vr", L"mw5_cockpit", name.c_str(), (g_dir + L"mw4vr.ini").c_str());
-    logf(g_mechCur >= 0 ? "mw5: cockpit '%ls' chosen for mech profile %d" : "mw5: cockpit '%ls' chosen (no mech known: for all)", name.c_str(), g_mechCur + 1);
+    if (g_mechCur >= 0)
+        WritePrivateProfileStringW(sec, L"mw5_cockpit", name.c_str(), mechIni().c_str());
+    else
+        WritePrivateProfileStringW(L"vr", L"mw5_cockpit", name.c_str(), (g_dir + L"mw4vr.ini").c_str());
+    logf(g_mechCur >= 0 ? "mw5: cockpit '%ls' chosen for mech profile %d"
+                        : "mw5: cockpit '%ls' chosen (no mech known: for all)",
+         name.c_str(), g_mechCur + 1);
     mw5Switch(name.c_str());
     g_mw5On = true;
     wchar_t note[160];
-    if (g_mechCur >= 0) swprintf(note, 160, L"Cockpit %d / %d: %ls  (mech %d)", pick + 1, n, name.c_str(), g_mechCur + 1);
-    else swprintf(note, 160, L"Cockpit %d / %d: %ls  (no mech known)", pick + 1, n, name.c_str());
+    if (g_mechCur >= 0)
+        swprintf(note, 160, L"Cockpit %d / %d: %ls  (mech %d)", pick + 1, n, name.c_str(), g_mechCur + 1);
+    else
+        swprintf(note, 160, L"Cockpit %d / %d: %ls  (no mech known)", pick + 1, n, name.c_str());
     noteShow(note);
     Beep(1000, 40);
 }
@@ -1058,8 +1134,10 @@ static void mw5Next(int step) {
 static void mw5CockpitPutStr(const wchar_t *key, const wchar_t *val) {
     wchar_t k[48];
     swprintf(k, 48, L"mw5_%ls", key);
-    if (g_mw5Own) WritePrivateProfileStringW(L"cockpit", key, val, mw5OwnIni().c_str());
-    else WritePrivateProfileStringW(L"vr", k, val, (g_dir + L"mw4vr.ini").c_str());
+    if (g_mw5Own)
+        WritePrivateProfileStringW(L"cockpit", key, val, mw5OwnIni().c_str());
+    else
+        WritePrivateProfileStringW(L"vr", k, val, (g_dir + L"mw4vr.ini").c_str());
 }
 
 // ---- the parts on the glass: where they go ----
@@ -1117,10 +1195,13 @@ static void mw5GlassFit() {
         static const float shrink[4] = {1.0f, 0.85f, 0.7f, 0.55f}; // smaller if it does not fit whole
         for (int s = 0; s < 4 && !ok; ++s) {
             w = def[2] * shrink[s];
-            ok = mcGridFit(g_m5Grid, w + 1, w * a + 1, def[0], def[1], 40, taken, nt, &r, &u); // (half a degree of margin; within 40 degrees)
+            ok = mcGridFit(g_m5Grid, w + 1, w * a + 1, def[0], def[1], 40, taken, nt, &r,
+                           &u); // (half a degree of margin; within 40 degrees)
         }
-        if (!ok) r = def[0], u = def[1], w = def[2], ++failed;
-        else ++fitted;
+        if (!ok)
+            r = def[0], u = def[1], w = def[2], ++failed;
+        else
+            ++fitted;
         float rim = mcGridRim(g_m5Grid, r, u, w, w * a);
         g[0] = r, g[1] = u, g[2] = w;
         g[3] = rim > 0 ? min(5.0f, max(0.4f, 0.95f * rim)) : g_m5GlassDistDef;
@@ -1132,11 +1213,14 @@ static void mw5GlassFit() {
     if (wcscmp(told, g_mw5Name) || toldN != fitted * 16 + failed) {
         wcscpy_s(told, g_mw5Name);
         toldN = fitted * 16 + failed;
-        logf("mw5: cockpit '%ls': %d parts of the HUD placed in its windows, %d found no open place (left where they usually are)", g_mw5Name, fitted, failed);
+        logf("mw5: cockpit '%ls': %d parts of the HUD placed in its windows, %d found no open place (left where they "
+             "usually are)",
+             g_mw5Name, fitted, failed);
         for (int p = 0; p < M5_PARTS; ++p)
             if (!mw5PartOnMonitor(p))
-                logf("mw5:   %ls %s: %.0f right, %.0f up, %.1f wide, %.2f m away", g_m5PartName[p], g_m5GlassSaved[p] ? "(set by hand)" : "(automatic)",
-                     g_m5Glass[p][0], g_m5Glass[p][1], g_m5Glass[p][2], g_m5Glass[p][3]);
+                logf("mw5:   %ls %s: %.0f right, %.0f up, %.1f wide, %.2f m away", g_m5PartName[p],
+                     g_m5GlassSaved[p] ? "(set by hand)" : "(automatic)", g_m5Glass[p][0], g_m5Glass[p][1],
+                     g_m5Glass[p][2], g_m5Glass[p][3]);
     }
 }
 
@@ -1196,7 +1280,8 @@ static void mw5HighlightDraw(ID3D11DeviceContext *c) {
         if (p == 5) rc[3] = g_vr.hudTop, rc[2] = g_m5WeaponsLeft;
     }
     LONG W = (LONG)g_hudTexW, H = (LONG)g_hudH, t = max(3L, H / 400);
-    LONG x0 = (LONG)(rc[0] * g_hudW), y0 = (LONG)(rc[1] * g_hudH), x1 = (LONG)(rc[2] * g_hudW), y1 = (LONG)(rc[3] * g_hudH);
+    LONG x0 = (LONG)(rc[0] * g_hudW), y0 = (LONG)(rc[1] * g_hudH), x1 = (LONG)(rc[2] * g_hudW),
+         y1 = (LONG)(rc[3] * g_hudH);
     x0 = max(0L, x0), y0 = max(0L, y0), x1 = min(W, x1), y1 = min(H, y1);
     if (x1 - x0 < 4 * t || y1 - y0 < 4 * t) return;
     ID3D11DeviceContext1 *c1 = nullptr;
@@ -1214,19 +1299,25 @@ static void mw5HighlightDraw(ID3D11DeviceContext *c) {
 // With Shift: 1..6 chooses the part the Ctrl+Alt+Shift keys change (arrows: its place, PgUp / PgDn: its size,
 // Ins / Del: farther / nearer), 0 takes that part off the glass. Remembered for the cockpit.
 static void mw5Assign(int part, bool shift) {
-    static const wchar_t *lanceAlt = L"0.000 0.000 0.243 0.435 0.210 0.125"; // the list with the open orders menu, and where that shows
+    static const wchar_t *lanceAlt =
+        L"0.000 0.000 0.243 0.435 0.210 0.125"; // the list with the open orders menu, and where that shows
     const bool plain = !mw5Active(), outside = mw5Outside();
     int n = plain ? -1 : g_m5Looked - 1, p = part - 1;
     wchar_t note[200], k[32];
-    if (part == 8) { // with Shift: all parts together - in the row without a cockpit of ours (the game's cockpits, seen from outside)
+    if (part == 8) { // with Shift: all parts together - in the row without a cockpit of ours (the game's cockpits, seen
+                     // from outside)
         if (!shift) return;
         if (!plain) {
-            noteShow(L"All parts together only without a cockpit of ours: there each has its place in a window or on a monitor", 5);
+            noteShow(L"All parts together only without a cockpit of ours: there each has its place in a window or on a "
+                     L"monitor",
+                     5);
             Beep(300, 150);
             return;
         }
         g_m5All = true;
-        swprintf(note, 200, L"%ls: all parts chosen - Ctrl+Alt+Shift + arrows move them together, PgUp/PgDn size, Ins/Del depth", mw5Who());
+        swprintf(note, 200,
+                 L"%ls: all parts chosen - Ctrl+Alt+Shift + arrows move them together, PgUp/PgDn size, Ins/Del depth",
+                 mw5Who());
         noteShow(note, 5);
         Beep(900, 40);
         return;
@@ -1248,7 +1339,10 @@ static void mw5Assign(int part, bool shift) {
             }
         }
         mw5ReadIni();
-        swprintf(note, 200, plain ? L"%ls: its parts back in their row" : L"%ls: the HUD's parts placed in the windows automatically", mw5Who());
+        swprintf(note, 200,
+                 plain ? L"%ls: its parts back in their row"
+                       : L"%ls: the HUD's parts placed in the windows automatically",
+                 mw5Who());
         noteShow(note, 4);
         logf("mw5: cockpit '%ls': the parts on the glass are automatic again", g_mw5Name);
         Beep(1000, 40);
@@ -1258,7 +1352,9 @@ static void mw5Assign(int part, bool shift) {
         bool on = !g_mw5ScreensWanted;
         mw5CockpitPutStr(L"screens", on ? L"1" : L"0");
         mw5ReadIni();
-        swprintf(note, 200, on ? L"%ls: the monitors show the HUD again" : L"%ls: monitors off - all of the HUD on the glass", g_mw5Name);
+        swprintf(note, 200,
+                 on ? L"%ls: the monitors show the HUD again" : L"%ls: monitors off - all of the HUD on the glass",
+                 g_mw5Name);
         noteShow(note, 4);
         logf("mw5: cockpit '%ls': monitors %s (saved)", g_mw5Name, on ? "on" : "off - the HUD on the glass");
         Beep(on ? 1200 : 700, 40);
@@ -1268,7 +1364,9 @@ static void mw5Assign(int part, bool shift) {
         p = g_m5GlassLast;
         int mon = p >= 0 && p < 5 ? mw5MonitorOf(p) : -1;
         if (mon < 0) {
-            noteShow(p < 0 ? L"Choose a part first: Ctrl+Alt+Shift+1..5 (radar, target, damage, lance, weapons)" : L"That part is not on a monitor", 4);
+            noteShow(p < 0 ? L"Choose a part first: Ctrl+Alt+Shift+1..5 (radar, target, damage, lance, weapons)"
+                           : L"That part is not on a monitor",
+                     4);
             Beep(300, 150);
             return;
         }
@@ -1281,7 +1379,8 @@ static void mw5Assign(int part, bool shift) {
             mw5CockpitPutStr(k, nullptr);
         }
         mw5ReadIni();
-        swprintf(note, 200, L"%ls: %ls off monitor %d, on the glass now (Ctrl+Alt+Shift + arrows move it)", g_mw5Name, g_m5PartName[p], mon);
+        swprintf(note, 200, L"%ls: %ls off monitor %d, on the glass now (Ctrl+Alt+Shift + arrows move it)", g_mw5Name,
+                 g_m5PartName[p], mon);
         noteShow(note, 5);
         logf("mw5: cockpit '%ls': %ls off monitor %d, onto the glass (saved)", g_mw5Name, g_m5PartName[p], mon);
         Beep(1000, 40);
@@ -1291,9 +1390,14 @@ static void mw5Assign(int part, bool shift) {
         g_m5All = false;
         g_m5GlassLast = p, mw5HiTouch();
         if (p < 5 && mw5MonitorOf(p) >= 0)
-            swprintf(note, 200, L"%ls (on a monitor) chosen: Ctrl+Alt+Shift + arrows move what it shows, PgUp/PgDn nearer/more, Ins/Del longer/shorter",
+            swprintf(note, 200,
+                     L"%ls (on a monitor) chosen: Ctrl+Alt+Shift + arrows move what it shows, PgUp/PgDn nearer/more, "
+                     L"Ins/Del longer/shorter",
                      g_m5PartName[p]);
-        else swprintf(note, 200, L"%ls chosen: Ctrl+Alt+Shift + arrows move it, PgUp/PgDn size, Ins/Del depth, 0 removes", g_m5PartName[p]);
+        else
+            swprintf(note, 200,
+                     L"%ls chosen: Ctrl+Alt+Shift + arrows move it, PgUp/PgDn size, Ins/Del depth, 0 removes",
+                     g_m5PartName[p]);
         noteShow(note, 5);
         Beep(900, 40);
         return;
@@ -1316,7 +1420,9 @@ static void mw5Assign(int part, bool shift) {
     bool onMonitor = n >= 0 && n < MW5_SCREENS && p != 5;
     float right = 0, up = 0;
     if (!onMonitor && (p < 0 || !g_m5GlassOn || !mw5GlassAim(mw5G(p)[3], &right, &up))) {
-        noteShow(L"Ctrl+Alt+1..6 (radar, target, damage, lance, weapons, top strip): onto the monitor or the glass you look at", 4);
+        noteShow(L"Ctrl+Alt+1..6 (radar, target, damage, lance, weapons, top strip): onto the monitor or the glass you "
+                 L"look at",
+                 4);
         Beep(300, 150);
         return;
     }
@@ -1330,7 +1436,8 @@ static void mw5Assign(int part, bool shift) {
     }
     if (onMonitor) {
         wchar_t b[96] = L"";
-        if (p >= 0) swprintf(b, 96, L"%.3f %.3f %.3f %.3f", g_m5Part[p][0], g_m5Part[p][1], g_m5Part[p][2], g_m5Part[p][3]);
+        if (p >= 0)
+            swprintf(b, 96, L"%.3f %.3f %.3f %.3f", g_m5Part[p][0], g_m5Part[p][1], g_m5Part[p][2], g_m5Part[p][3]);
         swprintf(k, 32, L"screen_%d", n);
         mw5CockpitPutStr(k, p >= 0 ? b : nullptr);
         swprintf(k, 32, L"screen_%d_alt", n);
@@ -1347,8 +1454,11 @@ static void mw5Assign(int part, bool shift) {
         mw5ReadIni();
         g = mw5G(p);
         g_m5GlassLast = p, mw5HiTouch();
-        swprintf(note, 200, plain ? L"%ls: %ls at %+.0f right %+.0f up" : L"%ls: %ls on the glass, %+.0f right %+.0f up", mw5Who(), g_m5PartName[p], right, up);
-        logf("mw5: cockpit '%ls': %ls on the glass at %.1f right, %.1f up, %.1f wide, %.2f m away (saved)", g_mw5Name, g_m5PartName[p], right, up, g[2], g[3]);
+        swprintf(note, 200,
+                 plain ? L"%ls: %ls at %+.0f right %+.0f up" : L"%ls: %ls on the glass, %+.0f right %+.0f up", mw5Who(),
+                 g_m5PartName[p], right, up);
+        logf("mw5: cockpit '%ls': %ls on the glass at %.1f right, %.1f up, %.1f wide, %.2f m away (saved)", g_mw5Name,
+             g_m5PartName[p], right, up, g[2], g[3]);
     }
     noteShow(note, 4);
     Beep(1200, 40);
@@ -1358,7 +1468,9 @@ static void mw5Assign(int part, bool shift) {
 static void mw5MonitorTurn(float step) {
     int p = g_m5GlassLast, mon = p >= 0 && p < 5 ? mw5MonitorOf(p) : -1;
     if (mon < 0) {
-        noteShow(p < 0 ? L"Choose a part first: Ctrl+Alt+Shift+1..5 (radar, target, damage, lance, weapons)" : L"That part is not on a monitor", 4);
+        noteShow(p < 0 ? L"Choose a part first: Ctrl+Alt+Shift+1..5 (radar, target, damage, lance, weapons)"
+                       : L"That part is not on a monitor",
+                 4);
         Beep(300, 150);
         return;
     }
@@ -1385,7 +1497,9 @@ static void mw5GlassAdjust(int k) {
             if (k == 1) g[1] -= 1;
             if (k == 2) g[0] += 1;
             if (k == 3) g[0] -= 1;
-            if (k == 4) g[2] = min(120.0f, g[2] * 1.05f), g[0] *= 1.05f, g[1] *= 1.05f; // (larger about the view's middle: the row stays a row)
+            if (k == 4)
+                g[2] = min(120.0f, g[2] * 1.05f), g[0] *= 1.05f,
+                g[1] *= 1.05f; // (larger about the view's middle: the row stays a row)
             if (k == 5) g[2] = max(2.0f, g[2] / 1.05f), g[0] /= 1.05f, g[1] /= 1.05f;
             if (k == 6) g[3] = min(20.0f, g[3] * 1.05f);
             if (k == 7) g[3] = max(0.3f, g[3] / 1.05f);
@@ -1394,7 +1508,10 @@ static void mw5GlassAdjust(int k) {
         }
         wchar_t note[200];
         swprintf(note, 200, L"%ls: all %d parts %ls", mw5Who(), n,
-                 k < 2 ? (k == 0 ? L"up" : L"down") : k < 4 ? (k == 2 ? L"right" : L"left") : k < 6 ? (k == 4 ? L"larger" : L"smaller") : (k == 6 ? L"farther" : L"nearer"));
+                 k < 2   ? (k == 0 ? L"up" : L"down")
+                 : k < 4 ? (k == 2 ? L"right" : L"left")
+                 : k < 6 ? (k == 4 ? L"larger" : L"smaller")
+                         : (k == 6 ? L"farther" : L"nearer"));
         noteShow(note, 3);
         logf("mw5: %ls: all %d parts of the row changed together (key %d, saved)", mw5Who(), n, k);
         Beep(k < 4 ? 1000 : k < 6 ? 1400 : 800, 30);
@@ -1423,8 +1540,8 @@ static void mw5GlassAdjust(int k) {
         if (k == 6) r[3] += 0.02f; // Ins: longer downwards (a list with more lines), Del: shorter
         if (k == 7) r[3] -= 0.02f;
         const float *d = g_m5Part[p];
-        bool ok = r[0] >= -0.02f && r[1] >= -0.02f && r[2] <= 1.06f && r[3] <= 1.02f && r[2] - r[0] >= 0.03f && r[3] - r[1] >= 0.03f &&
-                  mcHolds(r, 0.5f * (d[0] + d[2]), 0.5f * (d[1] + d[3]));
+        bool ok = r[0] >= -0.02f && r[1] >= -0.02f && r[2] <= 1.06f && r[3] <= 1.02f && r[2] - r[0] >= 0.03f &&
+                  r[3] - r[1] >= 0.03f && mcHolds(r, 0.5f * (d[0] + d[2]), 0.5f * (d[1] + d[3]));
         wchar_t note[200], key[32], b[96];
         if (!ok) {
             memcpy(r, was, sizeof was);
@@ -1436,7 +1553,8 @@ static void mw5GlassAdjust(int k) {
         swprintf(key, 32, L"screen_%d", mon);
         swprintf(b, 96, L"%.3f %.3f %.3f %.3f", r[0], r[1], r[2], r[3]);
         mw5CockpitPutStr(key, b);
-        swprintf(note, 200, L"%ls on monitor %d: shows %.2f..%.2f across, %.2f..%.2f down", g_m5PartName[p], mon, r[0], r[2], r[1], r[3]);
+        swprintf(note, 200, L"%ls on monitor %d: shows %.2f..%.2f across, %.2f..%.2f down", g_m5PartName[p], mon, r[0],
+                 r[2], r[1], r[3]);
         noteShow(note, 3);
         Beep(k < 4 ? 1000 : k < 6 ? 1400 : 800, 30);
         return;
@@ -1492,9 +1610,11 @@ static void mw5OnPresent() {
         was = down;
     }
     if (!g_mw5On && !mw5Plain()) return;
-    if (g_mw5On) { // the seat, the eye in the mesh or the mesh itself changed: the automatic places on the glass are found anew
+    if (g_mw5On) { // the seat, the eye in the mesh or the mesh itself changed: the automatic places on the glass are
+                   // found anew
         static float last[8];
-        float now[8] = {g_vr.seatUp, g_vr.seatFwd, g_vr.cockpitScale, g_mw5Eye[0], g_mw5Eye[1], g_mw5Eye[2], g_mw5Scale, (float)g_m5Tri.size()};
+        float now[8] = {g_vr.seatUp, g_vr.seatFwd, g_vr.cockpitScale, g_mw5Eye[0],
+                        g_mw5Eye[1], g_mw5Eye[2],  g_mw5Scale,        (float)g_m5Tri.size()};
         if (g_mw5State == 1 && memcmp(last, now, sizeof now)) {
             memcpy(last, now, sizeof now);
             mw5GlassFit();
@@ -1535,7 +1655,8 @@ static void mw5OnPresent() {
             mw5CockpitPutF(L"scale", g_mw5Scale);
             logf("mw5: eye %.2f m up, %.2f m forward, size %.3f (saved)", g_mw5Eye[1], g_mw5Eye[2], g_mw5Scale);
             wchar_t note[160];
-            swprintf(note, 160, L"%ls: eye %+.2f m up, %+.2f m forward, size %.2f", g_mw5Name, g_mw5Eye[1], g_mw5Eye[2], g_mw5Scale);
+            swprintf(note, 160, L"%ls: eye %+.2f m up, %+.2f m forward, size %.2f", g_mw5Name, g_mw5Eye[1], g_mw5Eye[2],
+                     g_mw5Scale);
             noteShow(note, 3);
             Beep(k < 2 ? 800 : k < 4 ? 1000 : 1400, 30);
         }

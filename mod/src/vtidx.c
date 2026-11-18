@@ -23,7 +23,7 @@ const int VT_Dev_CreateDeferredContext3 = IDX(ID3D11Device3, CreateDeferredConte
 const int VT_Ctx_ExecuteCommandList = IDX(ID3D11DeviceContext1, ExecuteCommandList);
 const int VT_Ctx_FinishCommandList = IDX(ID3D11DeviceContext1, FinishCommandList);
 
-const int VT_Ctx_VSSetConstantBuffers =IDX(ID3D11DeviceContext1, VSSetConstantBuffers);
+const int VT_Ctx_VSSetConstantBuffers = IDX(ID3D11DeviceContext1, VSSetConstantBuffers);
 const int VT_Ctx_PSSetConstantBuffers = IDX(ID3D11DeviceContext1, PSSetConstantBuffers);
 const int VT_Ctx_CSSetConstantBuffers = IDX(ID3D11DeviceContext1, CSSetConstantBuffers);
 const int VT_Ctx_VSSetConstantBuffers1 = IDX(ID3D11DeviceContext1, VSSetConstantBuffers1);

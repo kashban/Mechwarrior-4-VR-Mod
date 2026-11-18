@@ -38,18 +38,16 @@
 #include "core.h"
 
 extern "C" {
-extern const int VT_Dev_CreateBuffer, VT_Dev_CreateVertexShader, VT_Dev_CreatePixelShader,
-    VT_Dev_CreateComputeShader, VT_Dev_CreateGeometryShader, VT_Dev_CreateHullShader,
-    VT_Dev_CreateDomainShader, VT_Dev_CreateDeferredContext, VT_Dev_CreateDeferredContext1,
-    VT_Dev_CreateDeferredContext2, VT_Dev_CreateDeferredContext3;
+extern const int VT_Dev_CreateBuffer, VT_Dev_CreateVertexShader, VT_Dev_CreatePixelShader, VT_Dev_CreateComputeShader,
+    VT_Dev_CreateGeometryShader, VT_Dev_CreateHullShader, VT_Dev_CreateDomainShader, VT_Dev_CreateDeferredContext,
+    VT_Dev_CreateDeferredContext1, VT_Dev_CreateDeferredContext2, VT_Dev_CreateDeferredContext3;
 extern const int VT_Ctx_VSSetConstantBuffers, VT_Ctx_PSSetConstantBuffers, VT_Ctx_CSSetConstantBuffers,
-    VT_Ctx_VSSetConstantBuffers1, VT_Ctx_PSSetConstantBuffers1, VT_Ctx_CSSetConstantBuffers1,
-    VT_Ctx_VSSetShader, VT_Ctx_VSSetShaderResources, VT_Ctx_PSSetShader, VT_Ctx_CSSetShader, VT_Ctx_Draw, VT_Ctx_DrawIndexed,
+    VT_Ctx_VSSetConstantBuffers1, VT_Ctx_PSSetConstantBuffers1, VT_Ctx_CSSetConstantBuffers1, VT_Ctx_VSSetShader,
+    VT_Ctx_VSSetShaderResources, VT_Ctx_PSSetShader, VT_Ctx_CSSetShader, VT_Ctx_Draw, VT_Ctx_DrawIndexed,
     VT_Ctx_DrawInstanced, VT_Ctx_DrawIndexedInstanced, VT_Ctx_DrawInstancedIndirect,
-    VT_Ctx_DrawIndexedInstancedIndirect, VT_Ctx_Dispatch, VT_Ctx_DispatchIndirect, VT_Ctx_Map,
-    VT_Ctx_Unmap, VT_Ctx_UpdateSubresource, VT_Ctx_UpdateSubresource1, VT_Ctx_OMSetRenderTargets,
-    VT_Ctx_OMSetRenderTargetsAndUAVs, VT_Ctx_RSSetViewports, VT_Ctx_ExecuteCommandList,
-    VT_Ctx_FinishCommandList;
+    VT_Ctx_DrawIndexedInstancedIndirect, VT_Ctx_Dispatch, VT_Ctx_DispatchIndirect, VT_Ctx_Map, VT_Ctx_Unmap,
+    VT_Ctx_UpdateSubresource, VT_Ctx_UpdateSubresource1, VT_Ctx_OMSetRenderTargets, VT_Ctx_OMSetRenderTargetsAndUAVs,
+    VT_Ctx_RSSetViewports, VT_Ctx_ExecuteCommandList, VT_Ctx_FinishCommandList;
 extern const int VT_Ann_BeginEvent, VT_Ann_EndEvent, VT_Ann_SetMarker, VT_Ann_GetStatus;
 extern const int VT_Fac_CreateSwapChain, VT_Fac_CreateSwapChainForHwnd;
 extern const int VT_Sc_Present, VT_Sc_Present1, VT_Sc_ResizeBuffers;
@@ -88,28 +86,29 @@ static std::string narrow(const wchar_t *w) {
 // the real d3d11.dll and the exports we pass through
 
 static HMODULE g_real;
-typedef HRESULT(WINAPI *PFN_CreateDevice)(IDXGIAdapter *, D3D_DRIVER_TYPE, HMODULE, UINT,
-                                          const D3D_FEATURE_LEVEL *, UINT, UINT, ID3D11Device **,
-                                          D3D_FEATURE_LEVEL *, ID3D11DeviceContext **);
+typedef HRESULT(WINAPI *PFN_CreateDevice)(IDXGIAdapter *, D3D_DRIVER_TYPE, HMODULE, UINT, const D3D_FEATURE_LEVEL *,
+                                          UINT, UINT, ID3D11Device **, D3D_FEATURE_LEVEL *, ID3D11DeviceContext **);
 typedef HRESULT(WINAPI *PFN_CreateDeviceAndSwapChain)(IDXGIAdapter *, D3D_DRIVER_TYPE, HMODULE, UINT,
                                                       const D3D_FEATURE_LEVEL *, UINT, UINT,
-                                                      const DXGI_SWAP_CHAIN_DESC *, IDXGISwapChain **,
-                                                      ID3D11Device **, D3D_FEATURE_LEVEL *,
-                                                      ID3D11DeviceContext **);
+                                                      const DXGI_SWAP_CHAIN_DESC *, IDXGISwapChain **, ID3D11Device **,
+                                                      D3D_FEATURE_LEVEL *, ID3D11DeviceContext **);
 static PFN_CreateDevice r_CreateDevice;
 static PFN_CreateDeviceAndSwapChain r_CreateDeviceAndSwapChain;
 
-#define FWD_LIST(X)                                                                            \
-    X(D3D11CoreCreateDevice) X(D3D11CoreCreateLayeredDevice) X(D3D11CoreGetLayeredDeviceSize)    \
-    X(D3D11CoreRegisterLayers) X(D3D11CreateDeviceForD3D12) X(D3D11On12CreateDevice)             \
-    X(CreateDirect3D11DeviceFromDXGIDevice) X(CreateDirect3D11SurfaceFromDXGISurface)            \
-    X(D3DPerformance_BeginEvent) X(D3DPerformance_EndEvent) X(D3DPerformance_GetStatus)          \
-    X(D3DPerformance_SetMarker) X(EnableFeatureLevelUpgrade) X(OpenAdapter10) X(OpenAdapter10_2)
+#define FWD_LIST(X)                                                                                                    \
+    X(D3D11CoreCreateDevice)                                                                                           \
+    X(D3D11CoreCreateLayeredDevice) X(D3D11CoreGetLayeredDeviceSize) X(D3D11CoreRegisterLayers)                        \
+        X(D3D11CreateDeviceForD3D12) X(D3D11On12CreateDevice) X(CreateDirect3D11DeviceFromDXGIDevice)                  \
+            X(CreateDirect3D11SurfaceFromDXGISurface) X(D3DPerformance_BeginEvent) X(D3DPerformance_EndEvent)          \
+                X(D3DPerformance_GetStatus) X(D3DPerformance_SetMarker) X(EnableFeatureLevelUpgrade) X(OpenAdapter10)  \
+                    X(OpenAdapter10_2)
 
-#define DECL_FWD(n)                                                                            \
-    extern "C" FARPROC r_##n;                                                                  \
-    FARPROC r_##n;                                                                             \
-    extern "C" __declspec(naked) void P_##n() { __asm { jmp dword ptr [r_##n] } }
+#define DECL_FWD(n)                                                                                                    \
+    extern "C" FARPROC r_##n;                                                                                          \
+    FARPROC r_##n;                                                                                                     \
+    extern "C" __declspec(naked) void P_##n() {                                                                        \
+        __asm { jmp dword ptr [r_##n] }                                                                                    \
+    }
 FWD_LIST(DECL_FWD)
 
 #pragma comment(linker, "/EXPORT:D3D11CoreCreateDevice=_P_D3D11CoreCreateDevice")
@@ -138,8 +137,7 @@ static bool loadReal() {
     g_real = LoadLibraryW(p);
     if (!g_real) return false;
     r_CreateDevice = (PFN_CreateDevice)GetProcAddress(g_real, "D3D11CreateDevice");
-    r_CreateDeviceAndSwapChain =
-        (PFN_CreateDeviceAndSwapChain)GetProcAddress(g_real, "D3D11CreateDeviceAndSwapChain");
+    r_CreateDeviceAndSwapChain = (PFN_CreateDeviceAndSwapChain)GetProcAddress(g_real, "D3D11CreateDeviceAndSwapChain");
 #define RES_FWD(n) r_##n = GetProcAddress(g_real, #n);
     FWD_LIST(RES_FWD)
     return true;
@@ -217,7 +215,7 @@ struct ShaderInfo {
     bool camera = false;
     std::vector<std::pair<UINT, UINT>> camPos; // (cb slot, byte offset) of camera-position float3/float4s
     std::vector<std::string> camPosNames;
-    std::string res; // non-cbuffer bindings, for the audit
+    std::string res;           // non-cbuffer bindings, for the audit
     std::vector<int> srvSlots; // shader-resource (t) slots it reads
 };
 
@@ -409,7 +407,7 @@ struct CtxState {
     void *self = nullptr;
     UINT vpN = 0;
     D3D11_VIEWPORT vp0[4] = {}; // the viewports as the game set them
-    bool foreign = false; // a context of the VR runtime's own device
+    bool foreign = false;       // a context of the VR runtime's own device
     bool deferred = false;
     StageState st[ST_N];
     std::string rt = "?", vp = "?", pendSig;
@@ -421,8 +419,8 @@ struct CtxState {
 };
 
 static std::mutex g_ctxMx;
-static std::unordered_map<void *, CtxState *> g_ctx;      // context -> state
-static std::unordered_map<void *, void *> g_annCtx;       // annotation interface -> its context
+static std::unordered_map<void *, CtxState *> g_ctx; // context -> state
+static std::unordered_map<void *, void *> g_annCtx;  // annotation interface -> its context
 
 static CtxState *ctxOf(void *c) {
     thread_local void *lastKey;
@@ -450,8 +448,7 @@ static CtxState *ctxOfAnn(void *a) {
 }
 
 // statistics (all contexts)
-static volatile LONG g_statDrawsImm, g_statDrawsDef, g_statDisp, g_statMaps, g_statLabels, g_statExec,
-    g_statFinish;
+static volatile LONG g_statDrawsImm, g_statDrawsDef, g_statDisp, g_statMaps, g_statLabels, g_statExec, g_statFinish;
 static unsigned g_statFrames, g_frame;
 static DWORD g_statT0;
 static std::string g_frameLabels, g_lastFrameLabels;
@@ -499,8 +496,8 @@ static std::string texDesc(ID3D11View *v) {
         D3D11_TEXTURE2D_DESC d;
         t->GetDesc(&d);
         char b[96];
-        snprintf(b, sizeof b, "%ux%u f%u%s%s", d.Width, d.Height, (unsigned)d.Format,
-                 d.ArraySize > 1 ? " arr" : "", d.SampleDesc.Count > 1 ? " msaa" : "");
+        snprintf(b, sizeof b, "%ux%u f%u%s%s", d.Width, d.Height, (unsigned)d.Format, d.ArraySize > 1 ? " arr" : "",
+                 d.SampleDesc.Count > 1 ? " msaa" : "");
         s = b;
         t->Release();
     }
@@ -546,8 +543,8 @@ static void dumpCamera(CtxState *s, int st) {
                     (unsigned long long)sh->hash, cb.slot, cb.name.c_str(), buf);
             continue;
         }
-        capLine(s, "  cam %cS %016llx cb b%u '%s' buf %p +%u v%u:", sh->stage, (unsigned long long)sh->hash,
-                cb.slot, cb.name.c_str(), buf, off, ver);
+        capLine(s, "  cam %cS %016llx cb b%u '%s' buf %p +%u v%u:", sh->stage, (unsigned long long)sh->hash, cb.slot,
+                cb.name.c_str(), buf, off, ver);
         for (int vi : cb.camVars) {
             const VarInfo &v = cb.vars[vi];
             UINT at = off + v.offset;
@@ -602,12 +599,14 @@ struct GlassItem {
 };
 static int mw5GlassItems(GlassItem *out);
 static void mw5HudCopy(ID3D11DeviceContext *, ID3D11Texture2D *);
-static bool g_renderOverride;          // the game renders larger than its window ([vr] render_height)
-static void *volatile g_foreignDev;    // the VR runtime's device (shares the vtable with the game's)
-static volatile bool g_inHud;          // inside the top-level "after 3D: HUD, 2D" label
-static volatile bool g_smallCamSide;   // the small camera being drawn is a window at the picture's side (the target's view), not the zoom window
-static volatile float g_hudPx;         // HUD shift per eye in back-buffer pixels (VR), 0 = none // VR session running: the eyes alternate, offset from [vr]
-static volatile bool g_in3D; // inside the top-level "3D" label: the world, not HUD or menus
+static bool g_renderOverride;        // the game renders larger than its window ([vr] render_height)
+static void *volatile g_foreignDev;  // the VR runtime's device (shares the vtable with the game's)
+static volatile bool g_inHud;        // inside the top-level "after 3D: HUD, 2D" label
+static volatile bool g_smallCamSide; // the small camera being drawn is a window at the picture's side (the target's
+                                     // view), not the zoom window
+static volatile float g_hudPx; // HUD shift per eye in back-buffer pixels (VR), 0 = none // VR session running: the eyes
+                               // alternate, offset from [vr]
+static volatile bool g_in3D;   // inside the top-level "3D" label: the world, not HUD or menus
 static volatile bool g_in3DSeen; // a "3D" label was seen (a battle is running)
 
 static void onWork(void *ctx, const char *kind, bool compute) {
@@ -620,9 +619,12 @@ static void onWork(void *ctx, const char *kind, bool compute) {
         for (uint64_t x : g_vsFrame) have |= x == h;
         if (!have) g_vsFrame.push_back(h);
     }
-    if (compute) InterlockedIncrement(&g_statDisp);
-    else if (s->deferred) InterlockedIncrement(&g_statDrawsDef);
-    else InterlockedIncrement(&g_statDrawsImm);
+    if (compute)
+        InterlockedIncrement(&g_statDisp);
+    else if (s->deferred)
+        InterlockedIncrement(&g_statDrawsDef);
+    else
+        InterlockedIncrement(&g_statDrawsImm);
     if (!g_cap) return;
     char b[512];
     if (compute)
@@ -631,8 +633,7 @@ static void onWork(void *ctx, const char *kind, bool compute) {
     else
         snprintf(b, sizeof b, "%s VS %016llx PS %016llx %s VP %s", kind,
                  s->st[ST_VS].sh ? (unsigned long long)s->st[ST_VS].sh->hash : 0ull,
-                 s->st[ST_PS].sh ? (unsigned long long)s->st[ST_PS].sh->hash : 0ull, s->rt.c_str(),
-                 s->vp.c_str());
+                 s->st[ST_PS].sh ? (unsigned long long)s->st[ST_PS].sh->hash : 0ull, s->rt.c_str(), s->vp.c_str());
     if (s->pendSig != b) {
         flushPending(s);
         s->pendSig = b;
@@ -666,8 +667,8 @@ static void snapshot(void *res, const void *src, UINT dstOff, UINT bytes) {
 // writes into its buffers - the first way this mod worked. It went with the fallback for other builds of mw4hook.)
 
 enum { EK_NONE, EK_VIEW };
-static int g_xIdx = -1;               // float index of the clip.x translation term (12 column-major, 3 row-major)
-static float g_P00, g_P11;            // projection scales, from g_vWorldToClip
+static int g_xIdx = -1;    // float index of the clip.x translation term (12 column-major, 3 row-major)
+static float g_P00, g_P11; // projection scales, from g_vWorldToClip
 static int g_layoutLogs;
 #include "head.inc"
 
@@ -709,7 +710,8 @@ static void eyeLearnLayout(const float *m) {
     }
     if (g_layoutLogs < 3) {
         ++g_layoutLogs;
-        logf("eye: g_vWorldToClip = [%.4f %.4f %.4f %.4f | %.4f %.4f %.4f %.4f | %.4f %.4f %.4f %.4f | %.4f %.4f %.4f %.4f]"
+        logf("eye: g_vWorldToClip = [%.4f %.4f %.4f %.4f | %.4f %.4f %.4f %.4f | %.4f %.4f %.4f %.4f | %.4f %.4f %.4f "
+             "%.4f]"
              " -> |w row| column-major %.4f, row-major %.4f => x term at float %d, P00 %.4f",
              m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7], m[8], m[9], m[10], m[11], m[12], m[13], m[14], m[15], cm,
              rm, idx, p00);
@@ -731,7 +733,8 @@ static void eyeReadIni() {
     if (GetFileAttributesW(p.c_str()) == INVALID_FILE_ATTRIBUTES) {
         FILE *f = _wfsopen(p.c_str(), L"w", _SH_DENYNO);
         if (f) {
-            fputs("; MW4VR - no settings were found. Copy mw4vr.ini from the mod's package (docs/mw4vr.ini.example) over this file:\n"
+            fputs("; MW4VR - no settings were found. Copy mw4vr.ini from the mod's package (docs/mw4vr.ini.example) "
+                  "over this file:\n"
                   "; it has every key with a comment. Until then the mod stays switched off.\n"
                   "[vr]\n"
                   "enabled=0\n",
@@ -749,7 +752,8 @@ static void hideOnPresent() {
     }
     static bool keyWas;
     static int idx;
-    bool key = g_dbg && (GetAsyncKeyState(VK_CONTROL) & 0x8000) && (GetAsyncKeyState(VK_F8) & 0x8000); // (diagnosis: [debug] level=1 only)
+    bool key = g_dbg && (GetAsyncKeyState(VK_CONTROL) & 0x8000) &&
+               (GetAsyncKeyState(VK_F8) & 0x8000); // (diagnosis: [debug] level=1 only)
     if (key && !keyWas) {
         std::lock_guard<std::mutex> lk(g_hideMx);
         int n = (int)g_vsList.size();
@@ -791,7 +795,8 @@ static HMODULE g_self;
 static std::string moduleOf(void *addr) {
     HMODULE m = nullptr;
     if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                            (LPCWSTR)addr, &m) || !m)
+                            (LPCWSTR)addr, &m) ||
+        !m)
         return "?";
     char o[64];
     snprintf(o, sizeof o, "+%lx", (unsigned long)((char *)addr - (char *)m));
@@ -805,12 +810,21 @@ static std::string moduleOf(void *addr) {
 static void dumpSlots(void *obj, const char *what) {
     if (!obj) return;
     void **vt = *(void ***)obj;
-    struct { const char *n; int i; } slots[] = {
-        {"Draw", VT_Ctx_Draw}, {"DrawIndexed", VT_Ctx_DrawIndexed},
-        {"DrawIndexedInstanced", VT_Ctx_DrawIndexedInstanced}, {"DrawInstanced", VT_Ctx_DrawInstanced},
-        {"Dispatch", VT_Ctx_Dispatch}, {"VSSetShader", VT_Ctx_VSSetShader}, {"PSSetShader", VT_Ctx_PSSetShader},
-        {"PSSetConstantBuffers", VT_Ctx_PSSetConstantBuffers}, {"OMSetRenderTargets", VT_Ctx_OMSetRenderTargets},
-        {"RSSetViewports", VT_Ctx_RSSetViewports}, {"Map", VT_Ctx_Map}, {"Unmap", VT_Ctx_Unmap}};
+    struct {
+        const char *n;
+        int i;
+    } slots[] = {{"Draw", VT_Ctx_Draw},
+                 {"DrawIndexed", VT_Ctx_DrawIndexed},
+                 {"DrawIndexedInstanced", VT_Ctx_DrawIndexedInstanced},
+                 {"DrawInstanced", VT_Ctx_DrawInstanced},
+                 {"Dispatch", VT_Ctx_Dispatch},
+                 {"VSSetShader", VT_Ctx_VSSetShader},
+                 {"PSSetShader", VT_Ctx_PSSetShader},
+                 {"PSSetConstantBuffers", VT_Ctx_PSSetConstantBuffers},
+                 {"OMSetRenderTargets", VT_Ctx_OMSetRenderTargets},
+                 {"RSSetViewports", VT_Ctx_RSSetViewports},
+                 {"Map", VT_Ctx_Map},
+                 {"Unmap", VT_Ctx_Unmap}};
     logf("%s %p vtable %p (%s):", what, obj, vt, moduleOf(vt).c_str());
     for (auto &s : slots) logf("   [%3d] %-22s -> %p %s", s.i, s.n, vt[s.i], moduleOf(vt[s.i]).c_str());
 }
@@ -896,24 +910,28 @@ static void helpPause(IDXGISwapChain *sc, int eye) {
         shotKeys(); // Ctrl+F12 takes a picture of the page too
         DWORD a = GetTickCount();
         vrOnPresent(sc, eye);
-        if (GetTickCount() - a < 3) Sleep(8);                // no frame of the runtime's to wait for: not a busy loop
+        if (GetTickCount() - a < 3) Sleep(8); // no frame of the runtime's to wait for: not a busy loop
         if (GetTickCount() - t0 > 15 * 60 * 1000) g_helpOn = false; // a quarter of an hour: back to the game
     }
     g_helpOn = false;
-    for (int i = 0; i < 100 && (GetAsyncKeyState(VK_ESCAPE) & 0x8000); ++i) Sleep(10); // Esc let go: its release is not the game's either
+    for (int i = 0; i < 100 && (GetAsyncKeyState(VK_ESCAPE) & 0x8000); ++i)
+        Sleep(10); // Esc let go: its release is not the game's either
     helpForgetKeys();
     QueryPerformanceCounter(&q1);
     DWORD ms = GetTickCount() - t0;
     if (g_helpClock) g_helpOffQpc += q1.QuadPart - q0.QuadPart, g_helpOffMs += ms;
-    logf("help: closed after %.1f s%s", ms / 1000.0f, g_helpClock ? "" : " (the clocks are left alone: the game sees one long frame)");
+    logf("help: closed after %.1f s%s", ms / 1000.0f,
+         g_helpClock ? "" : " (the clocks are left alone: the game sees one long frame)");
 }
 
 static void presentGap() {
     static DWORD last;
     DWORD now = GetTickCount();
     if (last && now - last >= 3000)
-        logf("present: no frame for %.1f s (frame %u; of the last Present our part took %.1f s - xrWaitFrame %.1f s -, the system's %.1f s; "
-             "the rest was the game's)", (now - last) / 1000.0f, g_frame, g_presOurs / 1000.0f, g_presWait / 1000.0f, g_presReal / 1000.0f);
+        logf("present: no frame for %.1f s (frame %u; of the last Present our part took %.1f s - xrWaitFrame %.1f s -, "
+             "the system's %.1f s; "
+             "the rest was the game's)",
+             (now - last) / 1000.0f, g_frame, g_presOurs / 1000.0f, g_presWait / 1000.0f, g_presReal / 1000.0f);
     last = now;
 }
 
@@ -923,22 +941,26 @@ static void onPresent(IDXGISwapChain *sc) {
         g_firstPresentLogged = true;
         DXGI_SWAP_CHAIN_DESC d;
         if (SUCCEEDED(sc->GetDesc(&d)))
-            logf("first Present: %ux%u fmt %u buffers %u swap effect %u", d.BufferDesc.Width,
-                 d.BufferDesc.Height, (unsigned)d.BufferDesc.Format, d.BufferCount, (unsigned)d.SwapEffect);
+            logf("first Present: %ux%u fmt %u buffers %u swap effect %u", d.BufferDesc.Width, d.BufferDesc.Height,
+                 (unsigned)d.BufferDesc.Format, d.BufferCount, (unsigned)d.SwapEffect);
     }
     if (g_cap) endCapture();
-    {   // the eye this frame was rendered for (as eyePatch chose it during the frame)
+    { // the eye this frame was rendered for (as eyePatch chose it during the frame)
         int mode = g_eyeMode, eye = -1;
-        if (mode == 1) eye = 1;
-        else if (mode == 2) eye = 0;
-        else if (mode == 3) eye = (g_frame & 1) ? 0 : 1;
+        if (mode == 1)
+            eye = 1;
+        else if (mode == 2)
+            eye = 0;
+        else if (mode == 3)
+            eye = (g_frame & 1) ? 0 : 1;
         mouseInstall();
         menuModeUpdate();
         mouseCapture();
         camKeepKey();
         mw5OnPresent();
         shotKeys();
-        bool inBattle = g_vr.ok && g_hudLayerOn && g_srcCamActive && g_camEyeFrame != ~0u && g_frame - g_camEyeFrame < 30 && !g_menuMode;
+        bool inBattle = g_vr.ok && g_hudLayerOn && g_srcCamActive && g_camEyeFrame != ~0u &&
+                        g_frame - g_camEyeFrame < 30 && !g_menuMode;
         if (inBattle) helpClocks();
         helpKey(inBattle);
         vrOnPresent(sc, eye);
@@ -963,7 +985,9 @@ static void onPresent(IDXGISwapChain *sc) {
     {
         std::lock_guard<std::mutex> lk(g_labelMx);
         if (g_frameLabels != g_lastFrameLabels) {
-            if (g_dbg) logf("frame %u top-level labels: %s", g_frame, g_frameLabels.empty() ? "(none)" : g_frameLabels.c_str());
+            if (g_dbg)
+                logf("frame %u top-level labels: %s", g_frame,
+                     g_frameLabels.empty() ? "(none)" : g_frameLabels.c_str());
             g_lastFrameLabels = g_frameLabels;
         }
         g_frameLabels.clear();
@@ -975,10 +999,11 @@ static void onPresent(IDXGISwapChain *sc) {
         float s = (now - g_statT0) / 1000.0f, f = g_statFrames ? (float)g_statFrames : 1.0f;
         static unsigned reports;
         bool all = g_dbg != 0; // else the first line alone, every sixth time (30 s)
-        if (all || reports++ % 6 == 0) logf("%.1f fps | per frame: %.0f draws imm, %.0f draws deferred, %.0f dispatches, %.0f maps, "
-             "%.0f labels, %.1f FinishCommandList, %.1f ExecuteCommandList | shaders %u, contexts %u",
-             g_statFrames / s, g_statDrawsImm / f, g_statDrawsDef / f, g_statDisp / f, g_statMaps / f,
-             g_statLabels / f, g_statFinish / f, g_statExec / f, g_shaderCount, (unsigned)g_ctx.size());
+        if (all || reports++ % 6 == 0)
+            logf("%.1f fps | per frame: %.0f draws imm, %.0f draws deferred, %.0f dispatches, %.0f maps, "
+                 "%.0f labels, %.1f FinishCommandList, %.1f ExecuteCommandList | shaders %u, contexts %u",
+                 g_statFrames / s, g_statDrawsImm / f, g_statDrawsDef / f, g_statDisp / f, g_statMaps / f,
+                 g_statLabels / f, g_statFinish / f, g_statExec / f, g_shaderCount, (unsigned)g_ctx.size());
         if (all) logf("   CPU-path draws with the replacement shader per frame %.1f", g_statTlSwaps / f);
         g_statTlSwaps = 0;
         g_statT0 = now;
@@ -987,7 +1012,8 @@ static void onPresent(IDXGISwapChain *sc) {
     }
 
     static bool keyWas;
-    bool key = g_dbg && (GetAsyncKeyState(VK_CONTROL) & 0x8000) && (GetAsyncKeyState(VK_SHIFT) & 0x8000) && (GetAsyncKeyState(VK_F11) & 0x8000);
+    bool key = g_dbg && (GetAsyncKeyState(VK_CONTROL) & 0x8000) && (GetAsyncKeyState(VK_SHIFT) & 0x8000) &&
+               (GetAsyncKeyState(VK_F11) & 0x8000);
     bool trig = key && !keyWas;
     keyWas = key;
     if (g_dbg && g_frame % 30 == 0) {
@@ -1018,12 +1044,12 @@ static HRESULT STDMETHODCALLTYPE H_CreateBuffer(ID3D11Device *d, const D3D11_BUF
 
 typedef HRESULT(STDMETHODCALLTYPE *PFN_CreateShader)(ID3D11Device *, const void *, SIZE_T, ID3D11ClassLinkage *,
                                                      void **);
-#define SHADER_HOOK(Kind, letter)                                                                  \
-    static HRESULT STDMETHODCALLTYPE H_Create##Kind(ID3D11Device *d, const void *code, SIZE_T len, \
-                                                    ID3D11ClassLinkage *cl, void **out) {          \
-        HRESULT hr = ORIG(PFN_CreateShader, d, VT_Dev_Create##Kind)(d, code, len, cl, out);        \
-        if (SUCCEEDED(hr) && out && *out && d != g_foreignDev) onShader(letter, code, len, *out);  \
-        return hr;                                                                                 \
+#define SHADER_HOOK(Kind, letter)                                                                                      \
+    static HRESULT STDMETHODCALLTYPE H_Create##Kind(ID3D11Device *d, const void *code, SIZE_T len,                     \
+                                                    ID3D11ClassLinkage *cl, void **out) {                              \
+        HRESULT hr = ORIG(PFN_CreateShader, d, VT_Dev_Create##Kind)(d, code, len, cl, out);                            \
+        if (SUCCEEDED(hr) && out && *out && d != g_foreignDev) onShader(letter, code, len, *out);                      \
+        return hr;                                                                                                     \
     }
 SHADER_HOOK(VertexShader, 'V')
 SHADER_HOOK(PixelShader, 'P')
@@ -1033,13 +1059,13 @@ SHADER_HOOK(HullShader, 'H')
 SHADER_HOOK(DomainShader, 'D')
 
 typedef HRESULT(STDMETHODCALLTYPE *PFN_CreateDeferred)(void *, UINT, void **);
-#define DEFERRED_HOOK(Sfx)                                                                         \
-    static HRESULT STDMETHODCALLTYPE H_CreateDeferredContext##Sfx(void *d, UINT fl, void **out) { \
-        HRESULT hr = ORIG(PFN_CreateDeferred, d, VT_Dev_CreateDeferredContext##Sfx)(d, fl, out);   \
-        logf("CreateDeferredContext" #Sfx " on thread %lu -> 0x%08lx ctx %p", GetCurrentThreadId(), hr, \
-             out ? *out : nullptr);                                                                \
-        if (SUCCEEDED(hr) && out && *out) hookContext((ID3D11DeviceContext *)*out, true, false);          \
-        return hr;                                                                                 \
+#define DEFERRED_HOOK(Sfx)                                                                                             \
+    static HRESULT STDMETHODCALLTYPE H_CreateDeferredContext##Sfx(void *d, UINT fl, void **out) {                      \
+        HRESULT hr = ORIG(PFN_CreateDeferred, d, VT_Dev_CreateDeferredContext##Sfx)(d, fl, out);                       \
+        logf("CreateDeferredContext" #Sfx " on thread %lu -> 0x%08lx ctx %p", GetCurrentThreadId(), hr,                \
+             out ? *out : nullptr);                                                                                    \
+        if (SUCCEEDED(hr) && out && *out) hookContext((ID3D11DeviceContext *)*out, true, false);                       \
+        return hr;                                                                                                     \
     }
 DEFERRED_HOOK()
 DEFERRED_HOOK(1)
@@ -1050,12 +1076,12 @@ DEFERRED_HOOK(3)
 // hooks: context
 
 typedef void(STDMETHODCALLTYPE *PFN_SetShader)(ID3D11DeviceContext *, void *, ID3D11ClassInstance *const *, UINT);
-#define SETSHADER_HOOK(St, idx)                                                                    \
-    static void STDMETHODCALLTYPE H_##St##SetShader(ID3D11DeviceContext *c, void *s,               \
-                                                    ID3D11ClassInstance *const *ci, UINT n) {      \
-        ctxOf(c)->st[idx].sh = lookupShader(s);                                                    \
-        ctxOf(c)->st[idx].obj = s;                                                                 \
-        ORIG(PFN_SetShader, c, VT_Ctx_##St##SetShader)(c, s, ci, n);                               \
+#define SETSHADER_HOOK(St, idx)                                                                                        \
+    static void STDMETHODCALLTYPE H_##St##SetShader(ID3D11DeviceContext *c, void *s, ID3D11ClassInstance *const *ci,   \
+                                                    UINT n) {                                                          \
+        ctxOf(c)->st[idx].sh = lookupShader(s);                                                                        \
+        ctxOf(c)->st[idx].obj = s;                                                                                     \
+        ORIG(PFN_SetShader, c, VT_Ctx_##St##SetShader)(c, s, ci, n);                                                   \
     }
 SETSHADER_HOOK(VS, ST_VS)
 SETSHADER_HOOK(PS, ST_PS)
@@ -1069,19 +1095,18 @@ static void trackCBs(void *c, int st, UINT start, UINT n, ID3D11Buffer *const *b
     }
 }
 typedef void(STDMETHODCALLTYPE *PFN_SetCB)(ID3D11DeviceContext *, UINT, UINT, ID3D11Buffer *const *);
-typedef void(STDMETHODCALLTYPE *PFN_SetCB1)(ID3D11DeviceContext *, UINT, UINT, ID3D11Buffer *const *,
-                                            const UINT *, const UINT *);
-#define SETCB_HOOK(St, idx)                                                                        \
-    static void STDMETHODCALLTYPE H_##St##SetConstantBuffers(ID3D11DeviceContext *c, UINT s, UINT n, \
-                                                             ID3D11Buffer *const *b) {             \
-        trackCBs(c, idx, s, n, b, nullptr);                                                        \
-        ORIG(PFN_SetCB, c, VT_Ctx_##St##SetConstantBuffers)(c, s, n, b);                           \
-    }                                                                                              \
-    static void STDMETHODCALLTYPE H_##St##SetConstantBuffers1(ID3D11DeviceContext *c, UINT s, UINT n, \
-                                                              ID3D11Buffer *const *b, const UINT *f, \
-                                                              const UINT *nc) {                    \
-        trackCBs(c, idx, s, n, b, f);                                                              \
-        ORIG(PFN_SetCB1, c, VT_Ctx_##St##SetConstantBuffers1)(c, s, n, b, f, nc);                  \
+typedef void(STDMETHODCALLTYPE *PFN_SetCB1)(ID3D11DeviceContext *, UINT, UINT, ID3D11Buffer *const *, const UINT *,
+                                            const UINT *);
+#define SETCB_HOOK(St, idx)                                                                                            \
+    static void STDMETHODCALLTYPE H_##St##SetConstantBuffers(ID3D11DeviceContext *c, UINT s, UINT n,                   \
+                                                             ID3D11Buffer *const *b) {                                 \
+        trackCBs(c, idx, s, n, b, nullptr);                                                                            \
+        ORIG(PFN_SetCB, c, VT_Ctx_##St##SetConstantBuffers)(c, s, n, b);                                               \
+    }                                                                                                                  \
+    static void STDMETHODCALLTYPE H_##St##SetConstantBuffers1(ID3D11DeviceContext *c, UINT s, UINT n,                  \
+                                                              ID3D11Buffer *const *b, const UINT *f, const UINT *nc) { \
+        trackCBs(c, idx, s, n, b, f);                                                                                  \
+        ORIG(PFN_SetCB1, c, VT_Ctx_##St##SetConstantBuffers1)(c, s, n, b, f, nc);                                      \
     }
 SETCB_HOOK(VS, ST_VS)
 SETCB_HOOK(PS, ST_PS)
@@ -1159,8 +1184,8 @@ static void STDMETHODCALLTYPE H_DispatchIndirect(ID3D11DeviceContext *c, ID3D11B
 
 typedef HRESULT(STDMETHODCALLTYPE *PFN_Map)(ID3D11DeviceContext *, ID3D11Resource *, UINT, D3D11_MAP, UINT,
                                             D3D11_MAPPED_SUBRESOURCE *);
-static HRESULT STDMETHODCALLTYPE H_Map(ID3D11DeviceContext *c, ID3D11Resource *r, UINT sub, D3D11_MAP t,
-                                       UINT fl, D3D11_MAPPED_SUBRESOURCE *m) {
+static HRESULT STDMETHODCALLTYPE H_Map(ID3D11DeviceContext *c, ID3D11Resource *r, UINT sub, D3D11_MAP t, UINT fl,
+                                       D3D11_MAPPED_SUBRESOURCE *m) {
     HRESULT hr = ORIG(PFN_Map, c, VT_Ctx_Map)(c, r, sub, t, fl, m);
     InterlockedIncrement(&g_statMaps);
     if (SUCCEEDED(hr) && m && t != D3D11_MAP_READ && !ctxOf(c)->foreign) {
@@ -1200,8 +1225,7 @@ static void STDMETHODCALLTYPE H_UpdateSubresource(ID3D11DeviceContext *c, ID3D11
 typedef void(STDMETHODCALLTYPE *PFN_Update1)(ID3D11DeviceContext *, ID3D11Resource *, UINT, const D3D11_BOX *,
                                              const void *, UINT, UINT, UINT);
 static void STDMETHODCALLTYPE H_UpdateSubresource1(ID3D11DeviceContext *c, ID3D11Resource *r, UINT sub,
-                                                   const D3D11_BOX *box, const void *src, UINT rp, UINT dp,
-                                                   UINT fl) {
+                                                   const D3D11_BOX *box, const void *src, UINT rp, UINT dp, UINT fl) {
     if (g_cap) snapshot(r, src, box ? box->left : 0, box ? box->right - box->left : 0);
     ORIG(PFN_Update1, c, VT_Ctx_UpdateSubresource1)(c, r, sub, box, src, rp, dp, fl);
 }
@@ -1212,14 +1236,32 @@ static void STDMETHODCALLTYPE H_UpdateSubresource1(ID3D11DeviceContext *c, ID3D1
 // hot-patch prologue "mov edi,edi" and has 5 spare bytes in front of it). The runtime may use more
 // than one implementation per slot; every one met in a slot gets its own variant hook.
 
-enum { SL_DRAW, SL_DRAWIDX, SL_DRAWINST, SL_DRAWIDXINST, SL_DRAWINSTIND, SL_DRAWIDXINSTIND, SL_DISP, SL_DISPIND,
-       SL_UPD, SL_UPD1, SL_N };
+enum {
+    SL_DRAW,
+    SL_DRAWIDX,
+    SL_DRAWINST,
+    SL_DRAWIDXINST,
+    SL_DRAWINSTIND,
+    SL_DRAWIDXINSTIND,
+    SL_DISP,
+    SL_DISPIND,
+    SL_UPD,
+    SL_UPD1,
+    SL_N
+};
 enum { HP_VARS = 4 };
 static void *g_tr[SL_N][HP_VARS];     // trampolines (function + 2)
 static void *g_hpAddr[SL_N][HP_VARS]; // patched functions
-static const char *g_slName[SL_N] = {"Draw", "DrawIndexed", "DrawInstanced", "DrawIndexedInstanced",
-                                     "DrawInstancedIndirect", "DrawIndexedInstancedIndirect", "Dispatch",
-                                     "DispatchIndirect", "UpdateSubresource", "UpdateSubresource1"};
+static const char *g_slName[SL_N] = {"Draw",
+                                     "DrawIndexed",
+                                     "DrawInstanced",
+                                     "DrawIndexedInstanced",
+                                     "DrawInstancedIndirect",
+                                     "DrawIndexedInstancedIndirect",
+                                     "Dispatch",
+                                     "DispatchIndirect",
+                                     "UpdateSubresource",
+                                     "UpdateSubresource1"};
 
 // what an UpdateSubresource writes (the data itself is passed on as it is)
 static void updateCommon(ID3D11Resource *r, const D3D11_BOX *box, const void *&src) {
@@ -1227,8 +1269,10 @@ static void updateCommon(ID3D11Resource *r, const D3D11_BOX *box, const void *&s
     UINT csz = cbSize(r);
     if (csz == 48 && !box) frameCbSeen(r, src);
     int kind = eyeKind(csz);
-    if (kind && !box) eyeLayoutFrom(kind, (const uint8_t *)src, csz);
-    else if (kind && box && box->right > box->left && box->right <= csz) eyeLayoutFrom(kind, (const uint8_t *)src, box->right - box->left, box->left);
+    if (kind && !box)
+        eyeLayoutFrom(kind, (const uint8_t *)src, csz);
+    else if (kind && box && box->right > box->left && box->right <= csz)
+        eyeLayoutFrom(kind, (const uint8_t *)src, box->right - box->left, box->left);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1267,7 +1311,7 @@ static void createEyeVS() {
     if (err) err->Release();
     ID3D11VertexShader *vs = nullptr;
     hr = ORIG(PFN_CreateShader, g_dev, VT_Dev_CreateVertexShader)(g_dev, code->GetBufferPointer(),
-                                                                   code->GetBufferSize(), nullptr, (void **)&vs);
+                                                                  code->GetBufferSize(), nullptr, (void **)&vs);
     code->Release();
     D3D11_BUFFER_DESC bd = {80, D3D11_USAGE_DYNAMIC, D3D11_BIND_CONSTANT_BUFFER, D3D11_CPU_ACCESS_WRITE, 0, 0};
     ID3D11Buffer *cb = nullptr;
@@ -1302,8 +1346,8 @@ static bool eyeTlPre(ID3D11DeviceContext *c) {
             memcpy(v, g_K, 64);
             v[16] = g_near;
             v[17] = g_kTlOnly ? g_cockpitRange : 1e30f; // camera mode: the cockpit alone
-            // our own cockpit instead of the game's: that is hidden. A large one (a large cockpit scale) reaches further
-            // than the range its near parts are told by
+            // our own cockpit instead of the game's: that is hidden. A large one (a large cockpit scale) reaches
+            // further than the range its near parts are told by
             v[18] = (g_kTlOnly && mw5Active()) ? g_cockpitRange * max(1.0f, g_vr.cockpitScale / 1.9f) : 0.0f;
             memcpy(m.pData, v, sizeof v);
             ORIG(PFN_Unmap, c, VT_Ctx_Unmap)(c, g_eyeCB, 0);
@@ -1366,8 +1410,8 @@ static bool hudWidePre(ID3D11DeviceContext *c) {
     static bool told;
     if (!told) {
         told = true;
-        logf("hud: wide HUD pass running (g_screen.x %.6f -> %.6f, scissor rects %u, first right edge %ld)", d[0] * g_hudTexW / g_hudW, d[0], ns,
-             ns ? sr[0].right : 0L);
+        logf("hud: wide HUD pass running (g_screen.x %.6f -> %.6f, scissor rects %u, first right edge %ld)",
+             d[0] * g_hudTexW / g_hudW, d[0], ns, ns ? sr[0].right : 0L);
     }
     return true;
 }
@@ -1409,7 +1453,8 @@ static bool smallCamBackdrop(ID3D11DeviceContext *c) {
 // sheet changes from frame to frame (a mark that blinks), and with one number kept for all frames the cross-hair
 // flickered through the menu. The image is emptied before each draw from a little before where the sheet was last
 // (before every draw, the first time) until the point is filled; that is a few read-backs a frame.
-static int g_sheetFrom = -1; // the indirect draw of the HUD pass (from 1) the emptying begins with; -1: not known, from the first
+static int g_sheetFrom =
+    -1; // the indirect draw of the HUD pass (from 1) the emptying begins with; -1: not known, from the first
 // the point's alpha, 0..255; -1: cannot be read
 static int hudSheetPixel(ID3D11DeviceContext *c) {
     static ID3D11Texture2D *stage;
@@ -1437,7 +1482,8 @@ static int hudSheetPixel(ID3D11DeviceContext *c) {
     return a;
 }
 static unsigned g_sheetFrame = ~0u;
-static int g_sheetN, g_sheetTries; // indirect draws into the HUD's image in this frame; searches from the first draw in this menu
+static int g_sheetN,
+    g_sheetTries; // indirect draws into the HUD's image in this frame; searches from the first draw in this menu
 static bool g_sheetLook, g_sheetFound; // this frame: the sheet is looked for; it was found (the image is clean)
 // before an indirect draw. true: the image was emptied before it - hudSheetPost after it
 static bool hudSheetPre(ID3D11DeviceContext *c) {
@@ -1453,11 +1499,14 @@ static bool hudSheetPre(ID3D11DeviceContext *c) {
     if (!ours) return false;
     if (g_sheetFrame != g_frame) {
         static int fails;
-        // not found in the frame before: the sheet came earlier than looked for (or it fades out) - from the first draw again
+        // not found in the frame before: the sheet came earlier than looked for (or it fades out) - from the first draw
+        // again
         fails = g_sheetLook && !g_sheetFound ? fails + 1 : 0;
         if (fails >= 2) g_sheetFrom = -1, fails = 0;
         g_sheetFrame = g_frame, g_sheetN = 0, g_sheetFound = false;
-        g_sheetLook = g_sheetFrom > 0 || g_sheetTries < 8; // (a search from the first draw reads back after every draw: some a menu, not for ever)
+        g_sheetLook =
+            g_sheetFrom > 0 ||
+            g_sheetTries < 8; // (a search from the first draw reads back after every draw: some a menu, not for ever)
         if (g_sheetLook && g_sheetFrom < 0) ++g_sheetTries;
     }
     ++g_sheetN;
@@ -1474,7 +1523,8 @@ static void hudSheetPost(ID3D11DeviceContext *c) {
     static bool told;
     if (!told) {
         told = true;
-        logf("hud: the paused battle's sheet is indirect draw %d of the HUD pass (frame %u) - the HUD's image is emptied before it, found anew in every frame",
+        logf("hud: the paused battle's sheet is indirect draw %d of the HUD pass (frame %u) - the HUD's image is "
+             "emptied before it, found anew in every frame",
              g_sheetN, g_frame);
     }
     if (g_sheetFrom < 0 || from < g_sheetFrom) g_sheetFrom = from;
@@ -1483,10 +1533,12 @@ static void hudSheetPost(ID3D11DeviceContext *c) {
 static void e2eState(int *v) {
     static unsigned last, lastFrame = ~0u;
     static int hud;
-    v[0] = g_fadeMenu && !g_menuMode ? 1 : 0; // (a menu's own screen draws no HUD: the sheet's state is an old one there)
+    v[0] =
+        g_fadeMenu && !g_menuMode ? 1 : 0; // (a menu's own screen draws no HUD: the sheet's state is an old one there)
     v[1] = (int)(g_m5AllDraws - last);
     last = g_m5AllDraws;
-    if (g_sheetFrame != lastFrame) lastFrame = g_sheetFrame, hud = g_sheetN; // (counted in the frame before: this one's HUD is still to come)
+    if (g_sheetFrame != lastFrame)
+        lastFrame = g_sheetFrame, hud = g_sheetN; // (counted in the frame before: this one's HUD is still to come)
     v[2] = g_fadeMenu ? hud : 0;
     v[3] = g_fadeMenu && !g_menuMode && g_sheetCleanFrame == g_frame ? 1 : 0;
 }
@@ -1516,7 +1568,8 @@ template <int V> static void STDMETHODCALLTYPE HP_DrawIndexed(ID3D11DeviceContex
     if (hw) hudWidePost(c);
     if (sw) eyeTlPost(c);
 }
-template <int V> static void STDMETHODCALLTYPE HP_DrawInstanced(ID3D11DeviceContext *c, UINT a, UINT b, UINT d, UINT e) {
+template <int V>
+static void STDMETHODCALLTYPE HP_DrawInstanced(ID3D11DeviceContext *c, UINT a, UINT b, UINT d, UINT e) {
     onWork(c, "DrawInstanced", false);
     if (eyeHidden(c)) return;
     bool sw = eyeTlPre(c);
@@ -1535,7 +1588,8 @@ static void STDMETHODCALLTYPE HP_DrawIndexedInstanced(ID3D11DeviceContext *c, UI
     if (hw) hudWidePost(c);
     if (sw) eyeTlPost(c);
 }
-template <int V> static void STDMETHODCALLTYPE HP_DrawInstancedIndirect(ID3D11DeviceContext *c, ID3D11Buffer *b, UINT o) {
+template <int V>
+static void STDMETHODCALLTYPE HP_DrawInstancedIndirect(ID3D11DeviceContext *c, ID3D11Buffer *b, UINT o) {
     onWork(c, "DrawInstancedIndirect", false);
     if (eyeHidden(c)) return;
     bool sheet = hudSheetPre(c);
@@ -1576,10 +1630,16 @@ static void STDMETHODCALLTYPE HP_Upd1(ID3D11DeviceContext *c, ID3D11Resource *r,
 }
 
 #define HP_ROW(f) {(void *)&f<0>, (void *)&f<1>, (void *)&f<2>, (void *)&f<3>}
-static void *const g_hpHook[SL_N][HP_VARS] = {
-    HP_ROW(HP_Draw), HP_ROW(HP_DrawIndexed), HP_ROW(HP_DrawInstanced), HP_ROW(HP_DrawIndexedInstanced),
-    HP_ROW(HP_DrawInstancedIndirect), HP_ROW(HP_DrawIndexedInstancedIndirect), HP_ROW(HP_Dispatch),
-    HP_ROW(HP_DispatchIndirect), HP_ROW(HP_Upd), HP_ROW(HP_Upd1)};
+static void *const g_hpHook[SL_N][HP_VARS] = {HP_ROW(HP_Draw),
+                                              HP_ROW(HP_DrawIndexed),
+                                              HP_ROW(HP_DrawInstanced),
+                                              HP_ROW(HP_DrawIndexedInstanced),
+                                              HP_ROW(HP_DrawInstancedIndirect),
+                                              HP_ROW(HP_DrawIndexedInstancedIndirect),
+                                              HP_ROW(HP_Dispatch),
+                                              HP_ROW(HP_DispatchIndirect),
+                                              HP_ROW(HP_Upd),
+                                              HP_ROW(HP_Upd1)};
 
 static bool hotpatch(void *fn, void *hook) {
     uint8_t *p = (uint8_t *)fn;
@@ -1600,9 +1660,16 @@ static void hotpatchScan(ID3D11DeviceContext *ctx) {
     if (!ctx || !g_real) return;
     static std::mutex mx;
     std::lock_guard<std::mutex> lk(mx);
-    const int slots[SL_N] = {VT_Ctx_Draw, VT_Ctx_DrawIndexed, VT_Ctx_DrawInstanced, VT_Ctx_DrawIndexedInstanced,
-                             VT_Ctx_DrawInstancedIndirect, VT_Ctx_DrawIndexedInstancedIndirect, VT_Ctx_Dispatch,
-                             VT_Ctx_DispatchIndirect, VT_Ctx_UpdateSubresource, VT_Ctx_UpdateSubresource1};
+    const int slots[SL_N] = {VT_Ctx_Draw,
+                             VT_Ctx_DrawIndexed,
+                             VT_Ctx_DrawInstanced,
+                             VT_Ctx_DrawIndexedInstanced,
+                             VT_Ctx_DrawInstancedIndirect,
+                             VT_Ctx_DrawIndexedInstancedIndirect,
+                             VT_Ctx_Dispatch,
+                             VT_Ctx_DispatchIndirect,
+                             VT_Ctx_UpdateSubresource,
+                             VT_Ctx_UpdateSubresource1};
     void **vt = *(void ***)ctx;
     for (int s = 0; s < SL_N; ++s) {
         void *fn = vt[slots[s]];
@@ -1639,8 +1706,7 @@ static void hotpatchScan(ID3D11DeviceContext *ctx) {
 
 typedef void(STDMETHODCALLTYPE *PFN_OMSet)(ID3D11DeviceContext *, UINT, ID3D11RenderTargetView *const *,
                                            ID3D11DepthStencilView *);
-static void STDMETHODCALLTYPE H_OMSetRenderTargets(ID3D11DeviceContext *c, UINT n,
-                                                   ID3D11RenderTargetView *const *rtv,
+static void STDMETHODCALLTYPE H_OMSetRenderTargets(ID3D11DeviceContext *c, UINT n, ID3D11RenderTargetView *const *rtv,
                                                    ID3D11DepthStencilView *dsv) {
     if (g_cap) setRTs(ctxOf(c), n, rtv, dsv);
     if (n >= 1 && n <= 8 && rtv && hudSwap(rtv[0]) != rtv[0]) { // inside the HUD pass: our layer texture
@@ -1654,13 +1720,12 @@ static void STDMETHODCALLTYPE H_OMSetRenderTargets(ID3D11DeviceContext *c, UINT 
     ORIG(PFN_OMSet, c, VT_Ctx_OMSetRenderTargets)(c, n, rtv, dsv);
 }
 typedef void(STDMETHODCALLTYPE *PFN_OMSetU)(ID3D11DeviceContext *, UINT, ID3D11RenderTargetView *const *,
-                                            ID3D11DepthStencilView *, UINT, UINT,
-                                            ID3D11UnorderedAccessView *const *, const UINT *);
+                                            ID3D11DepthStencilView *, UINT, UINT, ID3D11UnorderedAccessView *const *,
+                                            const UINT *);
 static void STDMETHODCALLTYPE H_OMSetRenderTargetsAndUAVs(ID3D11DeviceContext *c, UINT n,
                                                           ID3D11RenderTargetView *const *rtv,
                                                           ID3D11DepthStencilView *dsv, UINT us, UINT un,
-                                                          ID3D11UnorderedAccessView *const *uav,
-                                                          const UINT *ic) {
+                                                          ID3D11UnorderedAccessView *const *uav, const UINT *ic) {
     if (g_cap && n != D3D11_KEEP_RENDER_TARGETS_AND_DEPTH_STENCIL) setRTs(ctxOf(c), n, rtv, dsv);
     // which buffers stand behind the clutter's g_ctView (u75) and g_ctWind (u76): logged once each
     static int seen75, seen76;
@@ -1768,12 +1833,15 @@ static void waterBothEyes() {
         h = hkBase();
         uint8_t code[7] = {};
         uint32_t at = h ? (uint32_t)(uintptr_t)(h + HK_WATER_REFLECT) : 0;
-        ok = h && camRead(h + HK_AT_WATER_CHECK, code, 7) && code[0] == 0x80 && code[1] == 0x3d && memcmp(code + 2, &at, 4) == 0 && code[6] == 0;
-        logf("water: reflection for both eyes %s", ok ? "on (mw4hook's code as known)" : "off - mw4hook's code is not the known one");
+        ok = h && camRead(h + HK_AT_WATER_CHECK, code, 7) && code[0] == 0x80 && code[1] == 0x3d &&
+             memcmp(code + 2, &at, 4) == 0 && code[6] == 0;
+        logf("water: reflection for both eyes %s",
+             ok ? "on (mw4hook's code as known)" : "off - mw4hook's code is not the known one");
         if (!ok) return;
     }
     uint8_t *flag = h + HK_WATER_REFLECT;
-    if (g_camPassEye == 0) left = *flag;
+    if (g_camPassEye == 0)
+        left = *flag;
     else if (g_camPassEye == 1 && left == 1 && *flag == 0) {
         *flag = 1;
         static bool told;
@@ -1834,7 +1902,8 @@ static INT STDMETHODCALLTYPE H_BeginEvent(ID3DUserDefinedAnnotation *a, LPCWSTR 
         if (!smallCam && wcsncmp(name, HK_LBL_CAMERA, 7) == 0) {
             const wchar_t *v = wcsstr(name, HK_LBL_VIEWPORT);
             int x = 0, y = 0, w = 0, hh = 0;
-            if (v && swscanf_s(v, L"viewport %d,%d %dx%d", &x, &y, &w, &hh) == 4 && w > 0 && (UINT)w * 10 < g_hudW * 7) {
+            if (v && swscanf_s(v, L"viewport %d,%d %dx%d", &x, &y, &w, &hh) == 4 && w > 0 &&
+                (UINT)w * 10 < g_hudW * 7) {
                 smallCam = true;
                 hudCamRect(x, y, w, hh);
             }
@@ -1926,8 +1995,8 @@ typedef HRESULT(STDMETHODCALLTYPE *PFN_CSCHwnd)(IDXGIFactory2 *, IUnknown *, HWN
                                                 IDXGISwapChain1 **);
 static HRESULT STDMETHODCALLTYPE H_CreateSwapChainForHwnd(IDXGIFactory2 *f, IUnknown *dev, HWND w,
                                                           const DXGI_SWAP_CHAIN_DESC1 *d,
-                                                          const DXGI_SWAP_CHAIN_FULLSCREEN_DESC *fs,
-                                                          IDXGIOutput *o, IDXGISwapChain1 **out) {
+                                                          const DXGI_SWAP_CHAIN_FULLSCREEN_DESC *fs, IDXGIOutput *o,
+                                                          IDXGISwapChain1 **out) {
     DXGI_SWAP_CHAIN_DESC1 d2;
     if (d && g_renderOverride) { // larger than its window: shown stretched to it
         d2 = *d;
@@ -1936,8 +2005,8 @@ static HRESULT STDMETHODCALLTYPE H_CreateSwapChainForHwnd(IDXGIFactory2 *f, IUnk
     }
     HRESULT hr = ORIG(PFN_CSCHwnd, f, VT_Fac_CreateSwapChainForHwnd)(f, dev, w, d, fs, o, out);
     if (d)
-        logf("CreateSwapChainForHwnd: %ux%u fmt %u buffers %u effect %u flags 0x%x -> 0x%08lx", d->Width,
-             d->Height, (unsigned)d->Format, d->BufferCount, (unsigned)d->SwapEffect, d->Flags, hr);
+        logf("CreateSwapChainForHwnd: %ux%u fmt %u buffers %u effect %u flags 0x%x -> 0x%08lx", d->Width, d->Height,
+             (unsigned)d->Format, d->BufferCount, (unsigned)d->SwapEffect, d->Flags, hr);
     if (SUCCEEDED(hr) && out && *out) hookSwapChain(*out);
     return hr;
 }
@@ -1946,8 +2015,8 @@ static HRESULT STDMETHODCALLTYPE H_CreateSwapChain(IDXGIFactory *f, IUnknown *de
                                                    IDXGISwapChain **out) {
     HRESULT hr = ORIG(PFN_CSC, f, VT_Fac_CreateSwapChain)(f, dev, d, out);
     if (d)
-        logf("CreateSwapChain: %ux%u fmt %u buffers %u effect %u -> 0x%08lx", d->BufferDesc.Width,
-             d->BufferDesc.Height, (unsigned)d->BufferDesc.Format, d->BufferCount, (unsigned)d->SwapEffect, hr);
+        logf("CreateSwapChain: %ux%u fmt %u buffers %u effect %u -> 0x%08lx", d->BufferDesc.Width, d->BufferDesc.Height,
+             (unsigned)d->BufferDesc.Format, d->BufferCount, (unsigned)d->SwapEffect, hr);
     if (SUCCEEDED(hr) && out && *out) hookSwapChain(*out);
     return hr;
 }
@@ -1960,11 +2029,11 @@ static int hookContext(ID3D11DeviceContext *ctx, bool deferred, bool repair) {
     s->deferred = deferred;
     int n = 0;
     std::string names;
-#define PT(obj, idx, hook)                                                                         \
-    if (patch(obj, idx, (void *)(hook))) {                                                         \
-        ++n;                                                                                       \
-        names += " " #idx;                                                                         \
-        if (repair && g_frame < 8) names += "(was " + moduleOf(g_lastReplaced) + ")";              \
+#define PT(obj, idx, hook)                                                                                             \
+    if (patch(obj, idx, (void *)(hook))) {                                                                             \
+        ++n;                                                                                                           \
+        names += " " #idx;                                                                                             \
+        if (repair && g_frame < 8) names += "(was " + moduleOf(g_lastReplaced) + ")";                                  \
     }
     PT(ctx, VT_Ctx_VSSetShader, H_VSSetShader);
     PT(ctx, VT_Ctx_PSSetShader, H_PSSetShader);
@@ -2130,8 +2199,8 @@ static BOOL WINAPI mouseGetCursorPos(POINT *p) {
         if (!logged) {
             logged = true;
             const LONG *pic = (const LONG *)(g_mouseBase + HK_PICTURE_RECT);
-            logf("mouse: cursor scaled by %.3f x %.3f about %ld,%ld (mw4hook's picture %ld,%ld - %ld,%ld, known %d)", kx, ky, o.x, o.y,
-                 pic[0], pic[1], pic[2], pic[3], (int)*(g_mouseBase + HK_PICTURE_KNOWN));
+            logf("mouse: cursor scaled by %.3f x %.3f about %ld,%ld (mw4hook's picture %ld,%ld - %ld,%ld, known %d)",
+                 kx, ky, o.x, o.y, pic[0], pic[1], pic[2], pic[3], (int)*(g_mouseBase + HK_PICTURE_KNOWN));
         }
         p->x = o.x + mouseRound((p->x - o.x) * kx);
         p->y = o.y + mouseRound((p->y - o.y) * ky);
@@ -2166,11 +2235,14 @@ static void mouseInstall() {
     uint8_t *base = hkBase();
     if (!base) return;
     __try {
-        void **pg = (void **)(base + HK_PTR_GETCURSORPOS), **ps = (void **)(base + HK_PTR_SETCURSORPOS), **pc = (void **)(base + HK_PTR_CLIPCURSOR);
+        void **pg = (void **)(base + HK_PTR_GETCURSORPOS), **ps = (void **)(base + HK_PTR_SETCURSORPOS),
+             **pc = (void **)(base + HK_PTR_CLIPCURSOR);
         // this build? "mov eax, [mw4hook+0x4c7310]" in its GetCursorPos, "mov eax, [mw4hook+0x4c7318]" in its clip
         const uint8_t *i1 = base + HK_AT_GETCURSORPOS, *i2 = base + HK_AT_CLIPCURSOR;
-        if (i1[0] != 0xA1 || *(uint32_t *)(i1 + 1) != (uint32_t)(uintptr_t)pg || i2[0] != 0xA1 || *(uint32_t *)(i2 + 1) != (uint32_t)(uintptr_t)pc) {
-            logf("mouse: mw4hook's cursor mapping is not where it was - the cursor is not corrected for the render size");
+        if (i1[0] != 0xA1 || *(uint32_t *)(i1 + 1) != (uint32_t)(uintptr_t)pg || i2[0] != 0xA1 ||
+            *(uint32_t *)(i2 + 1) != (uint32_t)(uintptr_t)pc) {
+            logf("mouse: mw4hook's cursor mapping is not where it was - the cursor is not corrected for the render "
+                 "size");
             g_mouseDone = true;
             return;
         }
@@ -2204,7 +2276,8 @@ static void mouseCapture() {
         if (fg) GetWindowTextW(fg, t, 80), GetClassNameW(fg, cls, 60);
         POINT cp = {};
         GetCursorPos(&cp);
-        logf("focus: in front now: %s '%ls' (%ls), cursor at %ld,%ld, frame %u", fg == w ? "the game" : "NOT the game", t, cls, cp.x, cp.y, g_frame);
+        logf("focus: in front now: %s '%ls' (%ls), cursor at %ld,%ld, frame %u", fg == w ? "the game" : "NOT the game",
+             t, cls, cp.x, cp.y, g_frame);
     }
     static bool held;
     bool hold = want && w && fg == w && !g_menuMode && g_srcCamActive;
@@ -2214,7 +2287,9 @@ static void mouseCapture() {
         if (GetClientRect(w, &r) && r.right > 64 && r.bottom > 64 && ClientToScreen(w, &o)) {
             RECT c = {o.x + 8, o.y + 8, o.x + r.right - 8, o.y + r.bottom - 8};
             ClipCursor(&c); // every frame: other programs and the game itself lift it
-            if (!held) logf("mouse: cursor kept inside the game's window (%ld,%ld - %ld,%ld)", c.left, c.top, c.right, c.bottom);
+            if (!held)
+                logf("mouse: cursor kept inside the game's window (%ld,%ld - %ld,%ld)", c.left, c.top, c.right,
+                     c.bottom);
             held = true;
         }
     } else if (held) {
@@ -2229,8 +2304,9 @@ static void menuModeUpdate() {
     if (!base) base = hkBase();
     if (!base) return;
     __try {
-        const LONG *mode = (const LONG *)(base + HK_SCREEN_MODE); // the game's screen mode (what the cursor is mapped to)
-        const RECT *out = (const RECT *)(base + HK_OUT_RECT);  // mw4hook's output size
+        const LONG *mode =
+            (const LONG *)(base + HK_SCREEN_MODE);            // the game's screen mode (what the cursor is mapped to)
+        const RECT *out = (const RECT *)(base + HK_OUT_RECT); // mw4hook's output size
         LONG mw = mode[0], mh = mode[1], ow = out->right, oh = out->bottom;
         bool menu = false;
         if (mw >= 320 && mh >= 200 && mw <= 16384 && mh <= 16384 && ow > 0 && oh > 0) {
@@ -2240,11 +2316,11 @@ static void menuModeUpdate() {
         static LONG lw, lh;
         if (mw != lw || mh != lh) {
             lw = mw, lh = mh;
-            logf("mode: the game's screen mode is %ld x %ld (output %ld x %ld) - %s", mw, mh, ow, oh, menu ? "a menu" : "a battle");
+            logf("mode: the game's screen mode is %ld x %ld (output %ld x %ld) - %s", mw, mh, ow, oh,
+                 menu ? "a menu" : "a battle");
         }
         g_menuMode = menu;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-    }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {}
 }
 
 static void renderSizeSet(int want) {
@@ -2261,7 +2337,8 @@ static void renderSizeSet(int want) {
         RECT *rc = (RECT *)(base + HK_OUT_RECT), real;
         if (!child || !GetClientRect(child, &real) || real.right <= 0 || real.bottom <= 0 || rc->right != real.right ||
             rc->bottom != real.bottom) {
-            logf("render: mw4hook's output size (%ld x %ld) is not its window's - render_height ignored", rc->right, rc->bottom);
+            logf("render: mw4hook's output size (%ld x %ld) is not its window's - render_height ignored", rc->right,
+                 rc->bottom);
             return;
         }
         if (want > 8192) want = 8192;
@@ -2291,7 +2368,8 @@ static void renderSizeSet(int want) {
             pic[0] = w;
             pic[1] = h;
         } else {
-            logf("render: mw4hook's picture size (%ld x %ld, check %d) is not its window's - the battles may stay at the window's size",
+            logf("render: mw4hook's picture size (%ld x %ld, check %d) is not its window's - the battles may stay at "
+                 "the window's size",
                  picOk ? pic[0] : 0, picOk ? pic[1] : 0, (int)picOk);
         }
         rc->right = w;
@@ -2313,9 +2391,8 @@ static void renderSizeApply() {
 }
 
 extern "C" HRESULT WINAPI Hook_D3D11CreateDevice(IDXGIAdapter *a, D3D_DRIVER_TYPE dt, HMODULE sw, UINT fl,
-                                                 const D3D_FEATURE_LEVEL *fls, UINT nfl, UINT sdk,
-                                                 ID3D11Device **dev, D3D_FEATURE_LEVEL *ofl,
-                                                 ID3D11DeviceContext **ctx) {
+                                                 const D3D_FEATURE_LEVEL *fls, UINT nfl, UINT sdk, ID3D11Device **dev,
+                                                 D3D_FEATURE_LEVEL *ofl, ID3D11DeviceContext **ctx) {
     if (!loadReal() || !r_CreateDevice) return E_FAIL;
     if (!g_dev && !g_vrInitRunning) renderSizeApply();
     HRESULT hr = r_CreateDevice(a, dt, sw, fl, fls, nfl, sdk, dev, ofl, ctx);
@@ -2337,11 +2414,11 @@ extern "C" HRESULT WINAPI Hook_D3D11CreateDevice(IDXGIAdapter *a, D3D_DRIVER_TYP
     return hr;
 }
 
-extern "C" HRESULT WINAPI Hook_D3D11CreateDeviceAndSwapChain(IDXGIAdapter *a, D3D_DRIVER_TYPE dt, HMODULE sw,
-                                                             UINT fl, const D3D_FEATURE_LEVEL *fls, UINT nfl,
-                                                             UINT sdk, const DXGI_SWAP_CHAIN_DESC *scd,
-                                                             IDXGISwapChain **sc, ID3D11Device **dev,
-                                                             D3D_FEATURE_LEVEL *ofl, ID3D11DeviceContext **ctx) {
+extern "C" HRESULT WINAPI Hook_D3D11CreateDeviceAndSwapChain(IDXGIAdapter *a, D3D_DRIVER_TYPE dt, HMODULE sw, UINT fl,
+                                                             const D3D_FEATURE_LEVEL *fls, UINT nfl, UINT sdk,
+                                                             const DXGI_SWAP_CHAIN_DESC *scd, IDXGISwapChain **sc,
+                                                             ID3D11Device **dev, D3D_FEATURE_LEVEL *ofl,
+                                                             ID3D11DeviceContext **ctx) {
     if (!loadReal() || !r_CreateDeviceAndSwapChain) return E_FAIL;
     HRESULT hr = r_CreateDeviceAndSwapChain(a, dt, sw, fl, fls, nfl, sdk, scd, sc, dev, ofl, ctx);
     logf("D3D11CreateDeviceAndSwapChain -> 0x%08lx", hr);
