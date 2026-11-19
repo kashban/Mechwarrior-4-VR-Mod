@@ -731,3 +731,46 @@ static inline unsigned mcGroupBytes(unsigned nv, unsigned ni, unsigned cs, unsig
         return 0;
     return nv * 32 + ni * 4 + cs * cs * 6 + es * es * 6;
 }
+
+// ---------------------------------------------------------------------------------------------
+// A battle's first pictures are held back until the world is complete (vr.cpp). mw4hook builds its own terrain
+// and what it plants on it - grass, bushes, trees - while the battle already runs: for two or three seconds the
+// game's old terrain was seen, bare, and then the rest came in. Until the complete world has been drawn
+// MC_HOLD_SETTLE frames in a row the headset stays dark, then the picture comes up in MC_HOLD_FADE ms. A world
+// that never says it is complete (a map without that terrain) is shown after MC_HOLD_MAX ms; one that is complete
+// from the battle's first frame (back from the options' screen) is shown at once, without the fade.
+enum { MC_HOLD_IDLE, MC_HOLD_DARK, MC_HOLD_FADING, MC_HOLD_SHOWN };
+enum { MC_HOLD_SETTLE = 3 };
+static const double MC_HOLD_MAX = 4000, MC_HOLD_FADE = 500;
+struct McHold {
+    int state;
+    int n;     // the battle's frames so far (while dark)
+    int ok;    // of them the last ones with the complete world, in a row
+    double t0; // the state's begin (ms)
+};
+// one frame: is it a battle's, was the complete world drawn in it, the clock (ms). How dark the picture is to be:
+// 1 wholly, 0 not at all
+static inline float mcHoldStep(McHold &h, bool battle, bool complete, double now) {
+    if (!battle) {
+        h = {};
+        return 0;
+    }
+    if (h.state == MC_HOLD_IDLE) h.state = MC_HOLD_DARK, h.n = 0, h.ok = 0, h.t0 = now;
+    if (h.state == MC_HOLD_DARK) {
+        ++h.n;
+        h.ok = complete ? h.ok + 1 : 0;
+        if (h.ok >= MC_HOLD_SETTLE) {
+            h.state = h.n == h.ok ? MC_HOLD_SHOWN : MC_HOLD_FADING;
+            h.t0 = now;
+            return h.state == MC_HOLD_SHOWN ? 0.0f : 1.0f;
+        }
+        if (now - h.t0 >= MC_HOLD_MAX) h.state = MC_HOLD_FADING, h.t0 = now;
+        return 1;
+    }
+    if (h.state == MC_HOLD_FADING) {
+        double a = 1 - (now - h.t0) / MC_HOLD_FADE;
+        if (a > 0) return (float)a;
+        h.state = MC_HOLD_SHOWN;
+    }
+    return 0;
+}

@@ -131,6 +131,7 @@ static INT STDMETHODCALLTYPE H_BeginEvent(ID3DUserDefinedAnnotation *a, LPCWSTR 
         }
     }
     if (!s->deferred) rpLabel(name, s->depth, true);
+    if (!s->deferred && name && wcsncmp(name, HK_LABEL_WORLD, wcslen(HK_LABEL_WORLD)) == 0) g_vrWorldFrame = g_frame;
     ++s->depth;
     {
         std::string l = narrow(name);
@@ -666,7 +667,7 @@ BOOL WINAPI DllMain(HINSTANCE h, DWORD reason, LPVOID) {
         if (g_dbg) g_shlog = _wfsopen((g_dir + L"mw4vr_shaders.txt").c_str(), L"w", _SH_DENYNO);
         wchar_t exe[MAX_PATH];
         GetModuleFileNameW(nullptr, exe, MAX_PATH);
-        logf("MW4VR v11.79 (debug level %d) loaded into %s", g_dbg, narrow(exe).c_str());
+        logf("MW4VR v11.80 (debug level %d) loaded into %s", g_dbg, narrow(exe).c_str());
         if (!loadReal()) logf("ERROR: the system d3d11.dll could not be loaded");
         rpReadIni();
     }

@@ -223,9 +223,13 @@ void e2eFrame(ID3D11DeviceContext *ctx, ID3D11Texture2D *l, ID3D11Texture2D *r) 
         logf("e2e: the camera sits in the mech at frame %u - the plan's clock starts", g_frame);
     }
     float t = e2eTime();
-    if (g_e2eShotNext < g_e2eShots.size() && t >= g_e2eShots[g_e2eShotNext]) {
-        ++g_e2eShotNext;
-        g_shotOne = 1;
+    // (a time below zero is a frame's number: pictures of a battle's first frames, before the plan's clock runs)
+    if (g_e2eShotNext < g_e2eShots.size()) {
+        const float s = g_e2eShots[g_e2eShotNext];
+        if (s < 0 ? !flat && (float)g_frame >= -s : t >= s) {
+            ++g_e2eShotNext;
+            g_shotOne = 1;
+        }
     }
     float a[3] = {-1, -1, -1}, b[3] = {-1, -1, -1};
     if (!g_e2ePerf) {

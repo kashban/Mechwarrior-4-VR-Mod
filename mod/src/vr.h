@@ -105,7 +105,8 @@ XrVector3f qrot(XrQuaternionf q, XrVector3f v);
 // ahead ([vr] menu_scale; 0: off).
 static const float g_fadePts[6][2] = {{0.50f, 0.30f}, {0.36f, 0.40f}, {0.64f, 0.40f},
                                       {0.36f, 0.70f}, {0.64f, 0.70f}, {0.30f, 0.55f}};
-extern bool g_fadeMenu; // the sheet is a paused battle's (blue): its menu is up
+extern unsigned g_vrWorldFrame; // the frame mw4hook last drew its complete world in (main.cpp: its label)
+extern bool g_fadeMenu;         // the sheet is a paused battle's (blue): its menu is up
 extern unsigned
     g_sheetCleanFrame; // the frame whose HUD image holds the sheet and the menu alone (draws.cpp: hudSheetPost)
 void vrOnPresent(IDXGISwapChain *swap, int eye);

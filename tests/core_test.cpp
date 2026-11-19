@@ -75,7 +75,7 @@ static void testFrustum() {
     NEAR(fr.d0, 1), NEAR(fr.d1, -1), CHECK(nearly(fr.farD, 1000, 1e-3f)), CHECK(nearly(fr.nearD, 0.2f, 1e-3f));
     CHECK(fr.t == 1.6f); // the game's narrower tangent is widened
     const float *n = fr.planes;
-    for (int k = 0; k < 6; ++k) NEAR(mcDot3(n + 4 * k, n + 4 * k), 1); // unit normals
+    for (int k = 0; k < 6; ++k) NEAR(mcDot3(n + 4 * k, n + 4 * k), 1);    // unit normals
     for (int k = 2; k < 6; ++k) NEAR(mcDot3(n + 4 * k, p), n[4 * k + 3]); // the sides pass through the eye
     float x[3];
     const float zero[3] = {0, 0, 0};
@@ -138,7 +138,8 @@ static void testFrustumNear() {
         CHECK(mcFrustumPlanes(pl, id, id, kA, 2, &fr));
         CHECK(fr.planes[7] == want[i]);
         CHECK(fr.planes[3] == 500 && fr.nearD == give[i] && fr.farD == 500);
-        CHECK(fr.planes[0] == 0 && fr.planes[1] == 1 && fr.planes[2] == 0 && fr.planes[4] == 0 && fr.planes[5] == -1 && fr.planes[6] == 0);
+        CHECK(fr.planes[0] == 0 && fr.planes[1] == 1 && fr.planes[2] == 0 && fr.planes[4] == 0 && fr.planes[5] == -1 &&
+              fr.planes[6] == 0);
     }
 }
 
@@ -171,7 +172,8 @@ static void testFrustumLayout() {
 static void testWide() {
     g_test = "wide";
     CHECK(mcWideFactor(1.0f) == 1.0f && mcWideFactor(1.02f) == 1.02f && mcWideFactor(1.3f) == 1.3f);
-    CHECK(mcWideFactor(1.31f) == 1.0f && mcWideFactor(0.99f) == 1.0f && mcWideFactor(-2.0f) == 1.0f && mcWideFactor(5.0f) == 1.0f);
+    CHECK(mcWideFactor(1.31f) == 1.0f && mcWideFactor(0.99f) == 1.0f && mcWideFactor(-2.0f) == 1.0f &&
+          mcWideFactor(5.0f) == 1.0f);
     CHECK(mcWideFactor(std::numeric_limits<float>::quiet_NaN()) == 1.0f);
     CHECK(mcWideWidth(2000, 1.0f) == 2000 && mcWideWidth(2001, 1.0005f) == 2001 && mcWideWidth(2000, 1.001f) == 2000);
     CHECK(mcWideWidth(2000, 1.02f) == 2040); // already a multiple of 8
@@ -185,14 +187,16 @@ static void testWide() {
 static bool same(const McRects &q, const float (*want)[5], int n) {
     if (q.n != n) {
         printf("   %d rectangles, wanted %d\n", q.n, n);
-        for (int i = 0; i < q.n && i < MC_RECTS; ++i) printf("   got %.4f %.4f %.4f %.4f kind %g\n", q.rc[i][0], q.rc[i][1], q.rc[i][2], q.rc[i][3], q.rc[i][4]);
+        for (int i = 0; i < q.n && i < MC_RECTS; ++i)
+            printf("   got %.4f %.4f %.4f %.4f kind %g\n", q.rc[i][0], q.rc[i][1], q.rc[i][2], q.rc[i][3], q.rc[i][4]);
         return false;
     }
     for (int i = 0; i < n; ++i)
         for (int k = 0; k < 5; ++k)
             if (!nearly(q.rc[i][k], want[i][k], 1e-5f)) {
-                printf("   rectangle %d: %.4f %.4f %.4f %.4f kind %g, wanted %.4f %.4f %.4f %.4f kind %g\n", i, q.rc[i][0], q.rc[i][1], q.rc[i][2],
-                       q.rc[i][3], q.rc[i][4], want[i][0], want[i][1], want[i][2], want[i][3], want[i][4]);
+                printf("   rectangle %d: %.4f %.4f %.4f %.4f kind %g, wanted %.4f %.4f %.4f %.4f kind %g\n", i,
+                       q.rc[i][0], q.rc[i][1], q.rc[i][2], q.rc[i][3], q.rc[i][4], want[i][0], want[i][1], want[i][2],
+                       want[i][3], want[i][4]);
                 return false;
             }
     return true;
@@ -202,9 +206,9 @@ static void testAdd() {
     g_test = "add";
     McRects q = {};
     mcAdd(q, 0.1f, 0.2f, 0.3f, 0.4f, 3);
-    mcAdd(q, 0, 0, 0.004f, 1, 1);  // too narrow
-    mcAdd(q, 0, 0, 1, 0.004f, 1);  // too low
-    mcAdd(q, 0, 0, 0.005f, 1, 1);  // at the limit: still out
+    mcAdd(q, 0, 0, 0.004f, 1, 1); // too narrow
+    mcAdd(q, 0, 0, 1, 0.004f, 1); // too low
+    mcAdd(q, 0, 0, 0.005f, 1, 1); // at the limit: still out
     mcAdd(q, 0, 0, 1, 0.005f, 1);
     mcAdd(q, 0, 0, 0.006f, 0.006f, 2);
     mcAdd(q, 0.5f, 0.5f, 0.4f, 0.9f, 1); // inside out
@@ -222,12 +226,14 @@ static void testAdd() {
 static void testMeet() {
     g_test = "meet";
     const float c[4] = {0.2f, 0.3f, 0.6f, 0.7f};
-    CHECK(mcMeet(c, 0.5f, 0.6f, 0.9f, 0.9f) && mcMeet(c, 0, 0, 0.3f, 0.4f) && mcMeet(c, 0.3f, 0.4f, 0.4f, 0.5f) && mcMeet(c, 0, 0, 1, 1));
+    CHECK(mcMeet(c, 0.5f, 0.6f, 0.9f, 0.9f) && mcMeet(c, 0, 0, 0.3f, 0.4f) && mcMeet(c, 0.3f, 0.4f, 0.4f, 0.5f) &&
+          mcMeet(c, 0, 0, 1, 1));
     CHECK(!mcMeet(c, 0.6f, 0.3f, 0.9f, 0.7f)); // touching on each side is not meeting
     CHECK(!mcMeet(c, 0, 0.3f, 0.2f, 0.7f));
     CHECK(!mcMeet(c, 0.2f, 0.7f, 0.6f, 0.9f));
     CHECK(!mcMeet(c, 0.2f, 0, 0.6f, 0.3f));
-    CHECK(mcMeet(c, 0.59f, 0.3f, 0.9f, 0.7f) && mcMeet(c, 0, 0.3f, 0.21f, 0.7f) && mcMeet(c, 0.2f, 0.69f, 0.6f, 0.9f) && mcMeet(c, 0.2f, 0, 0.6f, 0.31f));
+    CHECK(mcMeet(c, 0.59f, 0.3f, 0.9f, 0.7f) && mcMeet(c, 0, 0.3f, 0.21f, 0.7f) && mcMeet(c, 0.2f, 0.69f, 0.6f, 0.9f) &&
+          mcMeet(c, 0.2f, 0, 0.6f, 0.31f));
 }
 
 static void testAddCut() {
@@ -240,7 +246,10 @@ static void testAddCut() {
     CHECK(same(q, whole, 2));
     q.n = 0;
     mcAddCut(q, c, 0.1f, 0.1f, 0.9f, 0.8f, 2); // the cut inside: above, below, left, right
-    const float ring[][5] = {{0.1f, 0.1f, 0.9f, 0.3f, 2}, {0.1f, 0.5f, 0.9f, 0.8f, 2}, {0.1f, 0.3f, 0.4f, 0.5f, 2}, {0.6f, 0.3f, 0.9f, 0.5f, 2}};
+    const float ring[][5] = {{0.1f, 0.1f, 0.9f, 0.3f, 2},
+                             {0.1f, 0.5f, 0.9f, 0.8f, 2},
+                             {0.1f, 0.3f, 0.4f, 0.5f, 2},
+                             {0.6f, 0.3f, 0.9f, 0.5f, 2}};
     CHECK(same(q, ring, 4));
     q.n = 0;
     mcAddCut(q, c, 0.5f, 0.4f, 0.9f, 0.8f, 1); // the cut over the top left corner: below and right only
@@ -264,16 +273,11 @@ static void testMoveOut() {
     mcAdd(q, 0.3f, 0.2f, 0.9f, 0.45f, MC_FAR); // far, met at its bottom left
     const float c[4] = {0.4f, 0.05f, 0.6f, 0.5f};
     mcMoveOut(q, c, MC_FAR_UP);
-    const float want[][5] = {{0.2f, 0.1f, 0.8f, 0.1f, MC_FAR}, // nothing left above (a sliver, kept in place)
-                             {0, 0, 1, 0.1f, MC_NEAR},
-                             {0.85f, 0.1f, 1, 0.9f, MC_FAR},
-                             {0.3f, 0.2f, 0.9f, 0.2f, MC_FAR},
-                             {0.2f, 0.5f, 0.8f, 0.9f, MC_FAR},
-                             {0.2f, 0.1f, 0.4f, 0.5f, MC_FAR},
-                             {0.6f, 0.1f, 0.8f, 0.5f, MC_FAR},
-                             {0.3f, 0.2f, 0.4f, 0.45f, MC_FAR},
-                             {0.6f, 0.2f, 0.9f, 0.45f, MC_FAR},
-                             {0.4f, 0.05f, 0.6f, 0.5f, MC_FAR_UP}};
+    const float want[][5] = {
+        {0.2f, 0.1f, 0.8f, 0.1f, MC_FAR}, // nothing left above (a sliver, kept in place)
+        {0, 0, 1, 0.1f, MC_NEAR},          {0.85f, 0.1f, 1, 0.9f, MC_FAR},    {0.3f, 0.2f, 0.9f, 0.2f, MC_FAR},
+        {0.2f, 0.5f, 0.8f, 0.9f, MC_FAR},  {0.2f, 0.1f, 0.4f, 0.5f, MC_FAR},  {0.6f, 0.1f, 0.8f, 0.5f, MC_FAR},
+        {0.3f, 0.2f, 0.4f, 0.45f, MC_FAR}, {0.6f, 0.2f, 0.9f, 0.45f, MC_FAR}, {0.4f, 0.05f, 0.6f, 0.5f, MC_FAR_UP}};
     CHECK(same(q, want, 10));
     // what lies behind the list's end is not part of it
     q.n = 0;
@@ -287,8 +291,11 @@ static void testMoveOut() {
     mcAdd(q, 0.2f, 0.1f, 0.8f, 0.9f, MC_FAR);
     const float in[4] = {0.4f, 0.3f, 0.6f, 0.5f};
     mcMoveOut(q, in, MC_FAR_UP);
-    const float ring[][5] = {{0.2f, 0.1f, 0.8f, 0.3f, MC_FAR}, {0.2f, 0.5f, 0.8f, 0.9f, MC_FAR}, {0.2f, 0.3f, 0.4f, 0.5f, MC_FAR},
-                             {0.6f, 0.3f, 0.8f, 0.5f, MC_FAR}, {0.4f, 0.3f, 0.6f, 0.5f, MC_FAR_UP}};
+    const float ring[][5] = {{0.2f, 0.1f, 0.8f, 0.3f, MC_FAR},
+                             {0.2f, 0.5f, 0.8f, 0.9f, MC_FAR},
+                             {0.2f, 0.3f, 0.4f, 0.5f, MC_FAR},
+                             {0.6f, 0.3f, 0.8f, 0.5f, MC_FAR},
+                             {0.4f, 0.3f, 0.6f, 0.5f, MC_FAR_UP}};
     CHECK(same(q, ring, 5));
 }
 
@@ -298,12 +305,15 @@ static void testSpans() {
     int n = 0;
     const float T = 0.12f;
     const float a[4] = {0.7f, 0, 1.0f, 0.1f}, b[4] = {0.1f, 0.05f, 0.3f, 0.5f}, c[4] = {0.4f, 0, 0.6f, 0.2f};
-    const float below[4] = {0, 0.12f, 0.2f, 0.5f}, justIn[4] = {0.4f, 0.119f, 0.5f, 0.5f}, flat[4] = {0.2f, 0, 0.2f, 0.1f}, low[4] = {0.2f, 0.1f, 0.3f, 0.1f};
+    const float below[4] = {0, 0.12f, 0.2f, 0.5f}, justIn[4] = {0.4f, 0.119f, 0.5f, 0.5f},
+                flat[4] = {0.2f, 0, 0.2f, 0.1f}, low[4] = {0.2f, 0.1f, 0.3f, 0.1f};
     const float unset[4] = {0, 0, 0, 0}, sameStart[4] = {0.4f, 0, 0.45f, 0.1f};
-    mcTopSpan(iv, n, a, T), mcTopSpan(iv, n, below, T), mcTopSpan(iv, n, b, T), mcTopSpan(iv, n, flat, T), mcTopSpan(iv, n, low, T);
+    mcTopSpan(iv, n, a, T), mcTopSpan(iv, n, below, T), mcTopSpan(iv, n, b, T), mcTopSpan(iv, n, flat, T),
+        mcTopSpan(iv, n, low, T);
     mcTopSpan(iv, n, unset, T), mcTopSpan(iv, n, c, T);
     CHECK(n == 3);
-    CHECK(iv[0][0] == 0.1f && iv[0][1] == 0.3f && iv[1][0] == 0.4f && iv[1][1] == 0.6f && iv[2][0] == 0.7f && iv[2][1] == 1.0f);
+    CHECK(iv[0][0] == 0.1f && iv[0][1] == 0.3f && iv[1][0] == 0.4f && iv[1][1] == 0.6f && iv[2][0] == 0.7f &&
+          iv[2][1] == 1.0f);
     mcTopSpan(iv, n, sameStart, T); // the same start: behind the one there
     CHECK(n == 4 && iv[1][1] == 0.6f && iv[2][0] == 0.4f && iv[2][1] == 0.45f && iv[3][0] == 0.7f && iv[3][1] == 1.0f);
     mcTopSpan(iv, n, justIn, T);
@@ -318,14 +328,16 @@ static void testSpans() {
 static void testLeftAlt() {
     g_test = "leftAlt";
     // (a fifth number behind each: not part of the rectangle)
-    const float a[5] = {0, 0, 0.24f, 0.43f, 9}, right[5] = {0.25f, 0, 0.5f, 0.6f, 9}, edge[5] = {0.249f, 0, 0.5f, 0.6f, 9};
+    const float a[5] = {0, 0, 0.24f, 0.43f, 9}, right[5] = {0.25f, 0, 0.5f, 0.6f, 9},
+                edge[5] = {0.249f, 0, 0.5f, 0.6f, 9};
     const float unset[5] = {0, 0, 0, 0, 9}, flat[5] = {0, 0.5f, 0.2f, 0.5f, 9}, thin[5] = {0.1f, 0, 0.1f, 0.9f, 9};
     CHECK(mcLeftAlt(a, 0.25f, 0) == 0.43f);
-    CHECK(mcLeftAlt(a, 0.25f, 0.5f) == 0.5f);   // another reached further already
+    CHECK(mcLeftAlt(a, 0.25f, 0.5f) == 0.5f); // another reached further already
     CHECK(mcLeftAlt(a, 0.25f, 0.43f) == 0.43f);
     CHECK(mcLeftAlt(right, 0.25f, 0.1f) == 0.1f); // begins at the column's edge: not in it
     CHECK(mcLeftAlt(edge, 0.25f, 0.1f) == 0.6f);
-    CHECK(mcLeftAlt(unset, 0.25f, 0.1f) == 0.1f && mcLeftAlt(flat, 0.25f, 0.1f) == 0.1f && mcLeftAlt(thin, 0.25f, 0.1f) == 0.1f);
+    CHECK(mcLeftAlt(unset, 0.25f, 0.1f) == 0.1f && mcLeftAlt(flat, 0.25f, 0.1f) == 0.1f &&
+          mcLeftAlt(thin, 0.25f, 0.1f) == 0.1f);
 }
 
 // ---------------------------------------------------------------- the HUD's parts
@@ -353,8 +365,11 @@ static void testHudPlain() {
     McRects q;
     q.n = 7; // whatever was there is gone
     mcHudRects(h, q);
-    const float want[][5] = {{0.25f, 0.12f, 0.72f, 0.78f, MC_FAR}, {0, 0, 1.02f, 0.12f, MC_NEAR}, {0, 0.78f, 1.02f, 1, MC_NEAR},
-                             {0, 0.12f, 0.25f, 0.78f, MC_NEAR}, {0.72f, 0.12f, 1.02f, 0.78f, MC_NEAR}};
+    const float want[][5] = {{0.25f, 0.12f, 0.72f, 0.78f, MC_FAR},
+                             {0, 0, 1.02f, 0.12f, MC_NEAR},
+                             {0, 0.78f, 1.02f, 1, MC_NEAR},
+                             {0, 0.12f, 0.25f, 0.78f, MC_NEAR},
+                             {0.72f, 0.12f, 1.02f, 0.78f, MC_NEAR}};
     CHECK(same(q, want, 5));
     const float stale[4] = {0.80f, 0.60f, 0.98f, 0.76f}; // a window at the side behind the list's end
     memcpy(h.cam[0], stale, sizeof stale);
@@ -418,7 +433,8 @@ static void testHudCross() {
     CHECK(nearly(area, 0.77f, 1e-3f)); // all of the picture above the bottom strip, each piece once
     // more parts than the runtime shows: the cross-hair stays in the middle
     h.nGlass = 8;
-    for (int g = 0; g < 8; ++g) h.glass[g][0] = 0.1f * g, h.glass[g][1] = 0.8f, h.glass[g][2] = 0.1f * g + 0.08f, h.glass[g][3] = 0.9f;
+    for (int g = 0; g < 8; ++g)
+        h.glass[g][0] = 0.1f * g, h.glass[g][1] = 0.8f, h.glass[g][2] = 0.1f * g + 0.08f, h.glass[g][3] = 0.9f;
     mcHudRects(h, q);
     CHECK(q.n == 14);
     for (int i = 0; i < q.n; ++i) CHECK(q.rc[i][4] != MC_FAR_SMALL);
@@ -445,16 +461,17 @@ static void testHudZoom() {
     setCam(h, 0.35f, 0.05f, 0.65f, 0.50f); // the zoom window
     McRects q;
     mcHudRects(h, q);
-    const float want[][5] = {{0.25f, 0.52f, 0.72f, 0.78f, MC_FAR}, // the far middle: below, left, right of the window and its frame
-                             {0.25f, 0.12f, 0.33f, 0.52f, MC_FAR},
-                             {0.67f, 0.12f, 0.72f, 0.52f, MC_FAR},
-                             {0, 0, 0.33f, 0.12f, MC_NEAR}, // the top strip left and right of it
-                             {0.67f, 0, 1.02f, 0.12f, MC_NEAR},
-                             {0, 0.78f, 1.02f, 1, MC_NEAR},
-                             {0, 0.12f, 0.25f, 0.78f, MC_NEAR},
-                             {0.72f, 0.12f, 1.02f, 0.78f, MC_NEAR},
-                             {0.35f, 0.05f, 0.65f, 0.50f, MC_FAR_OPAQUE},
-                             {0.80f, 0.60f, 0.98f, 0.76f, MC_NEAR_OPAQUE}};
+    const float want[][5] = {
+        {0.25f, 0.52f, 0.72f, 0.78f, MC_FAR}, // the far middle: below, left, right of the window and its frame
+        {0.25f, 0.12f, 0.33f, 0.52f, MC_FAR},
+        {0.67f, 0.12f, 0.72f, 0.52f, MC_FAR},
+        {0, 0, 0.33f, 0.12f, MC_NEAR}, // the top strip left and right of it
+        {0.67f, 0, 1.02f, 0.12f, MC_NEAR},
+        {0, 0.78f, 1.02f, 1, MC_NEAR},
+        {0, 0.12f, 0.25f, 0.78f, MC_NEAR},
+        {0.72f, 0.12f, 1.02f, 0.78f, MC_NEAR},
+        {0.35f, 0.05f, 0.65f, 0.50f, MC_FAR_OPAQUE},
+        {0.80f, 0.60f, 0.98f, 0.76f, MC_NEAR_OPAQUE}};
     CHECK(same(q, want, 10));
     float zr[4];
     CHECK(mcZoomWindow(h, zr) && zr[0] == 0.35f && zr[1] == 0.05f && zr[2] == 0.65f && zr[3] == 0.50f);
@@ -477,7 +494,8 @@ static void testHudZoomEdges() {
         McRects q;
         mcHudRects(h, q);
         const float *last = q.rc[q.n - 1];
-        CHECK(last[4] == (want[i] ? (float)MC_FAR_OPAQUE : (float)MC_NEAR_OPAQUE)); // shown either as the one or as the other
+        CHECK(last[4] ==
+              (want[i] ? (float)MC_FAR_OPAQUE : (float)MC_NEAR_OPAQUE)); // shown either as the one or as the other
         CHECK(last[0] == give[i][0] && last[1] == 0.3f && last[2] == give[i][1] && last[3] == 0.5f);
         int shown = 0;
         for (int k = 0; k < q.n; ++k) shown += q.rc[k][4] >= MC_NEAR_OPAQUE;
@@ -489,22 +507,22 @@ static void testHudScreens() {
     g_test = "hud screens";
     McHud h = hud();
     h.screens = true;
-    h.span[0][0] = 0, h.span[0][1] = 0.243f;       // the left monitor's part of the top strip
-    h.span[1][0] = 0.2f, h.span[1][1] = 0.3f;      // one that overlaps it
-    h.span[2][0] = 0.716f, h.span[2][1] = 1.0f;    // the right monitor's
+    h.span[0][0] = 0, h.span[0][1] = 0.243f;    // the left monitor's part of the top strip
+    h.span[1][0] = 0.2f, h.span[1][1] = 0.3f;   // one that overlaps it
+    h.span[2][0] = 0.716f, h.span[2][1] = 1.0f; // the right monitor's
     h.nSpan = 3;
     h.leftAlt = 0.435f;
     setCam(h, 0.80f, 0.60f, 0.98f, 0.76f); // the target's view: on a monitor, no quad
     McRects q;
     mcHudRects(h, q);
-    const float want[][5] = {{0.25f, 0.12f, 1.02f, 0.435f, MC_FAR}, // the middle and the right column beside the lance menu
-                             {0, 0.435f, 1.02f, 0.585f, MC_FAR},    // the whole width below it, down to the torso mark
-                             {0.3f, 0, 0.716f, 0.12f, MC_FAR},      // the top strip between the monitors' parts
-                             {1.0f, 0, 1.02f, 0.12f, MC_FAR},       // and right of them
-                             {0, 0.665f, 1.02f, 0.78f, MC_FAR},     // below, left and right of the mark
-                             {0, 0.585f, 0.42f, 0.665f, MC_FAR},
-                             {0.58f, 0.585f, 1.02f, 0.665f, MC_FAR},
-                             {0.42f, 0.585f, 0.58f, 0.665f, MC_FAR_UP}};
+    const float want[][5] = {
+        {0.25f, 0.12f, 1.02f, 0.435f, MC_FAR}, // the middle and the right column beside the lance menu
+        {0, 0.435f, 1.02f, 0.585f, MC_FAR},    // the whole width below it, down to the torso mark
+        {0.3f, 0, 0.716f, 0.12f, MC_FAR},      // the top strip between the monitors' parts
+        {1.0f, 0, 1.02f, 0.12f, MC_FAR},       // and right of them
+        {0, 0.665f, 1.02f, 0.78f, MC_FAR},     // below, left and right of the mark
+        {0, 0.585f, 0.42f, 0.665f, MC_FAR},       {0.58f, 0.585f, 1.02f, 0.665f, MC_FAR},
+        {0.42f, 0.585f, 0.58f, 0.665f, MC_FAR_UP}};
     CHECK(same(q, want, 8));
 
     h.twistDv = 0; // the mark not moved: nothing cut out
@@ -530,19 +548,27 @@ static void testHudScreens() {
     CHECK(same(q, all, 2));
     h.leftAlt = 0, h.rightAlt = 0.435f; // the right column begins lower
     mcHudRects(h, q);
-    const float right[][5] = {{0, 0.12f, 0.72f, 0.435f, MC_FAR}, {0, 0.435f, 1.02f, 0.78f, MC_FAR}, {0, 0, 1.02f, 0.12f, MC_FAR}};
+    const float right[][5] = {
+        {0, 0.12f, 0.72f, 0.435f, MC_FAR}, {0, 0.435f, 1.02f, 0.78f, MC_FAR}, {0, 0, 1.02f, 0.12f, MC_FAR}};
     CHECK(same(q, right, 3));
     h.leftAlt = 0.3f, h.rightAlt = 0.5f; // both lower, the left one first
     mcHudRects(h, q);
-    const float both[][5] = {{0.25f, 0.12f, 0.72f, 0.3f, MC_FAR}, {0, 0.3f, 0.72f, 0.5f, MC_FAR}, {0, 0.5f, 1.02f, 0.78f, MC_FAR}, {0, 0, 1.02f, 0.12f, MC_FAR}};
+    const float both[][5] = {{0.25f, 0.12f, 0.72f, 0.3f, MC_FAR},
+                             {0, 0.3f, 0.72f, 0.5f, MC_FAR},
+                             {0, 0.5f, 1.02f, 0.78f, MC_FAR},
+                             {0, 0, 1.02f, 0.12f, MC_FAR}};
     CHECK(same(q, both, 4));
     h.leftAlt = 0.5f, h.rightAlt = 0.3f; // the right one first
     mcHudRects(h, q);
-    const float other[][5] = {{0.25f, 0.12f, 0.72f, 0.3f, MC_FAR}, {0.25f, 0.3f, 1.02f, 0.5f, MC_FAR}, {0, 0.5f, 1.02f, 0.78f, MC_FAR}, {0, 0, 1.02f, 0.12f, MC_FAR}};
+    const float other[][5] = {{0.25f, 0.12f, 0.72f, 0.3f, MC_FAR},
+                              {0.25f, 0.3f, 1.02f, 0.5f, MC_FAR},
+                              {0, 0.5f, 1.02f, 0.78f, MC_FAR},
+                              {0, 0, 1.02f, 0.12f, MC_FAR}};
     CHECK(same(q, other, 4));
     h.leftAlt = h.rightAlt = 0.4f; // at the same height
     mcHudRects(h, q);
-    const float level[][5] = {{0.25f, 0.12f, 0.72f, 0.4f, MC_FAR}, {0, 0.4f, 1.02f, 0.78f, MC_FAR}, {0, 0, 1.02f, 0.12f, MC_FAR}};
+    const float level[][5] = {
+        {0.25f, 0.12f, 0.72f, 0.4f, MC_FAR}, {0, 0.4f, 1.02f, 0.78f, MC_FAR}, {0, 0, 1.02f, 0.12f, MC_FAR}};
     CHECK(same(q, level, 3));
     h.leftAlt = 0.9f, h.rightAlt = 0; // a column all taken: none of it
     mcHudRects(h, q);
@@ -566,14 +592,16 @@ static void testHudScreens() {
 static void testRightAlt() {
     g_test = "rightAlt";
     // (a fifth number behind each: not part of the rectangle)
-    const float a[5] = {0.7f, 0, 1.0f, 0.43f, 9}, left[5] = {0.5f, 0, 0.72f, 0.6f, 9}, edge[5] = {0.5f, 0, 0.721f, 0.6f, 9};
+    const float a[5] = {0.7f, 0, 1.0f, 0.43f, 9}, left[5] = {0.5f, 0, 0.72f, 0.6f, 9},
+                edge[5] = {0.5f, 0, 0.721f, 0.6f, 9};
     const float unset[5] = {0, 0, 0, 0, 9}, flat[5] = {0.8f, 0.5f, 0.9f, 0.5f, 9}, thin[5] = {0.9f, 0, 0.9f, 0.9f, 9};
     CHECK(mcRightAlt(a, 0.72f, 0) == 0.43f);
-    CHECK(mcRightAlt(a, 0.72f, 0.5f) == 0.5f);   // another reached further already
+    CHECK(mcRightAlt(a, 0.72f, 0.5f) == 0.5f); // another reached further already
     CHECK(mcRightAlt(a, 0.72f, 0.43f) == 0.43f);
     CHECK(mcRightAlt(left, 0.72f, 0.1f) == 0.1f); // ends at the column's edge: not in it
     CHECK(mcRightAlt(edge, 0.72f, 0.1f) == 0.6f);
-    CHECK(mcRightAlt(unset, 0.72f, 0.1f) == 0.1f && mcRightAlt(flat, 0.72f, 0.1f) == 0.1f && mcRightAlt(thin, 0.72f, 0.1f) == 0.1f);
+    CHECK(mcRightAlt(unset, 0.72f, 0.1f) == 0.1f && mcRightAlt(flat, 0.72f, 0.1f) == 0.1f &&
+          mcRightAlt(thin, 0.72f, 0.1f) == 0.1f);
     CHECK(mcRightAlt(unset, -1, 0.1f) == 0.1f);
 }
 
@@ -585,13 +613,13 @@ static void testHudScreensZoom() {
     setCam(h, 0.35f, 0.05f, 0.65f, 0.50f);
     McRects q;
     mcHudRects(h, q);
-    const float want[][5] = {{0, 0.52f, 1.02f, 0.78f, MC_FAR}, // the middle and the columns below, left and right of the window and its frame
-                             {0, 0.12f, 0.33f, 0.52f, MC_FAR},
-                             {0.67f, 0.12f, 1.02f, 0.52f, MC_FAR},
-                             {0.243f, 0, 1.02f, 0.03f, MC_FAR}, // the top strip around it: above, left, right
-                             {0.243f, 0.03f, 0.33f, 0.12f, MC_FAR},
-                             {0.67f, 0.03f, 1.02f, 0.12f, MC_FAR},
-                             {0.35f, 0.05f, 0.65f, 0.50f, MC_FAR_OPAQUE}}; // the torso mark stays where it is while zooming
+    const float want[][5] = {
+        {0, 0.52f, 1.02f, 0.78f, MC_FAR}, // the middle and the columns below, left and right of the window and its
+                                          // frame
+        {0, 0.12f, 0.33f, 0.52f, MC_FAR},           {0.67f, 0.12f, 1.02f, 0.52f, MC_FAR},
+        {0.243f, 0, 1.02f, 0.03f, MC_FAR}, // the top strip around it: above, left, right
+        {0.243f, 0.03f, 0.33f, 0.12f, MC_FAR},      {0.67f, 0.03f, 1.02f, 0.12f, MC_FAR},
+        {0.35f, 0.05f, 0.65f, 0.50f, MC_FAR_OPAQUE}}; // the torso mark stays where it is while zooming
     CHECK(same(q, want, 7));
 }
 
@@ -600,7 +628,8 @@ static void testHolds() {
     g_test = "holds";
     const float r[4] = {0.2f, 0.3f, 0.6f, 0.9f};
     CHECK(mcHolds(r, 0.21f, 0.31f) && mcHolds(r, 0.59f, 0.89f));
-    CHECK(!mcHolds(r, 0.2f, 0.5f) && !mcHolds(r, 0.6f, 0.5f) && !mcHolds(r, 0.4f, 0.3f) && !mcHolds(r, 0.4f, 0.9f)); // on an edge
+    CHECK(!mcHolds(r, 0.2f, 0.5f) && !mcHolds(r, 0.6f, 0.5f) && !mcHolds(r, 0.4f, 0.3f) &&
+          !mcHolds(r, 0.4f, 0.9f)); // on an edge
     CHECK(!mcHolds(r, 0.1f, 0.5f) && !mcHolds(r, 0.7f, 0.5f) && !mcHolds(r, 0.4f, 0.2f) && !mcHolds(r, 0.4f, 0.95f));
 }
 
@@ -609,7 +638,8 @@ static void testTurnNorm() {
     CHECK(mcTurnNorm(0) == 0 && mcTurnNorm(5) == 5 && mcTurnNorm(-5) == -5);
     CHECK(mcTurnNorm(180) == 180 && mcTurnNorm(-180) == 180 && mcTurnNorm(185) == -175 && mcTurnNorm(-185) == 175);
     CHECK(mcTurnNorm(360) == 0 && mcTurnNorm(725) == 5 && mcTurnNorm(-725) == -5 && mcTurnNorm(540) == 180);
-    CHECK(mcTurnNorm(179) == 179 && mcTurnNorm(-179) == -179 && mcTurnNorm(180.5f) == -179.5f && mcTurnNorm(-180.5f) == 179.5f);
+    CHECK(mcTurnNorm(179) == 179 && mcTurnNorm(-179) == -179 && mcTurnNorm(180.5f) == -179.5f &&
+          mcTurnNorm(-180.5f) == 179.5f);
     CHECK(mcTurnNorm(999990) == mcTurnNorm(999990 - 360 * 2777) && mcTurnNorm(-999990) == -mcTurnNorm(999990));
     CHECK(mcTurnNorm(1e6f) == 0 && mcTurnNorm(-1e6f) == 0 && mcTurnNorm(2e6f) == 0 && mcTurnNorm(-2e6f) == 0);
     float nan = 0;
@@ -648,7 +678,8 @@ static void testTurnFit() {
     mcTurnFit(2, 0.5f, 0, m); // narrower: its height fills
     CHECK(nearly(m[0], 4, e) && nearly(m[1], 0, e) && nearly(m[2], 0, e) && nearly(m[3], 1, e));
     mcTurnFit(2, 0.5f, 90, m); // a tall part on a wide monitor, a quarter turn clockwise: it fills the monitor;
-    CHECK(nearly(m[0], 0, e) && nearly(m[1], 1, e) && nearly(m[2], -1, e) && nearly(m[3], 0, e)); // the monitor's top is the part's right
+    CHECK(nearly(m[0], 0, e) && nearly(m[1], 1, e) && nearly(m[2], -1, e) &&
+          nearly(m[3], 0, e)); // the monitor's top is the part's right
     mcTurnFit(2, 0.5f, -90, m);
     CHECK(nearly(m[0], 0, e) && nearly(m[1], -1, e) && nearly(m[2], 1, e) && nearly(m[3], 0, e));
     mcTurnFit(2, 4, 180, m); // upside down
@@ -669,7 +700,8 @@ static void testTurnFit() {
             far = fmaxf(far, fmaxf(fabsf(u), fabsf(v)));
         }
         CHECK(nearly(far, 0.5f, e));
-        // undistorted: the monitor's right and down (in metres: mon, 1) are as long in the part (in metres: part, 1) and square
+        // undistorted: the monitor's right and down (in metres: mon, 1) are as long in the part (in metres: part, 1)
+        // and square
         float rx = m[0] / mon * part, ry = m[2] / mon, dx = m[1] * part, dy = m[3];
         CHECK(nearly(rx * rx + ry * ry, dx * dx + dy * dy, 1e-4f) && nearly(rx * dx + ry * dy, 0, 1e-4f));
         CHECK(t ? (m[1] < 0 && m[2] > 0) : (m[1] > 0 && m[2] < 0)); // clockwise for positive degrees
@@ -680,21 +712,24 @@ static void testHudGlass() {
     g_test = "hud glass";
     McHud h = hud();
     h.screens = true;
-    const float target[4] = {0, 0.772f, 0.18f, 1}, wide[4] = {0.125f, 0.25f, 0.75f, 0.625f}; // (wide holds the stale window's middle)
+    const float target[4] = {0, 0.772f, 0.18f, 1},
+                wide[4] = {0.125f, 0.25f, 0.75f, 0.625f}; // (wide holds the stale window's middle)
     memcpy(h.glass[0], target, sizeof target), memcpy(h.glass[1], wide, sizeof wide);
     h.nGlass = 2;
     setCam(h, 0.01f, 0.80f, 0.07f, 0.98f); // the target's view, in the target part
     setCam(h, 0.80f, 0.60f, 0.98f, 0.76f); // one in no part
-    setCam(h, 0, 0.3f, 0.25f, 0.5f);         // one whose middle lies on the second part's edge
+    setCam(h, 0, 0.3f, 0.25f, 0.5f);       // one whose middle lies on the second part's edge
     McRects q;
     mcHudRects(h, q);
     CHECK(q.n == 9); // the six without glass, then:
-    const float want[][5] = {{0, 0.772f, 0.18f, 1, MC_GLASS}, {0.01f, 0.80f, 0.07f, 0.98f, MC_GLASS_OPAQUE}, {0.125f, 0.25f, 0.75f, 0.625f, MC_GLASS + 1}};
+    const float want[][5] = {{0, 0.772f, 0.18f, 1, MC_GLASS},
+                             {0.01f, 0.80f, 0.07f, 0.98f, MC_GLASS_OPAQUE},
+                             {0.125f, 0.25f, 0.75f, 0.625f, MC_GLASS + 1}};
     for (int i = 0; i < 3 && q.n == 9; ++i)
         for (int k = 0; k < 5; ++k) CHECK(nearly(q.rc[6 + i][k], want[i][k], 1e-6f));
     h.nCam = 0;
     setCam(h, 0.20f, 0.27f, 0.28f, 0.59f); // a window in the second part, off its middle both ways
-    h.cam[0][0] = 0.14f; // (left of the zoom window's range)
+    h.cam[0][0] = 0.14f;                   // (left of the zoom window's range)
     h.nGlass = 2;
     mcHudRects(h, q);
     CHECK(q.n == 9 && q.rc[8][4] == MC_GLASS_OPAQUE + 1 && q.rc[8][0] == 0.14f && q.rc[8][3] == 0.59f);
@@ -728,7 +763,10 @@ static void testGlassPose() {
     mcGlassPose(0, 90, 2, p, q);
     CHECK(nearly(p[0], 0) && nearly(p[1], 2) && nearly(p[2], 0));
     const float give[][2] = {{30, 20}, {-30, 20}, {30, -20}, {75, 50}};
-    const float want[][3] = {{0.70477f, 0.51303f, -1.22070f}, {-0.70477f, 0.51303f, -1.22070f}, {0.70477f, -0.51303f, -1.22070f}, {0.93133f, 1.14907f, -0.24955f}};
+    const float want[][3] = {{0.70477f, 0.51303f, -1.22070f},
+                             {-0.70477f, 0.51303f, -1.22070f},
+                             {0.70477f, -0.51303f, -1.22070f},
+                             {0.93133f, 1.14907f, -0.24955f}};
     for (int i = 0; i < 4; ++i) {
         mcGlassPose(give[i][0], give[i][1], 1.5f, p, q);
         CHECK(nearly(p[0], want[i][0]) && nearly(p[1], want[i][1]) && nearly(p[2], want[i][2]));
@@ -757,7 +795,8 @@ static void testGlassAim() {
     const float seat[3] = {0, 0, 0}, ahead[3] = {0, 0, -1};
     mcGlassAim(seat, ahead, 1.2f, &r, &u);
     CHECK(nearly(r, 0) && nearly(u, 0));
-    const float f1[3] = {0.5f, 0, -0.8660254f}, f2[3] = {0, 0.3420201f, -0.9396926f}, f3[3] = {0.5f, 0.5f, -0.7071068f}, f4[3] = {-0.5f, -0.5f, -0.7071068f};
+    const float f1[3] = {0.5f, 0, -0.8660254f}, f2[3] = {0, 0.3420201f, -0.9396926f}, f3[3] = {0.5f, 0.5f, -0.7071068f},
+                f4[3] = {-0.5f, -0.5f, -0.7071068f};
     mcGlassAim(seat, f1, 1.2f, &r, &u);
     CHECK(nearly(r, 30, 1e-3f) && nearly(u, 0, 1e-3f));
     mcGlassAim(seat, f2, 1.2f, &r, &u);
@@ -777,9 +816,11 @@ static void testGlassAim() {
             mcGlassPose(r, u, D, x, q);
             float d[3] = {x[0] - p[0], x[1] - p[1], x[2] - p[2]};
             float t = mcDot3(d, f);
-            CHECK(t > 0.5f && nearly(d[0], t * f[0], 1e-3f) && nearly(d[1], t * f[1], 1e-3f) && nearly(d[2], t * f[2], 1e-3f));
+            CHECK(t > 0.5f && nearly(d[0], t * f[0], 1e-3f) && nearly(d[1], t * f[1], 1e-3f) &&
+                  nearly(d[2], t * f[2], 1e-3f));
         }
-    const float out[3] = {0, 0, -3}, right[3] = {1, 0, 0}; // a head outside the glass, looking past it: where the head is
+    const float out[3] = {0, 0, -3},
+                right[3] = {1, 0, 0}; // a head outside the glass, looking past it: where the head is
     mcGlassAim(out, right, 1, &r, &u);
     CHECK(nearly(r, 0) && nearly(u, 0));
     const float out2[3] = {-2, 0, -3}; // (the nearest point of its line of sight: 2 m along it)
@@ -820,9 +861,12 @@ static void testGridMark() {
     gridClear();
     mcGridMark(g_grid, 0, 0, 2), mcGridMark(g_grid, MC_GW - 1, MC_GH - 1, 3), mcGridMark(g_grid, 5, 7, 4);
     CHECK(cell(0, 0) == 2 && cell(MC_GW - 1, MC_GH - 1) == 3 && cell(5, 7) == 4 && marked() == 3);
-    mcGridMark(g_grid, -1, 0, 1), mcGridMark(g_grid, MC_GW, 0, 1), mcGridMark(g_grid, 0, -1, 1), mcGridMark(g_grid, 0, MC_GH, 1);
-    mcGridMark(g_grid, 3, -1, 1), mcGridMark(g_grid, 3, MC_GH, 1), mcGridMark(g_grid, -1, 9, 1), mcGridMark(g_grid, MC_GW, 9, 1);
-    CHECK(marked() == 3 && around() && cell(0, 0) == 2 && cell(MC_GW - 1, 0) == 0 && cell(0, MC_GH - 1) == 0 && cell(1, 0) == 0);
+    mcGridMark(g_grid, -1, 0, 1), mcGridMark(g_grid, MC_GW, 0, 1), mcGridMark(g_grid, 0, -1, 1),
+        mcGridMark(g_grid, 0, MC_GH, 1);
+    mcGridMark(g_grid, 3, -1, 1), mcGridMark(g_grid, 3, MC_GH, 1), mcGridMark(g_grid, -1, 9, 1),
+        mcGridMark(g_grid, MC_GW, 9, 1);
+    CHECK(marked() == 3 && around() && cell(0, 0) == 2 && cell(MC_GW - 1, 0) == 0 && cell(0, MC_GH - 1) == 0 &&
+          cell(1, 0) == 0);
     mcGridMark(g_grid, 5, 7, 6); // the nearest counts
     CHECK(cell(5, 7) == 4);
     mcGridMark(g_grid, 5, 7, 1.5f);
@@ -837,11 +881,13 @@ static void testGridPlace() {
     CHECK(mcGridX(ahead) == 40 && mcGridY(ahead) == 25);
     CHECK(nearly(mcGridX(p), 62.5f, 1e-3f) && nearly(mcGridY(p), 34.7356f, 1e-3f));
     CHECK(nearly(mcGridX(q), 32.9819f, 1e-3f) && nearly(mcGridY(q), 12.0615f, 1e-3f));
-    CHECK(mcGridSide(1, 1, 3, 2, 2, 1.5f) == 0 && mcGridSide(1, 1, 3, 2, 2, 2) == 1 && mcGridSide(1, 1, 3, 2, 2, 1) == -1);
+    CHECK(mcGridSide(1, 1, 3, 2, 2, 1.5f) == 0 && mcGridSide(1, 1, 3, 2, 2, 2) == 1 &&
+          mcGridSide(1, 1, 3, 2, 2, 1) == -1);
     CHECK(mcGridSide(1, 1, 3, 2, 5, 3.5f) == 1 && mcGridSide(3, 2, 1, 1, 5, 3.5f) == -1);
 }
 
-// the cells a triangle with the corners (cells) x, y must mark: those of its corners and those whose direction it covers
+// the cells a triangle with the corners (cells) x, y must mark: those of its corners and those whose direction it
+// covers
 static bool covered(const float *x, const float *y) {
     for (int r = 0; r < MC_GH; ++r)
         for (int c = 0; c < MC_GW; ++c) {
@@ -866,12 +912,15 @@ static void testGridTri() {
     g_test = "grid triangle";
     float v[3][4];
     // corners at three different places across and up, given in every order
-    const float shapes[][6] = {{30.3f, 41.7f, 36.4f, 20.2f, 23.8f, 27.6f}, {50.5f, 55.3f, 60.7f, 10.6f, 14.2f, 12.4f}, {20.4f, 20.7f, 21.3f, 30.2f, 36.8f, 33.1f}};
+    const float shapes[][6] = {{30.3f, 41.7f, 36.4f, 20.2f, 23.8f, 27.6f},
+                               {50.5f, 55.3f, 60.7f, 10.6f, 14.2f, 12.4f},
+                               {20.4f, 20.7f, 21.3f, 30.2f, 36.8f, 33.1f}};
     const int order[6][3] = {{0, 1, 2}, {0, 2, 1}, {1, 0, 2}, {1, 2, 0}, {2, 0, 1}, {2, 1, 0}};
     for (int s = 0; s < 3; ++s)
         for (int o = 0; o < 6; ++o) {
             float x[3], y[3];
-            for (int k = 0; k < 3; ++k) x[k] = shapes[s][order[o][k]], y[k] = shapes[s][3 + order[o][k]], at(x[k], y[k], 1 + k, v[k]);
+            for (int k = 0; k < 3; ++k)
+                x[k] = shapes[s][order[o][k]], y[k] = shapes[s][3 + order[o][k]], at(x[k], y[k], 1 + k, v[k]);
             gridClear();
             mcGridTri(g_grid, v[0], v[1], v[2]);
             CHECK(covered(x, y) && marked() > (s == 2 ? 3 : 8));
@@ -891,13 +940,17 @@ static void testGridTri() {
     gridClear();
     const float t0[4] = {0, -0.2f, 1, -1}, t1[4] = {0, 0.2f, 1, -1}, t2[4] = {0.2f, 0, 1, -1};
     mcGridTri(g_grid, t0, t1, t2);
-    CHECK(cell(40, 25) > 0 && cell(40, 20) > 0 && cell(40, 30) > 0 && cell(45, 25) > 0 && cell(42, 22) > 0 && cell(42, 27) > 0);
-    CHECK(cell(39, 25) == 0 && cell(40, 31) == 0 && cell(40, 18) == 0 && cell(46, 25) == 0 && cell(44, 22) == 0 && cell(44, 28) == 0);
+    CHECK(cell(40, 25) > 0 && cell(40, 20) > 0 && cell(40, 30) > 0 && cell(45, 25) > 0 && cell(42, 22) > 0 &&
+          cell(42, 27) > 0);
+    CHECK(cell(39, 25) == 0 && cell(40, 31) == 0 && cell(40, 18) == 0 && cell(46, 25) == 0 && cell(44, 22) == 0 &&
+          cell(44, 28) == 0);
     // one with a corner beside or behind the seat: left out, whichever corner it is
-    const float s0[4] = {0.3f, 0, 1, -1}, s1[4] = {0.3f, 0.3f, 1, -1}, s2[4] = {1, 0, 0.05f, -1}, s3[4] = {1, 0, -1, -1}, s4[4] = {1, 0, 0.06f, -1};
+    const float s0[4] = {0.3f, 0, 1, -1}, s1[4] = {0.3f, 0.3f, 1, -1}, s2[4] = {1, 0, 0.05f, -1},
+                s3[4] = {1, 0, -1, -1}, s4[4] = {1, 0, 0.06f, -1};
     const float s5[4] = {0.3f, 0, 0.06f, 1}, s6[4] = {0.3f, 0.02f, 0.06f, 1}, s7[4] = {0.31f, 0, 0.06f, 1};
     gridClear();
-    mcGridTri(g_grid, s0, s1, s2), mcGridTri(g_grid, s0, s3, s1), mcGridTri(g_grid, s3, s0, s1), mcGridTri(g_grid, s2, s0, s1), mcGridTri(g_grid, s0, s2, s1);
+    mcGridTri(g_grid, s0, s1, s2), mcGridTri(g_grid, s0, s3, s1), mcGridTri(g_grid, s3, s0, s1),
+        mcGridTri(g_grid, s2, s0, s1), mcGridTri(g_grid, s0, s2, s1);
     CHECK(marked() == 0);
     mcGridTri(g_grid, s0, s1, s4);
     CHECK(marked() > 3);
@@ -931,8 +984,10 @@ static void testGridFree() {
     gridClear();
     CHECK(mcGridFree(g_grid, 0, 0, 20, 10));
     CHECK(mcGridFree(g_grid, -69, -44, 20, 10) && mcGridFree(g_grid, 69, 44, 19, 9)); // up to the grid's edges
-    CHECK(!mcGridFree(g_grid, -71, 0, 20, 10) && !mcGridFree(g_grid, 71, 0, 20, 10) && !mcGridFree(g_grid, 0, -46, 20, 10) && !mcGridFree(g_grid, 0, 46, 20, 10));
-    const int in[][2] = {{35, 22}, {45, 22}, {35, 27}, {45, 27}, {40, 25}}; // the corner cells of -10..10 x -5..5, and one inside
+    CHECK(!mcGridFree(g_grid, -71, 0, 20, 10) && !mcGridFree(g_grid, 71, 0, 20, 10) &&
+          !mcGridFree(g_grid, 0, -46, 20, 10) && !mcGridFree(g_grid, 0, 46, 20, 10));
+    const int in[][2] = {
+        {35, 22}, {45, 22}, {35, 27}, {45, 27}, {40, 25}}; // the corner cells of -10..10 x -5..5, and one inside
     for (int i = 0; i < 5; ++i) {
         gridClear();
         mcGridMark(g_grid, in[i][0], in[i][1], 1);
@@ -950,7 +1005,8 @@ static void testGridRim() {
     CHECK(mcGridRim(g_grid, 0, 0, 20, 10) == 0);
     mcGridMark(g_grid, 32, 19, 2), mcGridMark(g_grid, 48, 30, 4); // three cells out from the corners 35 22 and 45 27
     CHECK(nearly(mcGridRim(g_grid, 0, 0, 20, 10), 3));
-    mcGridMark(g_grid, 31, 25, 9), mcGridMark(g_grid, 49, 25, 9), mcGridMark(g_grid, 40, 18, 9), mcGridMark(g_grid, 40, 31, 9); // four out
+    mcGridMark(g_grid, 31, 25, 9), mcGridMark(g_grid, 49, 25, 9), mcGridMark(g_grid, 40, 18, 9),
+        mcGridMark(g_grid, 40, 31, 9); // four out
     CHECK(nearly(mcGridRim(g_grid, 0, 0, 20, 10), 3));
     mcGridMark(g_grid, 40, 25, 6); // in it
     CHECK(nearly(mcGridRim(g_grid, 0, 0, 20, 10), 4));
@@ -969,13 +1025,17 @@ static void testGridFit() {
     g_test = "grid fit";
     gridClear();
     float r = 99, u = 99;
-    CHECK(mcGridFit(g_grid, 20, 10, 7.1f, -2.9f, 1000, nullptr, 0, &r, &u) && r == 8 && u == -2); // open everywhere: the nearest direction of the grid
+    CHECK(mcGridFit(g_grid, 20, 10, 7.1f, -2.9f, 1000, nullptr, 0, &r, &u) && r == 8 &&
+          u == -2); // open everywhere: the nearest direction of the grid
     CHECK(mcGridFit(g_grid, 20, 10, 6.9f, -3.1f, 1000, nullptr, 0, &r, &u) && r == 6 && u == -4);
-    CHECK(mcGridFit(g_grid, 20, 10, 7, -3, 1000, nullptr, 0, &r, &u) && r == 6 && u == -4); // between four: the first met
-    CHECK(mcGridFit(g_grid, 20, 10, -200, 0, 1000, nullptr, 0, &r, &u) && r == -70 && u == 0); // wanted outside: the edge
+    CHECK(mcGridFit(g_grid, 20, 10, 7, -3, 1000, nullptr, 0, &r, &u) && r == 6 &&
+          u == -4); // between four: the first met
+    CHECK(mcGridFit(g_grid, 20, 10, -200, 0, 1000, nullptr, 0, &r, &u) && r == -70 &&
+          u == 0); // wanted outside: the edge
     CHECK(mcGridFit(g_grid, 20, 10, 0, 200, 1000, nullptr, 0, &r, &u) && r == 0 && u == 44);
-    CHECK(mcGridFit(g_grid, 2, 2, -200, -200, 1000, nullptr, 0, &r, &u) && r == -78 && u == -48); // the grid's second row and column
-    CHECK(mcGridFit(g_grid, 2, 2, 200, 200, 1000, nullptr, 0, &r, &u) && r == 78 && u == 48);     // and its last
+    CHECK(mcGridFit(g_grid, 2, 2, -200, -200, 1000, nullptr, 0, &r, &u) && r == -78 &&
+          u == -48); // the grid's second row and column
+    CHECK(mcGridFit(g_grid, 2, 2, 200, 200, 1000, nullptr, 0, &r, &u) && r == 78 && u == 48); // and its last
     // places taken beside it: clear of them, touching them
     const float left[][4] = {{-30, -60, 0, 60}}, right[][4] = {{0, -60, 30, 60}};
     CHECK(mcGridFit(g_grid, 20, 10, -10, 0, 1000, left, 1, &r, &u) && r == 10 && u == 0);
@@ -989,8 +1049,9 @@ static void testGridFit() {
     CHECK(mcGridFit(g_grid, 20, 10, -10, 1, 1000, taken, 1, &r, &u) && r == -10 && u == 16);
     CHECK(mcGridFit(g_grid, 20, 10, -10, -1, 1000, taken, 1, &r, &u) && r == -10 && u == -16);
     CHECK(mcGridFit(g_grid, 20, 10, -10, 1, 1000, taken, 2, &r, &u) && r == -10 && u == -16); // above it the second
-    CHECK(mcGridFit(g_grid, 20, 10, -10, 1, 1000, taken, 3, &r, &u) && r == -10 && u == 20);  // below it the third: above the second
-    CHECK(mcGridFit(g_grid, 20, 4, -10, 12, 1000, taken, 1, &r, &u) && r == -10 && u == 12);  // touching is clear
+    CHECK(mcGridFit(g_grid, 20, 10, -10, 1, 1000, taken, 3, &r, &u) && r == -10 &&
+          u == 20); // below it the third: above the second
+    CHECK(mcGridFit(g_grid, 20, 4, -10, 12, 1000, taken, 1, &r, &u) && r == -10 && u == 12); // touching is clear
     // no farther than its reach
     const float mid[][4] = {{-11, -6, 11, 6}};
     gridClear();
@@ -1114,7 +1175,18 @@ static void testCockpitFile() {
     CHECK(!mcNameOk(L".."));
     CHECK(!mcNameOk(L"a..b"));
     CHECK(mcNameOk(L".a.b.")); // (single dots are a name's)
-    const wchar_t *bad[] = {L"a\\b", L"a/b", L"c:a", L"a*", L"a?", L"a\"b", L"a<b", L"a>b", L"a|b", L"a\x1f" L"b", L"a\tb"};
+    const wchar_t *bad[] = {L"a\\b",
+                            L"a/b",
+                            L"c:a",
+                            L"a*",
+                            L"a?",
+                            L"a\"b",
+                            L"a<b",
+                            L"a>b",
+                            L"a|b",
+                            L"a\x1f"
+                            L"b",
+                            L"a\tb"};
     for (const wchar_t *b : bad) CHECK(!mcNameOk(b));
     wchar_t n63[65];
     for (int i = 0; i < 64; ++i) n63[i] = L'x';
@@ -1147,8 +1219,10 @@ static bool sameM4(const McM4 &a, const double *want, double eps = 1e-12) {
 }
 static void testM4() {
     g_test = "m4";
-    const McM4 a = {{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}}, b = {{2, 0, 1, 3, 1, 3, 0, -2, 0, 1, 2, 5, 4, -1, 3, 1}};
-    const double ab[16] = {20, 5, 19, 18, 48, 17, 43, 46, 76, 29, 67, 74, 104, 41, 91, 102}, ba[16] = {50, 56, 62, 68, -10, -8, -6, -4, 88, 96, 104, 112, 39, 46, 53, 60};
+    const McM4 a = {{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}},
+               b = {{2, 0, 1, 3, 1, 3, 0, -2, 0, 1, 2, 5, 4, -1, 3, 1}};
+    const double ab[16] = {20, 5, 19, 18, 48, 17, 43, 46, 76, 29, 67, 74, 104, 41, 91, 102},
+                 ba[16] = {50, 56, 62, 68, -10, -8, -6, -4, 88, 96, 104, 112, 39, 46, 53, 60};
     CHECK(sameM4(mcM4Mul(a, b), ab, 0));
     CHECK(sameM4(mcM4Mul(b, a), ba, 0));
     const float c[12] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
@@ -1166,7 +1240,8 @@ static void testM4() {
     d = a, d.m[0] -= 4;
     CHECK(mcM4Apart(a, d) == 4);
     // floats times doubles, either way round
-    float f[16] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}, g[16] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
+    float f[16] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
+          g[16] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
     float f17[18], g17[18]; // nothing is written before or past the sixteen
     f17[0] = g17[0] = f17[17] = g17[17] = -77;
     memcpy(f17 + 1, f, sizeof f), memcpy(g17 + 1, g, sizeof g);
@@ -1186,8 +1261,27 @@ static void testM4() {
 }
 static void testM4Inv() {
     g_test = "m4Inv";
-    const McM4 m = {{2, 1, 0, 3, 1, 1, 0, -2, 0, 0, 1, 5, 0, 0, 0, 1}}, m2 = {{0, 1, 0, 1, 1, 0, 0, 2, 0, 0, 2, 4, 0, 0, 0, 1}}, g = {{1, 2, 0, 1, 0, 1, 3, 2, 2, 0, 1, -3, 0, 0, 0, 1}};
-    const double mi[16] = {1, -1, 0, -5, -1, 2, 0, 7, 0, 0, 1, -5, 0, 0, 0, 1}, m2i[16] = {0, 1, 0, -2, 1, 0, 0, -1, 0, 0, 0.5, -2, 0, 0, 0, 1}, gi[16] = {0.076923076923076927, -0.15384615384615385, 0.46153846153846156, 1.6153846153846154, 0.46153846153846156, 0.076923076923076927, -0.23076923076923078, -1.3076923076923077, -0.15384615384615385, 0.30769230769230771, 0.076923076923076927, -0.23076923076923078, 0, 0, 0, 1};
+    const McM4 m = {{2, 1, 0, 3, 1, 1, 0, -2, 0, 0, 1, 5, 0, 0, 0, 1}},
+               m2 = {{0, 1, 0, 1, 1, 0, 0, 2, 0, 0, 2, 4, 0, 0, 0, 1}},
+               g = {{1, 2, 0, 1, 0, 1, 3, 2, 2, 0, 1, -3, 0, 0, 0, 1}};
+    const double mi[16] = {1, -1, 0, -5, -1, 2, 0, 7, 0, 0, 1, -5, 0, 0, 0, 1},
+                 m2i[16] = {0, 1, 0, -2, 1, 0, 0, -1, 0, 0, 0.5, -2, 0, 0, 0, 1},
+                 gi[16] = {0.076923076923076927,
+                           -0.15384615384615385,
+                           0.46153846153846156,
+                           1.6153846153846154,
+                           0.46153846153846156,
+                           0.076923076923076927,
+                           -0.23076923076923078,
+                           -1.3076923076923077,
+                           -0.15384615384615385,
+                           0.30769230769230771,
+                           0.076923076923076927,
+                           -0.23076923076923078,
+                           0,
+                           0,
+                           0,
+                           1};
     McM4 o;
     CHECK(mcM4InvAffine(m, &o) && sameM4(o, mi, 0));
     CHECK(mcM4InvAffine(m2, &o) && sameM4(o, m2i, 0)); // (a negative determinant)
@@ -1195,7 +1289,8 @@ static void testM4Inv() {
     const double id[16] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
     CHECK(sameM4(mcM4Mul(g, o), id) && sameM4(mcM4Mul(o, g), id));
     // none: flat; and just under the limit - at it there is one
-    McM4 flat = {{1, 2, 3, 0, 2, 4, 6, 0, 0, 0, 1, 0, 0, 0, 0, 1}}, keep = {{7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7}};
+    McM4 flat = {{1, 2, 3, 0, 2, 4, 6, 0, 0, 0, 1, 0, 0, 0, 0, 1}},
+         keep = {{7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7}};
     o = keep;
     CHECK(!mcM4InvAffine(flat, &o) && sameM4(o, keep.m, 0));
     McM4 tiny = {{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, MC_DET_MIN, 0, 0, 0, 0, 1}};
@@ -1256,7 +1351,8 @@ static void testProj() {
 }
 static void testEyeStep() {
     g_test = "eyeStep";
-    const float r0[9] = {0, -1, 0, 1, 0, 0, 0, 0, 1}, r1[9] = {1, 0, 0, 0, 0, -1, 0, 1, 0}, t0[3] = {1, 2, 3}, t1[3] = {0.5, -1, 4};
+    const float r0[9] = {0, -1, 0, 1, 0, 0, 0, 0, 1}, r1[9] = {1, 0, 0, 0, 0, -1, 0, 1, 0}, t0[3] = {1, 2, 3},
+                t1[3] = {0.5, -1, 4};
     const double h[16] = {0, -1, 0, 0.5, 0, 0, 1, -1, -1, 0, 0, -3, 0, 0, 0, 1};
     CHECK(sameM4(mcEyeStep(r0, t0, r1, t1), h, 0));
     const double id[16] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
@@ -1265,13 +1361,65 @@ static void testEyeStep() {
 static void testStereo() {
     g_test = "stereo";
     const McProj p = {1.5, 2, 0.25, -0.5, 0.125, 0.75, true};
-    const float c0[12] = {0, 0, 1, 100, 1, 0, 0, 20, 0, 1, 0, -50}, c1[12] = {-0.28, 0, 0.96, 99.984375, 0.96, 0, 0.28, 20.0625, 0, 1, 0, -49.96875};
-    const McM4 hv = {{0.96000000000000008, 0, -0.28000000000000008, -0.064375000000000002, 0, 1, 0, -0.03125, 0.28000000000000008, 0, 0.95999999999999996, -0.0025000000000000044, 0, 0, 0, 1}};
-    const double kc[16] = {1.0066666666666668, 0, -0.12958333333333333, -0.41546875000000022, -0.093333333333333351, 1, -0.081666666666666665, 0.053541666666666668, 0.023333333333333338, 0, 0.99958333333333327, -0.010781249999999985, 0.1866666666666667, 0, -0.0033333333333333392, 0.91374999999999995};
-    const double kci[16] = {0.91333333333333322, 0, 0.11979166666666666, 0.41669270833333344, 0.093333333333333338, 1, 0.09375, -0.015052083333333299, -0.023333333333333334, 0, 0.99739583333333326, 0.001158854166666665, -0.18666666666666668, 0, -0.020833333333333332, 1.0092708333333333};
-    const double kct[16] = {1.0066666666666668, 0, 0, -0.43166666666666687, -0.093333333333333351, 1, 0, 0.043333333333333335, 0.023333333333333338, 0, 1, -0.010833333333333327, 0.1866666666666667, 0, 0, 0.91333333333333333};
-    const double kw[16] = {0.95999999999999996, 0.28000000000000008, 0, -1.602499999999992, -0.28000000000000008, 0.96000000000000008, 0, 28.735624999999999, 0, 0, 1, -0.03125, 0, 0, 0, 1};
-    const double kwi[16] = {0.95999999999999996, -0.28000000000000003, 0, 9.5843750000000085, 0.28000000000000003, 0.95999999999999996, 0, -27.137500000000003, 0, 0, 1, 0.03125, 0, 0, 0, 1};
+    const float c0[12] = {0, 0, 1, 100, 1, 0, 0, 20, 0, 1, 0, -50},
+                c1[12] = {-0.28, 0, 0.96, 99.984375, 0.96, 0, 0.28, 20.0625, 0, 1, 0, -49.96875};
+    const McM4 hv = {{0.96000000000000008, 0, -0.28000000000000008, -0.064375000000000002, 0, 1, 0, -0.03125,
+                      0.28000000000000008, 0, 0.95999999999999996, -0.0025000000000000044, 0, 0, 0, 1}};
+    const double kc[16] = {1.0066666666666668,    0, -0.12958333333333333,   -0.41546875000000022,
+                           -0.093333333333333351, 1, -0.081666666666666665,  0.053541666666666668,
+                           0.023333333333333338,  0, 0.99958333333333327,    -0.010781249999999985,
+                           0.1866666666666667,    0, -0.0033333333333333392, 0.91374999999999995};
+    const double kci[16] = {0.91333333333333322,
+                            0,
+                            0.11979166666666666,
+                            0.41669270833333344,
+                            0.093333333333333338,
+                            1,
+                            0.09375,
+                            -0.015052083333333299,
+                            -0.023333333333333334,
+                            0,
+                            0.99739583333333326,
+                            0.001158854166666665,
+                            -0.18666666666666668,
+                            0,
+                            -0.020833333333333332,
+                            1.0092708333333333};
+    const double kct[16] = {
+        1.0066666666666668,   0, 0, -0.43166666666666687,  -0.093333333333333351, 1, 0, 0.043333333333333335,
+        0.023333333333333338, 0, 1, -0.010833333333333327, 0.1866666666666667,    0, 0, 0.91333333333333333};
+    const double kw[16] = {0.95999999999999996,
+                           0.28000000000000008,
+                           0,
+                           -1.602499999999992,
+                           -0.28000000000000008,
+                           0.96000000000000008,
+                           0,
+                           28.735624999999999,
+                           0,
+                           0,
+                           1,
+                           -0.03125,
+                           0,
+                           0,
+                           0,
+                           1};
+    const double kwi[16] = {0.95999999999999996,
+                            -0.28000000000000003,
+                            0,
+                            9.5843750000000085,
+                            0.28000000000000003,
+                            0.95999999999999996,
+                            0,
+                            -27.137500000000003,
+                            0,
+                            0,
+                            1,
+                            0.03125,
+                            0,
+                            0,
+                            0,
+                            1};
     McStereo s;
     CHECK(mcStereo(p, hv, c0, c1, &s));
     CHECK(sameM4(s.kc, kc, 1e-9) && sameM4(s.kcInv, kci, 1e-9) && sameM4(s.kcTurn, kct, 1e-9));
@@ -1316,11 +1464,13 @@ static void testAuto() {
     // the first frames of the trial do not count (very slow here); the rest are faster by more than a sixteenth
     CHECK(autoRun(a, MC_AUTO_SETTLE, 500, 0.1) == MC_AUTO_NONE);
     CHECK(autoRun(a, MC_AUTO_TRIAL - MC_AUTO_SETTLE - 1, 28, 0.1) == MC_AUTO_NONE && a.trying);
-    CHECK(mcAutoStep(a, 28, 0.1, 0) == MC_AUTO_KEEP && a.replay && !a.trying && a.rest == MC_AUTO_KEPT_REST && a.pause == 0);
+    CHECK(mcAutoStep(a, 28, 0.1, 0) == MC_AUTO_KEEP && a.replay && !a.trying && a.rest == MC_AUTO_KEPT_REST &&
+          a.pause == 0);
     CHECK(a.after == 28 && a.before == 30);
     CHECK(a.n == 0 && a.sum == 0);
     // rest: nothing is watched, whatever the frames are
-    CHECK(autoRun(a, MC_AUTO_KEPT_REST, 99, 9) == MC_AUTO_NONE && a.rest == 0 && a.n == 0 && a.sum == 0 && a.waits == 0);
+    CHECK(autoRun(a, MC_AUTO_KEPT_REST, 99, 9) == MC_AUTO_NONE && a.rest == 0 && a.n == 0 && a.sum == 0 &&
+          a.waits == 0);
     // replay, slow, the graphics card is the limit: the game's own way is tried; it is no faster - back
     CHECK(autoRun(a, MC_AUTO_WINDOW, 20, 5) == MC_AUTO_TRY && !a.replay && a.before == 20);
     CHECK(autoRun(a, MC_AUTO_TRIAL, 20, 5) == MC_AUTO_BACK && a.replay && !a.trying);
@@ -1348,16 +1498,16 @@ static void testAutoLimits() {
         double frame, wait;
         bool tries;
     } const cases[] = {
-        {false, 30, 0.5, true},               // the game's way, slow, the processor: replay
-        {false, 30, 5, false},                // ... the graphics card: replay would cost it more
-        {false, 30, MC_AUTO_CPU, false},      // (at the limit: not under it)
-        {false, MC_AUTO_SLOW, 0.5, false},    // not slower than the headset
+        {false, 30, 0.5, true},            // the game's way, slow, the processor: replay
+        {false, 30, 5, false},             // ... the graphics card: replay would cost it more
+        {false, 30, MC_AUTO_CPU, false},   // (at the limit: not under it)
+        {false, MC_AUTO_SLOW, 0.5, false}, // not slower than the headset
         {false, MC_AUTO_SLOW + 0.125, 0.5, true},
         {false, 11, 0.1, false},
-        {true, 30, 5, true},                  // replay, slow, the graphics card: the game's way
-        {true, 30, 0.5, false},               // ... the processor: the game's way costs it a pass more
-        {true, 30, MC_AUTO_GPU, false},       // (at the limit: not above it)
-        {true, 30, 1.5, false},               // between the two limits: neither
+        {true, 30, 5, true},            // replay, slow, the graphics card: the game's way
+        {true, 30, 0.5, false},         // ... the processor: the game's way costs it a pass more
+        {true, 30, MC_AUTO_GPU, false}, // (at the limit: not above it)
+        {true, 30, 1.5, false},         // between the two limits: neither
         {false, 30, 1.5, false},
         {true, MC_AUTO_SLOW, 5, false},
         {true, MC_AUTO_SLOW + 0.125, 5, true},
@@ -1413,6 +1563,42 @@ static void testAutoLimits() {
 }
 
 // ---------------------------------------------------------------- the cockpit's sway from its place
+static void testHold() {
+    // a menu: nothing held, whatever the state was
+    McHold h = {MC_HOLD_FADING, 7, 2, 5};
+    CHECK(mcHoldStep(h, false, true, 100) == 0 && h.state == MC_HOLD_IDLE && h.n == 0 && h.ok == 0 && h.t0 == 0);
+    // a battle begins: dark, until the complete world was drawn three frames in a row
+    CHECK(mcHoldStep(h, true, false, 1000) == 1 && h.state == MC_HOLD_DARK && h.n == 1 && h.ok == 0 && h.t0 == 1000);
+    CHECK(mcHoldStep(h, true, true, 1010) == 1 && h.n == 2 && h.ok == 1 && h.t0 == 1000);
+    CHECK(mcHoldStep(h, true, true, 1020) == 1 && h.ok == 2);
+    CHECK(mcHoldStep(h, true, false, 1030) == 1 && h.ok == 0 && h.state == MC_HOLD_DARK); // (not in a row)
+    CHECK(mcHoldStep(h, true, true, 1040) == 1 && mcHoldStep(h, true, true, 1050) == 1 && h.state == MC_HOLD_DARK);
+    CHECK(mcHoldStep(h, true, true, 2000) == 1 && h.state == MC_HOLD_FADING && h.t0 == 2000 && h.n == 7 && h.ok == 3);
+    // ... then the picture comes up in half a second
+    CHECK(mcHoldStep(h, true, false, 2125) == 0.75f && h.state == MC_HOLD_FADING && h.n == 7);
+    CHECK(mcHoldStep(h, true, false, 2375) == 0.25f && h.t0 == 2000);
+    CHECK(mcHoldStep(h, true, false, 2500) == 0 && h.state == MC_HOLD_SHOWN);
+    CHECK(mcHoldStep(h, true, false, 2600) == 0 && h.state == MC_HOLD_SHOWN && h.t0 == 2000);
+    CHECK(mcHoldStep(h, true, true, 9000) == 0 && h.state == MC_HOLD_SHOWN && h.n == 7);
+    // a world complete from the first frame on (back from the options' screen): shown without the fade
+    h = {};
+    CHECK(mcHoldStep(h, true, true, 50) == 1 && mcHoldStep(h, true, true, 60) == 1);
+    CHECK(mcHoldStep(h, true, true, 70) == 0 && h.state == MC_HOLD_SHOWN && h.t0 == 70);
+    CHECK(mcHoldStep(h, true, false, 80) == 0);
+    // a world that never says so: shown after four seconds, with the fade
+    h = {};
+    CHECK(mcHoldStep(h, true, false, 100) == 1 && mcHoldStep(h, true, false, 4099) == 1 && h.state == MC_HOLD_DARK);
+    CHECK(mcHoldStep(h, true, false, 4100) == 1 && h.state == MC_HOLD_FADING && h.t0 == 4100 && h.n == 3);
+    CHECK(mcHoldStep(h, true, false, 4350) == 0.5f);
+    CHECK(mcHoldStep(h, true, false, 4601) == 0 && h.state == MC_HOLD_SHOWN);
+    // ... complete in the very frame the time is up: the complete world's way
+    h = {};
+    CHECK(mcHoldStep(h, true, false, 0) == 1 && mcHoldStep(h, true, true, 10) == 1 &&
+          mcHoldStep(h, true, true, 20) == 1);
+    CHECK(mcHoldStep(h, true, true, 5000) == 1 && h.state == MC_HOLD_FADING && h.t0 == 5000);
+    // the next battle is held anew
+    CHECK(mcHoldStep(h, false, false, 6000) == 0 && mcHoldStep(h, true, false, 7000) == 1 && h.t0 == 7000 && h.n == 1);
+}
 static void testShape() {
     g_test = "shape";
     const float m[12] = {0, 1, 0, 2, 0, 0, 1, 3, 1, 0, 0, 5}, want[12] = {0, 0, 1, -5, 1, 0, 0, -2, 0, 1, 0, -3};
@@ -1422,7 +1608,9 @@ static void testShape() {
     for (int i = 0; i < 12; ++i) CHECK(o[i] == want[i]);
     CHECK(o[12] == -77);
     // the cockpit against the camera, in the view's axes
-    const float base[12] = {0, 0, 1, 100, 1, 0, 0, 20, 0, 1, 0, -50}, A[9] = {0, 1, 0, 0, 0, 1, 1, 0, 0}, shape[12] = {0, 0, 1, 102, 0.8, -0.6, 0, 20.5, 0.6, 0.8, 0, -50.25}, rel[12] = {0, 0, 1, 2, 0.8, -0.6, 0, 0.5, 0.6, 0.8, 0, -0.25};
+    const float base[12] = {0, 0, 1, 100, 1, 0, 0, 20, 0, 1, 0, -50}, A[9] = {0, 1, 0, 0, 0, 1, 1, 0, 0},
+                shape[12] = {0, 0, 1, 102, 0.8, -0.6, 0, 20.5, 0.6, 0.8, 0, -50.25},
+                rel[12] = {0, 0, 1, 2, 0.8, -0.6, 0, 0.5, 0.6, 0.8, 0, -0.25};
     float r[13];
     r[12] = -77;
     mcShapeInView(base, A, shape, r);
@@ -1438,7 +1626,9 @@ static void testShape() {
         CHECK(r[i * 4 + 3] == 0);
     }
     // a step: the small turn and shift between two poses
-    const float prev[12] = {0, 1, 0, 2, 0, 0, 1, 3, 1, 0, 0, 5}, cur[12] = {-0.015625, 1, -0.00390625, 1.92578125, -0.0078125, 0.00390625, 1, 2.9609375, 1, 0.015625, 0.0078125, 5.05859375};
+    const float prev[12] = {0, 1, 0, 2, 0, 0, 1, 3, 1, 0, 0, 5},
+                cur[12] = {-0.015625, 1,         -0.00390625, 1.92578125, -0.0078125, 0.00390625,
+                           1,         2.9609375, 1,           0.015625,   0.0078125,  5.05859375};
     float w[3], d[3];
     CHECK(mcShapeStep(prev, cur, w, d));
     NEAR(w[0], 0.0078125f), NEAR(w[1], -0.015625f), NEAR(w[2], 0.00390625f);
@@ -1471,8 +1661,10 @@ static void testShape() {
 }
 
 int main() {
-    testM4(), testM4Inv(), testProj(), testEyeStep(), testStereo(), testAuto(), testAutoLimits(), testShape();
-    testHolds(), testTurnNorm(), testTurnFit(), testEyeInMesh(), testHudCross(), testHudGlass(), testGlassPose(), testGlassScale(), testGlassAim();
+    testM4(), testM4Inv(), testProj(), testEyeStep(), testStereo(), testAuto(), testAutoLimits(), testShape(),
+        testHold();
+    testHolds(), testTurnNorm(), testTurnFit(), testEyeInMesh(), testHudCross(), testHudGlass(), testGlassPose(),
+        testGlassScale(), testGlassAim();
     testGridMark(), testGridPlace(), testGridTri(), testGridCells(), testGridFree(), testGridRim(), testGridFit();
     testMul34(), testViewAxis();
     testFrustum(), testFrustumSameView(), testFrustumTangent(), testFrustumNear(), testFrustumLayout();

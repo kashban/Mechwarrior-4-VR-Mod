@@ -77,6 +77,9 @@ static const uint64_t HK_PS_BACKDROP = 0x3c49bfee1754587bull; // a small camera'
 // the clutter's view: a structured buffer of one record - the matrix into clip space, last frame's
 #define HK_RP_CLUTTER_VIEW_BYTES 128
 // labels inside the main camera's pass under which things are made once a frame, not once an eye
+// the label of the one draw of mw4hook's own terrain: with it the world is complete (before: the game's
+// tiles, bare - "terrain: N tiles drawn by our pass")
+#define HK_LABEL_WORLD L"terrain: one RTIN draw"
 #define HK_RP_ONCE_LABELS L"RTIN tree of sun shadow", L"sun shadows:", L"terrain VT:"
 // --- MW4Mercs.exe ---
 static const uintptr_t GM_CAMERA_DRAW = 0x4b6ec0; // CameraElement::Draw (mw4hook puts a jmp there)

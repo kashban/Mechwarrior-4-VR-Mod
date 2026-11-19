@@ -543,6 +543,42 @@ bool g_fadeMenu;                        // the sheet is a paused battle's (blue)
 unsigned g_sheetCleanFrame =
     ~0u;             // the frame whose HUD image holds the sheet and the menu alone (draws.cpp: hudSheetPost)
 static int g_fadePt; // the point showing the sheet alone
+// A battle's first pictures are held back until mw4hook's world is complete (core.h: mcHoldStep). Wholly dark:
+// the eyes' images get a black picture. Coming up: the picture itself, under a black sheet shown like the game's
+// own fade sheet - a few pixels of the HUD layer's image, written by us, over the whole view.
+unsigned g_vrWorldFrame = ~0u;
+static float g_holdA; // this frame: how dark (1 wholly, 0 not)
+static ID3D11Texture2D *g_holdBlack;
+enum { HOLD_PX = 8 };
+static void vrHoldStep() {
+    static McHold h;
+    static int on = -1;
+    if (on < 0) on = GetPrivateProfileIntW(L"vr", L"load_hold", 1, (g_dir + L"mw4vr.ini").c_str()) != 0;
+    const int was = h.state;
+    g_holdA = on ? mcHoldStep(h, !g_menuMode, g_vrWorldFrame == g_frame, (double)GetTickCount64()) : 0;
+    if (was == MC_HOLD_DARK && h.state != MC_HOLD_DARK)
+        logf("hold: the battle's picture was held back for %d frames - %s", h.n,
+             h.state == MC_HOLD_SHOWN ? "the world was complete from the first one"
+             : h.ok >= MC_HOLD_SETTLE ? "mw4hook's world is complete, the picture comes up"
+                                      : "the world did not say it is complete, the picture comes up");
+    if (g_holdA < 1 && g_holdBlack) g_holdBlack->Release(), g_holdBlack = nullptr;
+}
+// the black picture for an eye's image, made like the eye's own
+static ID3D11Texture2D *vrHoldBlack(ID3D11DeviceContext *ctx, ID3D11Texture2D *like) {
+    if (g_holdBlack || !like) return g_holdBlack;
+    D3D11_TEXTURE2D_DESC d;
+    like->GetDesc(&d);
+    d.Usage = D3D11_USAGE_DEFAULT, d.BindFlags = D3D11_BIND_RENDER_TARGET, d.CPUAccessFlags = 0, d.MiscFlags = 0;
+    ID3D11RenderTargetView *v = nullptr;
+    if (FAILED(g_dev->CreateTexture2D(&d, nullptr, &g_holdBlack))) return g_holdBlack = nullptr;
+    if (SUCCEEDED(g_dev->CreateRenderTargetView(g_holdBlack, nullptr, &v))) {
+        const FLOAT black[4] = {0, 0, 0, 1};
+        ctx->ClearRenderTargetView(v, black);
+        v->Release();
+    } else
+        g_holdBlack->Release(), g_holdBlack = nullptr;
+    return g_holdBlack;
+}
 // Esc was pressed a moment ago (asked once or more a frame). g_escOpens: no menu was up at that press - one comes
 static bool g_escOpens;
 static bool vrEscLately() {
@@ -894,6 +930,7 @@ void vrOnPresent(IDXGISwapChain *swap, int eye) {
     g_dev->GetImmediateContext(&ctx);
     // (a test run, e2e.cpp, looks at the eyes' images also while the runtime wants none: a headset on nobody's head
     // loses the focus after some seconds, and the run stood still until somebody touched it)
+    vrHoldStep();
     if ((fs.shouldRender || g_e2eOn) && SUCCEEDED(swap->GetBuffer(0, __uuidof(ID3D11Texture2D), (void **)&bb)) && bb &&
         ctx) {
         D3D11_TEXTURE2D_DESC bd;
@@ -914,7 +951,8 @@ void vrOnPresent(IDXGISwapChain *swap, int eye) {
             g_vr.WaitSwapchainImage(g_vr.sc[e], &wi);
             if (bothNow) {
                 D3D11_BOX eb = {0, 0, 0, min(g_eyeTexW, g_vr.w), min(g_eyeTexH, g_vr.h), 1};
-                ctx->CopySubresourceRegion(g_vr.img[e][idx].texture, 0, 0, 0, 0, g_eyeTex[e], 0, &eb);
+                ID3D11Texture2D *black = g_holdA >= 1 ? vrHoldBlack(ctx, g_eyeTex[e]) : nullptr;
+                ctx->CopySubresourceRegion(g_vr.img[e][idx].texture, 0, 0, 0, 0, black ? black : g_eyeTex[e], 0, &eb);
                 if (track && g_vr.usedOk[e]) {
                     g_vr.layerPose[e] = g_vr.used[e];
                     g_vr.layerFov[e] = g_vr.usedFov[e];
@@ -960,6 +998,12 @@ void vrOnPresent(IDXGISwapChain *swap, int eye) {
             // (not under a paused battle's menu: it lies where the cross-hair is, and would be taken apart with it)
             g_crossShown = !g_fadeMenu && vrCrossImage(ctx, g_vr.hudImg[idx].texture, g_hudTex, hb.right, hb.bottom);
             noteDraw(ctx, g_vr.hudImg[idx].texture, min(g_hudW, g_vr.w), hb.bottom); // a note of ours (note.cpp)
+            if (g_holdA > 0) { // the black sheet's pixels (the HUD is not shown from this image meanwhile)
+                uint32_t px[HOLD_PX * HOLD_PX];
+                for (uint32_t &p : px) p = (uint32_t)(g_holdA * 255.0f + 0.5f) << 24;
+                D3D11_BOX pb = {0, 0, 0, HOLD_PX, HOLD_PX, 1};
+                ctx->UpdateSubresource(g_vr.hudImg[idx].texture, 0, &pb, px, HOLD_PX * 4, 0);
+            }
             helpDraw(ctx, g_vr.hudImg[idx].texture, min(g_hudW, g_vr.w), hb.bottom, g_vr.hudLeft, g_vr.hudRight,
                      g_vr.hudTop, g_vr.hudBottom);
             XrSwapchainImageReleaseInfo ri = {XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
@@ -1126,7 +1170,13 @@ void vrOnPresent(IDXGISwapChain *swap, int eye) {
         float(*rc)[5] = hq_.rc;
         int nr = hq_.n;
         // a battle's first pictures (the answer comes a frame late, and the first frame can last long): no HUD yet
-        if (g_fadeStage && (g_fadeKnownFrame == ~0u || g_frame - g_fadeKnownFrame > 4))
+        // held back, or coming up: our black sheet over the whole view - unless the game's own fade sheet is the
+        // darker one by now (a battle that begins with a flight around the mech fades in for seconds)
+        if (g_holdA > 0 && !(g_holdA < 1 && g_fadeA > g_holdA)) {
+            rc[0][0] = 2.0f / g_vr.w, rc[0][1] = 2.0f / g_vr.h, rc[0][2] = (HOLD_PX - 2.0f) / g_vr.w,
+            rc[0][3] = (HOLD_PX - 2.0f) / g_vr.h, rc[0][4] = 5;
+            nr = 1;
+        } else if (g_fadeStage && (g_fadeKnownFrame == ~0u || g_frame - g_fadeKnownFrame > 4))
             nr = 0;
         else if (g_fadeA > 0) { // the game's fade sheet: over the whole view, the HUD not
             float du = 3.0f / g_vr.w, dv = 3.0f / g_vr.h;
@@ -1151,7 +1201,8 @@ void vrOnPresent(IDXGISwapChain *swap, int eye) {
             // wrong colours. No HUD for those moments; without a menu after them it is there again.
             if (vrEscLately() && !g_fadeMenu && !(g_fadeA > 0)) nr = 0;
         }
-        bool crossNow = g_crossShown && g_crossSc != XR_NULL_HANDLE && nr > 0 && !(g_fadeA > 0) && !g_fadeMenu;
+        bool crossNow =
+            g_crossShown && g_crossSc != XR_NULL_HANDLE && nr > 0 && !(g_fadeA > 0) && !g_fadeMenu && !(g_holdA > 0);
         for (int i = 0; i < nr; ++i) {
             float u0 = rc[i][0], v0 = rc[i][1], u1 = rc[i][2], v1 = rc[i][3];
             bool isFar = rc[i][4] == 1 || rc[i][4] >= 3, opaque = rc[i][4] == 2 || rc[i][4] == 3;
