@@ -199,6 +199,9 @@ static inline void mcM4Point(const McM4 &k, float *f) {
 // finding that out. And the game's own way is tried only where it can win at all: it costs the processor a
 // second pass of the camera, about MC_AUTO_SECOND of the first - with that added to the processor's part of a
 // frame (the frame less the wait for the graphics card) it must still come out faster.
+// A rest ends early when the frames have become much longer than they were at the last trial (MC_AUTO_CHANGE):
+// the scene is another one, and what that trial found does not hold for it. (A trial lost in the easy flight
+// around the mech kept the slower way for the heavy scene after it, 900 frames long - 20 pictures a second.)
 struct McAuto {
     bool replay;    // the way in use
     bool trying;    // the other way is being tried
@@ -210,6 +213,9 @@ struct McAuto {
     double after;   // the mean length in the last trial
     unsigned rest;  // frames until a trial may begin again
     unsigned pause; // the rest after the last trial that brought nothing
+    double seen;    // the mean length the last trial was decided at (0: none yet)
+    unsigned rn;    // while resting: frames of the window so far
+    double rsum;    // ... and their lengths
 };
 // Counted in frames: the rest when a battle begins (it loads still); the frames watched at a time; the frames of
 // a trial that do not count (new textures, histories) and all its frames; the rest after a trial that was kept,
@@ -222,6 +228,7 @@ static const double MC_AUTO_GPU = 2.0;     // a mean wait in Present above this:
 static const double MC_AUTO_CPU = 0.75;    // one under this: it is not
 static const double MC_AUTO_GAIN = 0.9375; // a trial is kept when its frames are this much of the ones before
 static const double MC_AUTO_SECOND = 0.75; // the game's pass for the second eye, against the first one's
+static const double MC_AUTO_CHANGE = 1.5;  // frames this much longer than at the last trial: another scene
 // a battle begins: with replay
 static inline McAuto mcAutoStart() {
     McAuto a = {};
@@ -236,6 +243,10 @@ static inline int mcAutoStep(McAuto &a, double frame, double wait, double pass) 
     if (!a.trying) {
         if (a.rest) {
             --a.rest;
+            a.rsum += frame;
+            if (++a.rn < MC_AUTO_WINDOW) return MC_AUTO_NONE;
+            if (a.seen > 0 && a.rsum / MC_AUTO_WINDOW > a.seen * MC_AUTO_CHANGE) a.rest = 0;
+            a.rn = 0, a.rsum = 0;
             return MC_AUTO_NONE;
         }
         a.sum += frame, a.waits += wait, a.passes += pass;
@@ -252,11 +263,12 @@ static inline int mcAutoStep(McAuto &a, double frame, double wait, double pass) 
     if (a.n < MC_AUTO_TRIAL) return MC_AUTO_NONE;
     double mean = a.sum / (MC_AUTO_TRIAL - MC_AUTO_SETTLE);
     a.n = 0, a.sum = 0, a.trying = false, a.after = mean;
+    a.rn = 0, a.rsum = 0;
     if (mean < a.before * MC_AUTO_GAIN) {
-        a.pause = 0, a.rest = MC_AUTO_KEPT_REST;
+        a.pause = 0, a.rest = MC_AUTO_KEPT_REST, a.seen = mean;
         return MC_AUTO_KEEP;
     }
-    a.replay = !a.replay;
+    a.replay = !a.replay, a.seen = a.before;
     a.pause = a.pause ? (unsigned)fmin(a.pause * 2.0, (double)MC_AUTO_PAUSE_MAX) : MC_AUTO_PAUSE;
     a.rest = a.pause;
     return MC_AUTO_BACK;

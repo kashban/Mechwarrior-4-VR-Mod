@@ -1488,8 +1488,8 @@ static void testAuto() {
           a.pause == 0);
     CHECK(a.after == 28 && a.before == 30);
     CHECK(a.n == 0 && a.sum == 0);
-    // rest: nothing is watched, whatever the frames are
-    CHECK(autoRun(a, MC_AUTO_KEPT_REST, 99, 9) == MC_AUTO_NONE && a.rest == 0 && a.n == 0 && a.sum == 0 &&
+    // rest: no trial, whatever the wait is (frames much longer than at the trial end it: testAutoChange)
+    CHECK(autoRun(a, MC_AUTO_KEPT_REST, 40, 9) == MC_AUTO_NONE && a.rest == 0 && a.n == 0 && a.sum == 0 &&
           a.waits == 0);
     // replay, slow, the graphics card is the limit: the game's own way is tried; it is no faster - back
     CHECK(autoRun(a, MC_AUTO_WINDOW, 20, 5) == MC_AUTO_TRY && !a.replay && a.before == 20);
@@ -1511,6 +1511,44 @@ static void testAuto() {
     CHECK(autoRun(a, MC_AUTO_TRIAL, 10, 5) == MC_AUTO_KEEP && !a.replay && a.pause == 0);
 }
 // no trial where the other way cannot help; the limits themselves
+static void testAutoChange() {
+    // a trial that brought nothing: the way stays for 900 frames - unless the frames get much longer than they
+    // were at that trial (another scene)
+    McAuto a = {};
+    CHECK(autoRun(a, MC_AUTO_WINDOW, 16, 0.5) == MC_AUTO_TRY);
+    CHECK(autoRun(a, MC_AUTO_TRIAL, 16, 0.5) == MC_AUTO_BACK && a.rest == MC_AUTO_PAUSE && a.seen == 16);
+    CHECK(a.rn == 0 && a.rsum == 0);
+    // ... as long: the rest runs on, window after window
+    CHECK(autoRun(a, MC_AUTO_WINDOW - 1, 24, 0.5) == MC_AUTO_NONE && a.rn == MC_AUTO_WINDOW - 1);
+    CHECK(a.rsum == 24.0 * (MC_AUTO_WINDOW - 1));
+    CHECK(mcAutoStep(a, 24, 0.5, 0) == MC_AUTO_NONE && a.rest == MC_AUTO_PAUSE - MC_AUTO_WINDOW && a.rn == 0);
+    CHECK(a.rsum == 0); // (24 = 16 x 1.5: just not longer)
+    // ... longer: the rest is over, the next window decides
+    CHECK(autoRun(a, MC_AUTO_WINDOW - 1, 24, 0.5) == MC_AUTO_NONE && a.rest == MC_AUTO_PAUSE - 2 * MC_AUTO_WINDOW + 1);
+    CHECK(mcAutoStep(a, 24.5, 0.5, 0) == MC_AUTO_NONE && a.rest == 0 && a.rn == 0 && a.rsum == 0 && !a.trying);
+    CHECK(autoRun(a, MC_AUTO_WINDOW, 40, 0.5) == MC_AUTO_TRY && a.replay && a.before == 40);
+    // kept: the frames it was kept at are the measure from then on
+    CHECK(autoRun(a, MC_AUTO_TRIAL, 28, 0.5) == MC_AUTO_KEEP && a.seen == 28 && a.rest == MC_AUTO_KEPT_REST);
+    CHECK(autoRun(a, MC_AUTO_WINDOW, 42, 0.5) == MC_AUTO_NONE && a.rest == MC_AUTO_KEPT_REST - MC_AUTO_WINDOW);
+    CHECK(autoRun(a, MC_AUTO_WINDOW, 42.5, 0.5) == MC_AUTO_NONE && a.rest == 0);
+    // what was added up in a rest does not count after a trial
+    a = {};
+    a.rest = 10, a.seen = 1;
+    CHECK(autoRun(a, 10, 1, 0.5) == MC_AUTO_NONE && a.rn == 10 && a.rsum == 10 && a.rest == 0);
+    CHECK(autoRun(a, MC_AUTO_WINDOW, 16, 0.5) == MC_AUTO_TRY);
+    CHECK(autoRun(a, MC_AUTO_TRIAL, 12, 0.5) == MC_AUTO_KEEP && a.rn == 0 && a.rsum == 0);
+    a = {};
+    a.rest = 10, a.seen = 1;
+    CHECK(autoRun(a, 10, 1, 0.5) == MC_AUTO_NONE && autoRun(a, MC_AUTO_WINDOW, 16, 0.5) == MC_AUTO_TRY);
+    CHECK(autoRun(a, MC_AUTO_TRIAL, 16, 0.5) == MC_AUTO_BACK && a.rn == 0 && a.rsum == 0);
+    // (a measure of one millisecond is a measure)
+    a = {};
+    a.rest = 100, a.seen = 1;
+    CHECK(autoRun(a, MC_AUTO_WINDOW, 2, 0.5) == MC_AUTO_NONE && a.rest == 0);
+    // a battle's first rest ends by its count alone (no trial yet to measure by)
+    a = mcAutoStart();
+    CHECK(a.seen == 0 && autoRun(a, MC_AUTO_START - 1, 500, 0.5) == MC_AUTO_NONE && a.rest == 1);
+}
 static void testAutoLimits() {
     g_test = "autoLimits";
     struct {
@@ -1784,8 +1822,8 @@ static void testShape() {
 }
 
 int main() {
-    testM4(), testM4Inv(), testProj(), testEyeStep(), testStereo(), testAuto(), testAutoLimits(), testShape(),
-        testHold(), testBand();
+    testM4(), testM4Inv(), testProj(), testEyeStep(), testStereo(), testAuto(), testAutoLimits(), testAutoChange(),
+        testShape(), testHold(), testBand();
     testHolds(), testTurnNorm(), testTurnFit(), testEyeInMesh(), testHudCross(), testHudGlass(), testGlassPose(),
         testGlassScale(), testGlassAim();
     testGridMark(), testGridPlace(), testGridTri(), testGridCells(), testGridFree(), testGridRim(), testGridFit();
