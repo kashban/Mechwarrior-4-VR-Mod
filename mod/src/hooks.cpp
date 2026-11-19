@@ -69,6 +69,7 @@ void onPresent(IDXGISwapChain *sc) {
         else if (mode == 3)
             eye = (g_frame & 1) ? 0 : 1;
         mouseInstall();
+        swayHookInstall();
         menuModeUpdate();
         if (g_menuMode) rpIdle();
         mouseCapture();

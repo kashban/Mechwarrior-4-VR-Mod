@@ -26,6 +26,8 @@ enum : uint32_t {
     HK_PTR_GETCURSORPOS = 0x4c7310, // the real functions its cursor mapping calls through
     HK_PTR_SETCURSORPOS = 0x4c7314,
     HK_PTR_CLIPCURSOR = 0x4c7318,
+    HK_PTR_DRAWSHAPE =
+        0x4b4084, // the game's MLRClipper::DrawShape as mw4hook calls it (for shapes it leaves to the game)
     HK_IAT_GETCLIENTRECT = 0x210308, // import slot
 };
 // --- mw4hook.dll: code that is checked before the data above is trusted ---
@@ -36,11 +38,14 @@ enum : uint32_t {
     HK_AT_WATER_CHECK = 0x9e5f0,  // cmp byte ptr [HK_WATER_REFLECT], 0
     HK_AT_GETCURSORPOS = 0xbb953, // mov eax, [HK_PTR_GETCURSORPOS]
     HK_AT_CLIPCURSOR = 0xbc0fd,   // mov eax, [HK_PTR_CLIPCURSOR]
+    HK_AT_DRAWSHAPE = 0x2834c,    // call [HK_PTR_DRAWSHAPE]
 };
 // --- mw4hook.dll: shaders (hashes of their bytecode) ---
 static const uint64_t HK_VS_TL = 0xad8cee09478ddb12ull;       // the CPU path's screen-space vertex shader
 static const uint64_t HK_PS_BACKDROP = 0x3c49bfee1754587bull; // a small camera's backdrop: the frame behind its window
 // --- mw4hook.dll: annotation labels (their beginnings) ---
+// a shape left to the game that sits this near the camera (game metres) is the cockpit
+#define GM_COCKPIT_REACH 2.0f
 #define HK_LBL_3D L"3D"                          // top level: the world
 #define HK_LBL_HUD L"after 3D"                   // top level: "after 3D: HUD, 2D"
 #define HK_LBL_TONEMAP L"tonemap into the frame" // the camera's picture is in the frame
@@ -78,7 +83,9 @@ static const uintptr_t GM_CAMERA_DRAW = 0x4b6ec0; // CameraElement::Draw (mw4hoo
 static const uintptr_t GM_HWND = 0x1241050;       // HWND of the game's window
 // a scene element (the camera is one)
 enum : uint32_t {
-    EL_PARENT = 0x10,     // the element above it
+    EL_PARENT = 0x10, // the element above it
+    GM_SHAPE_TO_WORLD =
+        0x20,             // in the DrawShapeInformation handed to MLRClipper::DrawShape: -> 3x4 float, shape -> world
     EL_LOCAL = 0x20,      // 3x4 float: its own matrix (rows: axis x, y, z, translation)
     EL_LOCAL_COPY = 0x50, // the same again
     EL_WORLD = 0x80,      // 3x4 float: element -> world, made by the game from the parent's and EL_LOCAL

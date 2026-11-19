@@ -65,7 +65,7 @@ log, the shaders' table, the contexts' table) has a mutex. The build optimises a
 | `vr` | OpenXR: the session, the swap chains, the layers of a frame, the settings in `mw4vr.ini`, the hot keys for seat and sizes. |
 | `mw5` | A cockpit mesh of our own (`.mwc`): loading, drawing, its monitors, the HUD's parts on its glass, the hot keys that place them. |
 | `cross` | The cross-hair taken out of the HUD's picture by its colour, as a layer of its own. |
-| `sway`, `note`, `help`, `shot` | The sway's values for its users; a line of text in the headset; the page of keys (Ctrl+F1); pictures for diagnosis (Ctrl+F12). |
+| `sway`, `note`, `help`, `shot` | The sway's values for its users, and the cockpit's place read where the game hands its cockpit to its renderer; a line of text in the headset; the page of keys (Ctrl+F1); pictures for diagnosis (Ctrl+F12). |
 | `e2e` | The test mode for the end-to-end test: only with `MW4VR_E2E` set, plays a plan of keys and records every frame. |
 | `perf` | For a performance run of that test: every frame's length and the time of its parts, and where the render thread is ([PERFORMANCE.md](PERFORMANCE.md)). |
 | `eye_tl_vs.hlsl` / `.h` | The replacement vertex shader for the CPU path. |

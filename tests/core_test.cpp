@@ -1387,8 +1387,66 @@ static void testAutoLimits() {
     CHECK(autoRun(a, MC_AUTO_TRIAL - MC_AUTO_SETTLE, 31, 0.1) == MC_AUTO_BACK && a.after == 31);
 }
 
+// ---------------------------------------------------------------- the cockpit's sway from its place
+static void testShape() {
+    g_test = "shape";
+    const float m[12] = {0, 1, 0, 2, 0, 0, 1, 3, 1, 0, 0, 5}, want[12] = {0, 0, 1, -5, 1, 0, 0, -2, 0, 1, 0, -3};
+    float o[13];
+    o[12] = -77;
+    mcInv34(m, o);
+    for (int i = 0; i < 12; ++i) CHECK(o[i] == want[i]);
+    CHECK(o[12] == -77);
+    // the cockpit against the camera, in the view's axes
+    const float base[12] = {0, 0, 1, 100, 1, 0, 0, 20, 0, 1, 0, -50}, A[9] = {0, 1, 0, 0, 0, 1, 1, 0, 0}, shape[12] = {0, 0, 1, 102, 0.8, -0.6, 0, 20.5, 0.6, 0.8, 0, -50.25}, rel[12] = {0, 0, 1, 2, 0.8, -0.6, 0, 0.5, 0.6, 0.8, 0, -0.25};
+    float r[13];
+    r[12] = -77;
+    mcShapeInView(base, A, shape, r);
+    for (int i = 0; i < 12; ++i) NEAR(r[i], rel[i]);
+    CHECK(r[12] == -77);
+    mcShapeInView(base, A, base, r); // the camera itself: no turn, no shift, the view's axes
+    const float same[12] = {0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0};
+    for (int i = 0; i < 12; ++i) NEAR(r[i], same[i]);
+    const float unit[12] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0}, A2[9] = {1, 2, 3, 4, 5, 6, 7, 8, 10};
+    mcShapeInView(unit, A2, unit, r); // (axes that are all different: each is taken from its own place)
+    for (int i = 0; i < 3; ++i) {
+        for (int j = 0; j < 3; ++j) CHECK(r[i * 4 + j] == A2[j * 3 + i]);
+        CHECK(r[i * 4 + 3] == 0);
+    }
+    // a step: the small turn and shift between two poses
+    const float prev[12] = {0, 1, 0, 2, 0, 0, 1, 3, 1, 0, 0, 5}, cur[12] = {-0.015625, 1, -0.00390625, 1.92578125, -0.0078125, 0.00390625, 1, 2.9609375, 1, 0.015625, 0.0078125, 5.05859375};
+    float w[3], d[3];
+    CHECK(mcShapeStep(prev, cur, w, d));
+    NEAR(w[0], 0.0078125f), NEAR(w[1], -0.015625f), NEAR(w[2], 0.00390625f);
+    NEAR(d[0], 0.015625f), NEAR(d[1], -0.0078125f), NEAR(d[2], 0.00390625f);
+    CHECK(mcShapeStep(prev, prev, w, d) && w[0] == 0 && w[1] == 0 && w[2] == 0 && d[0] == 0 && d[1] == 0 && d[2] == 0);
+    // no step: a shift or a turn at the limit (under it: one)
+    const float id[12] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0};
+    float far[12];
+    for (int a = 0; a < 3; ++a) {
+        memcpy(far, id, sizeof far), far[a * 4 + 3] = MC_STEP_MAX;
+        CHECK(!mcShapeStep(id, far, w, d) && d[a] == MC_STEP_MAX);
+        far[a * 4 + 3] = -MC_STEP_MAX;
+        CHECK(!mcShapeStep(id, far, w, d));
+        far[a * 4 + 3] = MC_STEP_MAX / 2;
+        CHECK(mcShapeStep(id, far, w, d) && d[a] == MC_STEP_MAX / 2);
+    }
+    memcpy(far, id, sizeof far), far[3] = 0.04f; // (4 cm, whatever the constant says)
+    CHECK(!mcShapeStep(id, far, w, d));
+    far[3] = 0.03f;
+    CHECK(mcShapeStep(id, far, w, d));
+    const int up[3][2] = {{9, 6}, {2, 8}, {4, 1}}; // (the elements a turn about x, y, z shows in)
+    for (int a = 0; a < 3; ++a) {
+        memcpy(far, id, sizeof far), far[up[a][0]] = MC_STEP_MAX, far[up[a][1]] = -MC_STEP_MAX;
+        CHECK(!mcShapeStep(id, far, w, d) && w[a] == MC_STEP_MAX);
+        far[up[a][0]] = MC_STEP_MAX / 2, far[up[a][1]] = -MC_STEP_MAX / 2;
+        CHECK(mcShapeStep(id, far, w, d) && w[a] == MC_STEP_MAX / 2 && w[(a + 1) % 3] == 0 && w[(a + 2) % 3] == 0);
+        far[up[a][0]] = -MC_STEP_MAX, far[up[a][1]] = MC_STEP_MAX;
+        CHECK(!mcShapeStep(id, far, w, d) && w[a] == -MC_STEP_MAX);
+    }
+}
+
 int main() {
-    testM4(), testM4Inv(), testProj(), testEyeStep(), testStereo(), testAuto(), testAutoLimits();
+    testM4(), testM4Inv(), testProj(), testEyeStep(), testStereo(), testAuto(), testAutoLimits(), testShape();
     testHolds(), testTurnNorm(), testTurnFit(), testEyeInMesh(), testHudCross(), testHudGlass(), testGlassPose(), testGlassScale(), testGlassAim();
     testGridMark(), testGridPlace(), testGridTri(), testGridCells(), testGridFree(), testGridRim(), testGridFit();
     testMul34(), testViewAxis();

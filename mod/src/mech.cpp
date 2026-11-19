@@ -264,10 +264,17 @@ static bool swvOnPresent() {
     int n = g_swvCurN;
     bool seated = g_swvAllN >= 90;
     g_swvAllN = 0;
-    static unsigned frames, matched;
+    static unsigned frames, matched, placed;
     static float most;
     static int pairsLast;
-    if (seated) {
+    // the cockpit's place as the game hands it to its renderer (sway.cpp): the step is told outright
+    float sw[3], sd[3];
+    int place = swayStep(sw, sd);
+    if (place == 1) {
+        for (int a = 0; a < 3; ++a) g_swvTh[a] += sw[a], g_swvTau[a] += sd[a];
+        ++placed;
+    }
+    if (seated || place) {
         ++frames;
         // Which vertex is which? Not by their order: the game clips the cockpit's triangles at the view's edges, so
         // with every turn of the head others are there, in another order (compared by order, the cockpit moved
@@ -297,7 +304,7 @@ static bool swvOnPresent() {
             if (bj >= 0) memcpy(P[m], g_swvPrev[bj], sizeof P[0]), memcpy(Q[m], q, sizeof Q[0]), ++m;
         }
         pairsLast = m;
-        if (m >= 60) {
+        if (m >= 60 && !place) { // (without the cockpit's place: its vertices' movement)
             n = m;
             double pc[3] = {0, 0, 0}, dm[3] = {0, 0, 0};
             for (int i = 0; i < n; ++i)
@@ -349,16 +356,18 @@ static bool swvOnPresent() {
         static int told;
         if (frames % 900 == 0 && told < 6) {
             ++told;
-            logf("sway: from the game's cockpit - %d vertices inside the view, %d found again in the frame before; %u "
-                 "of the last 900 frames compared; largest shift %.1f mm",
-                 g_swvCurN, pairsLast, matched, most * 1000);
-            matched = 0, most = 0;
+            long shapes, nearCam;
+            swayShapeCounts(&shapes, &nearCam);
+            logf("sway: of the last 900 frames %u from the cockpit's place (the game handed %ld shapes on, %ld at the "
+                 "camera), %u from its vertices (%d inside the view now, %d found again); largest shift %.1f mm",
+                 placed, shapes, nearCam, matched, g_swvCurN, pairsLast, most * 1000);
+            matched = 0, most = 0, placed = 0;
         }
     }
     // no cockpit of the game's (an outside view), or only every other frame (the eyes drawn in turns): the sway
     // stays for three frames, then it is none
     static unsigned last = ~0u;
-    if (seated) last = g_frame;
+    if (seated || place) last = g_frame;
     bool lately = last != ~0u && g_frame - last <= 3;
     if (!lately) {
         memset(g_swvTh, 0, sizeof g_swvTh);
@@ -368,7 +377,7 @@ static bool swvOnPresent() {
     g_swvPrevN = g_swvCurN;
     g_swvCurN = 0;
     g_swayValid = lately && g_swayOn;
-    if (!seated || !g_swayOn) return seated;
+    if (!(seated || place) || !g_swayOn) return seated;
     const float *th = g_swvTh;
     float R[9] = {1, -th[2], th[1], th[2], 1, -th[0], -th[1], th[0], 1};
     swayOrtho(R);

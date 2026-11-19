@@ -5,6 +5,7 @@
 #include <cstring>
 
 // ---- 3x4 matrices (rows: axis x, y, z; the fourth column the translation) ----
+static const float MC_STEP_MAX = 0.03125f; // a step of the cockpit against the camera: under 3 cm, 0.03 rad a frame
 
 // out = a o b; out must not be a or b
 static inline void mcMul34(const float *a, const float *b, float *out) {
@@ -22,6 +23,35 @@ static inline void mcViewAxis(const float *m, const float *A, int k, float *v) {
 }
 
 static inline float mcDot3(const float *a, const float *b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
+
+// ---- the cockpit's sway from its place in the world (sway.cpp) ----
+// A rigid 3x4 (rows: axes, the fourth column the translation) the other way round: out must not be m
+static inline void mcInv34(const float *m, float *out) {
+    for (int i = 0; i < 3; ++i) {
+        out[i * 4 + 3] = -(m[i] * m[3] + m[4 + i] * m[7] + m[8 + i] * m[11]);
+        for (int j = 0; j < 3; ++j) out[i * 4 + j] = m[j * 4 + i];
+    }
+}
+// The cockpit's pose against the camera, in view space (x right, y up, z forward): base is the camera's matrix
+// (camera -> world), shape the cockpit's (cockpit -> world), A the view's axes in the camera's own coordinates
+// (3x3, an axis per column). rel: 3x4, view <- cockpit.
+static inline void mcShapeInView(const float *base, const float *A, const float *shape, float *rel) {
+    float inv[12], loc[12];
+    mcInv34(base, inv);
+    mcMul34(inv, shape, loc);
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 4; ++j) rel[i * 4 + j] = A[i] * loc[j] + A[3 + i] * loc[4 + j] + A[6 + i] * loc[8 + j];
+}
+// The small movement from one such pose to the next: a point p of the camera's space that goes with the
+// cockpit moves to p + d + w x p (about the camera). false: no small movement - a cut to another view.
+static inline bool mcShapeStep(const float *prev, const float *cur, float *w, float *d) {
+    float inv[12], m[12];
+    mcInv34(prev, inv);
+    mcMul34(cur, inv, m);
+    w[0] = 0.5f * (m[9] - m[6]), w[1] = 0.5f * (m[2] - m[8]), w[2] = 0.5f * (m[4] - m[1]);
+    d[0] = m[3], d[1] = m[7], d[2] = m[11];
+    return mcDot3(w, w) < MC_STEP_MAX * MC_STEP_MAX && mcDot3(d, d) < MC_STEP_MAX * MC_STEP_MAX;
+}
 
 // ---- the right eye's view from the left eye's (replay.cpp) ----
 // 4x4 matrices of doubles, row-major, on column vectors: the world's coordinates are large against an eye's 6 cm.
