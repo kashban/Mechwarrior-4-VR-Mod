@@ -320,7 +320,15 @@ volatile bool g_in3D;         // inside the top-level "3D" label: the world, not
 volatile bool g_in3DSeen;     // a "3D" label was seen (a battle is running)
 
 void onWork(void *ctx, const char *kind, bool compute) {
-    if (ctxOf(ctx)->foreign) return;
+    if (ctxOf(ctx)->foreign) {
+        static bool told; // (what the hooks keep of a call in hand must be each thread's own: replay.h, g_rpOwn)
+        if (!told) {
+            told = true;
+            logf("draws: the VR runtime draws through the hooked functions too (%s, thread %lu)", kind,
+                 GetCurrentThreadId());
+        }
+        return;
+    }
     CtxState *s = ctxOf(ctx);
     // which vertex shaders draw in "3D": only the diagnosis key that hides one asks ([debug] level=1)
     if (g_dbg && !compute && g_in3D && s->st[ST_VS].sh) {

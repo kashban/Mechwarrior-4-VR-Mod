@@ -9,7 +9,10 @@ extern int g_rpMode;
 // the right eye's picture may be made from the left eye's draws (now, or later in this battle)
 static inline bool rpUsed() { return g_rpMode == RP_ON || g_rpMode == RP_AUTO; }
 extern volatile bool g_rpLive; // the left eye's pass runs, and each draw of it is made for the right eye too
-extern volatile LONG g_rpOwn;  // > 0: the calls that follow are the mod's own (not the game's)
+// > 0: the calls that follow are the mod's own (not the game's). A count of each thread's own: the VR runtime
+// draws on a thread of its own through the same hooked functions, and with one count for all it set the game's
+// thread's count wrong - a draw of the mod's own was taken for the game's then (v11.75: a yellow flicker).
+extern thread_local int g_rpOwn;
 // the mod's own work inside a hook: what it calls on the context is not the game's
 struct RpOwn {
     RpOwn() { ++g_rpOwn; }

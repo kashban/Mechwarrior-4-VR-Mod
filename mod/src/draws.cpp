@@ -523,6 +523,11 @@ template <int V> static void STDMETHODCALLTYPE HP_DispatchIndirect(ID3D11DeviceC
 template <int V>
 static void STDMETHODCALLTYPE HP_Upd(ID3D11DeviceContext *c, ID3D11Resource *r, UINT sub, const D3D11_BOX *box,
                                      const void *src, UINT rp, UINT dp) {
+    if (g_rpOwn) { // (the mod's own call, or one implementation calling another: see hpNested)
+        ((PFN_Update)g_tr[SL_UPD][V])(c, r, sub, box, src, rp, dp);
+        return;
+    }
+    RpOwn own;
     if (!ctxOf(c)->foreign) updateCommon(r, box, src);
     if ((void *)c == (void *)g_imm) rpUpdated(r, sub, box, src);
     if (g_cap) snapshot(r, src, box ? box->left : 0, box ? box->right - box->left : 0);
@@ -531,13 +536,20 @@ static void STDMETHODCALLTYPE HP_Upd(ID3D11DeviceContext *c, ID3D11Resource *r, 
 template <int V>
 static void STDMETHODCALLTYPE HP_Upd1(ID3D11DeviceContext *c, ID3D11Resource *r, UINT sub, const D3D11_BOX *box,
                                       const void *src, UINT rp, UINT dp, UINT fl) {
+    if (g_rpOwn) { // (the mod's own call, or one implementation calling another: see hpNested)
+        ((PFN_Update1)g_tr[SL_UPD1][V])(c, r, sub, box, src, rp, dp, fl);
+        return;
+    }
+    RpOwn own;
     if (!ctxOf(c)->foreign) updateCommon(r, box, src);
     if ((void *)c == (void *)g_imm) rpUpdated(r, sub, box, src);
     if (g_cap) snapshot(r, src, box ? box->left : 0, box ? box->right - box->left : 0);
     ((PFN_Update1)g_tr[SL_UPD1][V])(c, r, sub, box, src, rp, dp, fl);
 }
 
-// what the main camera's pass clears and copies, it clears and copies for the right eye too (replay.cpp)
+// What the main camera's pass clears and copies, it clears and copies for the right eye too (replay.cpp). The
+// right eye's call goes straight to an implementation, like every call of the mod's own; what that sets off in a
+// hook again is passed on and nothing else (hpNested).
 typedef void(STDMETHODCALLTYPE *PFN_ClearRtv)(ID3D11DeviceContext *, ID3D11RenderTargetView *, const FLOAT *);
 typedef void(STDMETHODCALLTYPE *PFN_ClearDsv)(ID3D11DeviceContext *, ID3D11DepthStencilView *, UINT, FLOAT, UINT8);
 typedef void(STDMETHODCALLTYPE *PFN_ClearUavU)(ID3D11DeviceContext *, ID3D11UnorderedAccessView *, const UINT *);
@@ -548,27 +560,52 @@ typedef void(STDMETHODCALLTYPE *PFN_CopyReg)(ID3D11DeviceContext *, ID3D11Resour
 typedef void(STDMETHODCALLTYPE *PFN_GenMips)(ID3D11DeviceContext *, ID3D11ShaderResourceView *);
 template <int V>
 static void STDMETHODCALLTYPE HP_ClearRtv(ID3D11DeviceContext *c, ID3D11RenderTargetView *v, const FLOAT *f) {
+    if (g_rpOwn) { // (the mod's own call, or one implementation calling another: see hpNested)
+        ((PFN_ClearRtv)g_tr[SL_CLRRTV][V])(c, v, f);
+        return;
+    }
+    RpOwn own;
     ((PFN_ClearRtv)g_tr[SL_CLRRTV][V])(c, v, f);
     if (ID3D11RenderTargetView *t = rpClearTwin(c, v)) ((PFN_ClearRtv)g_tr[SL_CLRRTV][V])(c, t, f);
 }
 template <int V>
 static void STDMETHODCALLTYPE HP_ClearDsv(ID3D11DeviceContext *c, ID3D11DepthStencilView *v, UINT fl, FLOAT d,
                                           UINT8 st) {
+    if (g_rpOwn) { // (the mod's own call, or one implementation calling another: see hpNested)
+        ((PFN_ClearDsv)g_tr[SL_CLRDSV][V])(c, v, fl, d, st);
+        return;
+    }
+    RpOwn own;
     ((PFN_ClearDsv)g_tr[SL_CLRDSV][V])(c, v, fl, d, st);
     if (ID3D11DepthStencilView *t = rpClearTwin(c, v)) ((PFN_ClearDsv)g_tr[SL_CLRDSV][V])(c, t, fl, d, st);
 }
 template <int V>
 static void STDMETHODCALLTYPE HP_ClearUavU(ID3D11DeviceContext *c, ID3D11UnorderedAccessView *v, const UINT *f) {
+    if (g_rpOwn) { // (the mod's own call, or one implementation calling another: see hpNested)
+        ((PFN_ClearUavU)g_tr[SL_CLRUAVU][V])(c, v, f);
+        return;
+    }
+    RpOwn own;
     ((PFN_ClearUavU)g_tr[SL_CLRUAVU][V])(c, v, f);
     if (ID3D11UnorderedAccessView *t = rpClearTwin(c, v)) ((PFN_ClearUavU)g_tr[SL_CLRUAVU][V])(c, t, f);
 }
 template <int V>
 static void STDMETHODCALLTYPE HP_ClearUavF(ID3D11DeviceContext *c, ID3D11UnorderedAccessView *v, const FLOAT *f) {
+    if (g_rpOwn) { // (the mod's own call, or one implementation calling another: see hpNested)
+        ((PFN_ClearUavF)g_tr[SL_CLRUAVF][V])(c, v, f);
+        return;
+    }
+    RpOwn own;
     ((PFN_ClearUavF)g_tr[SL_CLRUAVF][V])(c, v, f);
     if (ID3D11UnorderedAccessView *t = rpClearTwin(c, v)) ((PFN_ClearUavF)g_tr[SL_CLRUAVF][V])(c, t, f);
 }
 template <int V>
 static void STDMETHODCALLTYPE HP_CopyRes(ID3D11DeviceContext *c, ID3D11Resource *d, ID3D11Resource *sr) {
+    if (g_rpOwn) { // (the mod's own call, or one implementation calling another: see hpNested)
+        ((PFN_CopyRes)g_tr[SL_COPYRES][V])(c, d, sr);
+        return;
+    }
+    RpOwn own;
     ((PFN_CopyRes)g_tr[SL_COPYRES][V])(c, d, sr);
     ID3D11Resource *td, *ts;
     if (rpCopyTwins(c, d, sr, &td, &ts)) ((PFN_CopyRes)g_tr[SL_COPYRES][V])(c, td, ts);
@@ -576,11 +613,21 @@ static void STDMETHODCALLTYPE HP_CopyRes(ID3D11DeviceContext *c, ID3D11Resource 
 template <int V>
 static void STDMETHODCALLTYPE HP_CopyReg(ID3D11DeviceContext *c, ID3D11Resource *d, UINT ds, UINT x, UINT y, UINT z,
                                          ID3D11Resource *sr, UINT ss, const D3D11_BOX *b) {
+    if (g_rpOwn) { // (the mod's own call, or one implementation calling another: see hpNested)
+        ((PFN_CopyReg)g_tr[SL_COPYREG][V])(c, d, ds, x, y, z, sr, ss, b);
+        return;
+    }
+    RpOwn own;
     ((PFN_CopyReg)g_tr[SL_COPYREG][V])(c, d, ds, x, y, z, sr, ss, b);
     ID3D11Resource *td, *ts;
     if (rpCopyTwins(c, d, sr, &td, &ts)) ((PFN_CopyReg)g_tr[SL_COPYREG][V])(c, td, ds, x, y, z, ts, ss, b);
 }
 template <int V> static void STDMETHODCALLTYPE HP_GenMips(ID3D11DeviceContext *c, ID3D11ShaderResourceView *v) {
+    if (g_rpOwn) { // (the mod's own call, or one implementation calling another: see hpNested)
+        ((PFN_GenMips)g_tr[SL_GENMIPS][V])(c, v);
+        return;
+    }
+    RpOwn own;
     ((PFN_GenMips)g_tr[SL_GENMIPS][V])(c, v);
     if (ID3D11ShaderResourceView *t = rpMipsTwin(c, v)) ((PFN_GenMips)g_tr[SL_GENMIPS][V])(c, t);
 }

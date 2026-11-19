@@ -29,7 +29,7 @@
 
 int g_rpMode;
 volatile bool g_rpLive;
-volatile LONG g_rpOwn;
+thread_local int g_rpOwn;
 static bool g_rpBroken;   // something this unit cannot do was met: the game draws both eyes again
 static int g_rpSkip = -1; // the label depth a part made once a frame began at; -1: not in one
 static int g_rpEye = -1;  // the pass that is running
@@ -390,8 +390,8 @@ void rpUnmapping(ID3D11Resource *r, UINT sub) {
 }
 void rpUpdated(ID3D11Resource *r, UINT sub, const D3D11_BOX *box, const void *src) {
     (void)sub;
-    if (rpUsed() && !g_rpOwn && !box && src) rpViewWritten(r, src);
-    if (!g_rpDump || g_rpEye < 0 || g_rpOwn) return;
+    if (rpUsed() && !box && src) rpViewWritten(r, src);
+    if (!g_rpDump || g_rpEye < 0) return;
     UINT bytes;
     std::string what = "UpdateSubresource " + rpDescribe(r, &bytes);
     rpNote(what, box ? box->left : 0, box ? box->right : bytes);
@@ -467,12 +467,14 @@ static std::unordered_map<ID3D11Resource *, ID3D11Texture2D *> g_rpTwin; // (a r
 static std::unordered_map<ID3D11View *, ID3D11View *> g_rpTwinView;      // (a reference held on both)
 static std::unordered_map<ID3D11View *, unsigned> g_rpNoTwin; // views of textures without a twin, at g_rpTwinGen
 static unsigned g_rpTwinGen;
-static unsigned g_rpMiss; // this pass: something had no twin
+static bool g_rpInRight;                      // between rpRightBegin and rpRightEnd
+static std::unordered_set<void *> g_rpIsTwin; // the twins themselves
+static unsigned g_rpMiss;                     // this pass: something had no twin
 
 static void rpPurge() {
     for (auto &x : g_rpTwinView) x.first->Release(), x.second->Release();
     for (auto &x : g_rpTwin) x.first->Release(), x.second->Release();
-    g_rpTwinView.clear(), g_rpTwin.clear(), g_rpNoTwin.clear();
+    g_rpTwinView.clear(), g_rpTwin.clear(), g_rpNoTwin.clear(), g_rpIsTwin.clear();
     ++g_rpTwinGen;
 }
 // the twin of a texture; make: it is made when there is none (null: this kind of texture has none)
@@ -480,6 +482,15 @@ static ID3D11Texture2D *rpTwinRes(ID3D11Resource *r, bool make) {
     auto it = g_rpTwin.find(r);
     if (it != g_rpTwin.end()) return it->second;
     if (!make) return nullptr;
+    if (g_rpIsTwin.count(r)) { // (a twin's twin: the right eye's own targets were taken for the game's)
+        ++g_rpMiss;
+        static unsigned told;
+        if (told++ < 8)
+            logf("replay: frame %u: a twin was asked for a twin of its own - not made (in a right eye's draw %d, own "
+                 "%d, eye %d, live %d, under '%s')",
+                 g_frame, (int)g_rpInRight, g_rpOwn, g_rpEye, (int)g_rpLive, rpLabelPath().c_str());
+        return nullptr;
+    }
     D3D11_RESOURCE_DIMENSION dim;
     r->GetType(&dim);
     if (dim != D3D11_RESOURCE_DIMENSION_TEXTURE2D) return nullptr;
@@ -494,6 +505,7 @@ static ID3D11Texture2D *rpTwinRes(ID3D11Resource *r, bool make) {
     }
     r->AddRef();
     g_rpTwin[r] = t;
+    g_rpIsTwin.insert(t);
     ++g_rpTwinGen;
     if (g_rpTwin.size() <= 64 || g_dbg)
         logf("replay: twin %u of texture %p: %ux%u, %u levels, format %d, bind 0x%x", (unsigned)g_rpTwin.size(),
@@ -976,6 +988,18 @@ static void rpSetTargets(ID3D11DeviceContext *c, ID3D11RenderTargetView *const *
                                                        keep);
 }
 
+// does the context hold these targets? (Asked after each change of ours: a call it does not take would leave
+// the eye's targets with the game - every draw after it in the wrong picture.)
+static bool rpHolds(ID3D11DeviceContext *c, ID3D11RenderTargetView *rt0, ID3D11DepthStencilView *ds) {
+    ID3D11RenderTargetView *r = nullptr;
+    ID3D11DepthStencilView *d = nullptr;
+    c->OMGetRenderTargets(1, &r, &d);
+    bool ok = r == rt0 && d == ds;
+    if (r) r->Release();
+    if (d) d->Release();
+    return ok;
+}
+
 bool rpStereo(void *c) {
     if (!g_rpLive || c != (void *)g_imm || g_rpBroken) return false;
     if (g_rpSkip >= 0) ++g_rpStatSkip;
@@ -984,6 +1008,12 @@ bool rpStereo(void *c) {
 
 bool rpRightBegin(ID3D11DeviceContext *c, UINT instances) {
     g_rpInstances = instances;
+    if (g_rpInRight) {
+        static unsigned told;
+        if (told++ < 8)
+            logf("replay: frame %u: a right eye's draw begins inside another (own %d, under '%s')", g_frame, g_rpOwn,
+                 rpLabelPath().c_str());
+    }
     if (g_rpOmUavN > RP_OM_UAVS) { // (more views than a context has slots for: not a call this unit knows)
         ++g_rpMiss;
         return false;
@@ -1013,6 +1043,19 @@ bool rpRightBegin(ID3D11DeviceContext *c, UINT instances) {
         return false;
     }
     rpSetTargets(c, rt, ds);
+    if (!rpHolds(c, rt[0], ds)) { // not taken: the game's back, and this frame's right eye is the game's to draw
+        static unsigned told;
+        if (told++ < 6)
+            logf("replay: frame %u: the context did not take the right eye's targets (%u targets, %u views beside "
+                 "them from slot %u, under '%s')",
+                 g_frame, g_rpCurRtN, g_rpCurOmUavN, g_rpOmUavAt, rpLabelPath().c_str());
+        ORIG(PFN_OMSet, c, VT_Ctx_OMSetRenderTargets)(c, g_rpCurRtN, g_rpCurRt, g_rpCurDs);
+        if (g_rpCurOmUavN) rpSetTargets(c, g_rpCurRt, g_rpCurDs);
+        ++g_rpMiss;
+        rpDropTargets();
+        return false;
+    }
+    g_rpInRight = true;
     CtxState *s = ctxOf(c);
     g_rpSavedCbN = g_rpSavedSrvN = 0;
     g_rpDrawTwin = false;
@@ -1027,9 +1070,19 @@ bool rpRightBegin(ID3D11DeviceContext *c, UINT instances) {
     return true;
 }
 void rpRightEnd(ID3D11DeviceContext *c) {
+    g_rpInRight = false;
     if (g_rpTl) eyeTlRightPost(c);
     rpRestore(c);
     rpSetTargets(c, g_rpCurRt, g_rpCurDs);
+    if (!rpHolds(c, g_rpCurRt[0], g_rpCurDs)) { // not taken: without the views beside them, then
+        static unsigned told;
+        if (told++ < 6)
+            logf("replay: frame %u: the context did not take the game's targets back (%u targets, %u views beside "
+                 "them from slot %u, under '%s') - set without the views",
+                 g_frame, g_rpCurRtN, g_rpCurOmUavN, g_rpOmUavAt, rpLabelPath().c_str());
+        ORIG(PFN_OMSet, c, VT_Ctx_OMSetRenderTargets)(c, g_rpCurRtN, g_rpCurRt, g_rpCurDs);
+        ++g_rpMiss;
+    }
     rpDropTargets();
 }
 // A dispatch: again for the right eye only when it writes a texture that is an eye's own (has a twin). What
@@ -1257,7 +1310,8 @@ static void STDMETHODCALLTYPE R_CSSetUnorderedAccessViews(ID3D11DeviceContext *c
 // What the pass clears and copies, it clears and copies for the right eye too. (The runtime writes these
 // methods' vtable slots anew in every frame, as it does the draws': draws.cpp hooks them in Direct3D's code and
 // asks here what the right eye's call is.)
-static bool rpGameCall(void *c) { return rpStereo(c) && g_rpOwn == 0; }
+// (draws.cpp asks for a call of the game's alone: the mod's own calls and nested ones do not come here)
+static bool rpGameCall(void *c) { return rpStereo(c); }
 ID3D11RenderTargetView *rpClearTwin(void *c, ID3D11RenderTargetView *v) {
     if (!rpGameCall(c)) return nullptr;
     ID3D11RenderTargetView *t = rpTwinView(v, true);
