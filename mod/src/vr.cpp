@@ -674,6 +674,62 @@ static void fadeProbe(ID3D11DeviceContext *ctx, ID3D11Texture2D *hud) {
     }
 }
 
+// A band right across the HUD's image (a hint of the game's: core.h, mcWideBand): three columns of the image are
+// read back, a frame late and without waiting, like the sheet's points.
+static float g_wideBand[2];
+static unsigned g_wideFrame = ~0u; // the frame the band was last found in
+static void wideProbe(ID3D11DeviceContext *ctx, ID3D11Texture2D *hud) {
+    static ID3D11Texture2D *stage;
+    static UINT stageN, y0, n, H;
+    static bool pending;
+    static unsigned copyFrame;
+    static std::vector<uint8_t> a[3];
+    D3D11_TEXTURE2D_DESC d;
+    hud->GetDesc(&d);
+    int f = (int)d.Format;
+    if (d.SampleDesc.Count != 1 || !((f >= 27 && f <= 31) || (f >= 87 && f <= 88) || (f >= 90 && f <= 93))) return;
+    if (pending && stage) {
+        D3D11_MAPPED_SUBRESOURCE m;
+        if (SUCCEEDED(
+                ORIG(MechPFN_Map, ctx, VT_Ctx_Map)(ctx, stage, 0, D3D11_MAP_READ, D3D11_MAP_FLAG_DO_NOT_WAIT, &m)) &&
+            m.pData) {
+            for (int c = 0; c < 3; ++c) {
+                a[c].resize(n);
+                for (UINT i = 0; i < n; ++i) a[c][i] = ((const uint8_t *)m.pData)[(size_t)i * m.RowPitch + c * 4 + 3];
+            }
+            ORIG(MechPFN_Unmap, ctx, VT_Ctx_Unmap)(ctx, stage, 0);
+            int r0, r1;
+            if (g_frame - copyFrame <= 3 && H && mcWideBand(a[0].data(), a[1].data(), a[2].data(), (int)n, &r0, &r1)) {
+                if (g_wideFrame == ~0u || g_frame - g_wideFrame > 3)
+                    logf("hud: a band right across the picture (rows %u..%u of %u, frame %u) - shown in one piece, far",
+                         y0 + r0, y0 + r1, H, g_frame);
+                g_wideBand[0] = ((float)(y0 + r0) - 2) / H, g_wideBand[1] = ((float)(y0 + r1) + 2) / H;
+                g_wideFrame = g_frame;
+            }
+            pending = false;
+        }
+    }
+    if (pending) return;
+    const UINT top = (UINT)(g_vr.hudTop * d.Height), bottom = min((UINT)(g_vr.hudBottom * d.Height), d.Height);
+    if (bottom <= top + 16 || !g_hudW) return;
+    if (!stage || stageN != bottom - top) {
+        if (stage) stage->Release();
+        stage = nullptr;
+        D3D11_TEXTURE2D_DESC s = d;
+        s.Width = 3, s.Height = stageN = bottom - top, s.MipLevels = 1, s.ArraySize = 1;
+        s.Usage = D3D11_USAGE_STAGING, s.BindFlags = 0, s.CPUAccessFlags = D3D11_CPU_ACCESS_READ, s.MiscFlags = 0;
+        if (FAILED(g_dev->CreateTexture2D(&s, nullptr, &stage)) || !stage) return;
+    }
+    const float us[3] = {g_vr.hudLeft, 0.5f * (g_vr.hudLeft + g_vr.hudRight), g_vr.hudRight};
+    for (UINT c = 0; c < 3; ++c) {
+        UINT x = min((UINT)(us[c] * g_hudW), d.Width - 1);
+        D3D11_BOX b = {x, top, 0, x + 1, bottom, 1};
+        ctx->CopySubresourceRegion(stage, 0, c, 0, 0, hud, 0, &b);
+    }
+    y0 = top, n = bottom - top, H = d.Height;
+    pending = true, copyFrame = g_frame;
+}
+
 static XrSwapchain g_crossSc = XR_NULL_HANDLE;
 static std::vector<XrSwapchainImageD3D11KHR> g_crossImg;
 static UINT g_crossW, g_crossH, g_crossX, g_crossY;
@@ -1009,6 +1065,7 @@ void vrOnPresent(IDXGISwapChain *swap, int eye) {
         // is that menu then (a dark blue sheet), and the monitors keep what they showed when the battle stopped
         if (!g_fadeMenu && !(vrEscLately() && g_escOpens)) mw5HudCopy(ctx, g_hudTex);
     if (ctx && g_hudLayerOn && g_hudTex && g_hudDrawnFrame == g_frame) fadeProbe(ctx, g_hudTex);
+    if (ctx && g_hudLayerOn && g_hudTex && g_hudDrawnFrame == g_frame) wideProbe(ctx, g_hudTex);
     if (ctx && fs.shouldRender && g_hudLayerOn && g_hudTex && g_hudDrawnFrame == g_frame) {
         uint32_t idx = 0;
         XrSwapchainImageAcquireInfo ai = {XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO};
@@ -1188,6 +1245,8 @@ void vrOnPresent(IDXGISwapChain *swap, int eye) {
         }
         memcpy(hd.twist, g_vr.twist, sizeof hd.twist);
         hd.twistDv = g_vr.twistDv;
+        if (g_wideFrame != ~0u && g_frame - g_wideFrame <= 3 && !hd.nCam) // (not with a window open: its own cuts)
+            hd.wide[0] = g_wideBand[0], hd.wide[1] = g_wideBand[1];
         static McRects hq_;
         mcHudRects(hd, hq_);
         float(*rc)[5] = hq_.rc;

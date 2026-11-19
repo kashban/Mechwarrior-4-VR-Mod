@@ -1583,6 +1583,109 @@ static void testAutoLimits() {
 }
 
 // ---------------------------------------------------------------- the cockpit's sway from its place
+static void testBand() {
+    // the band: the rows where all three columns hold something, the longest run
+    unsigned char l[1024] = {}, m[1024] = {}, r[1024] = {};
+    int r0 = -1, r1 = -1;
+    CHECK(!mcWideBand(l, m, r, 1024, &r0, &r1) && r0 == -1 && r1 == -1);
+    for (int i = 100; i < 140; ++i) l[i] = m[i] = r[i] = MC_WIDE_ALPHA;
+    CHECK(mcWideBand(l, m, r, 1024, &r0, &r1) && r0 == 100 && r1 == 140);
+    // ... every one of the three is needed, and at least that much alpha
+    unsigned char *const cols[3] = {l, m, r};
+    for (unsigned char *c : cols) {
+        c[120] = MC_WIDE_ALPHA - 1;
+        CHECK(mcWideBand(l, m, r, 1024, &r0, &r1) && r0 == 100 && r1 == 120); // (the first of two runs as long)
+        c[119] = 0;
+        CHECK(mcWideBand(l, m, r, 1024, &r0, &r1) && r0 == 100 && r1 == 119);
+        c[118] = 0;
+        CHECK(mcWideBand(l, m, r, 1024, &r0, &r1) && r0 == 121 && r1 == 140);
+        c[118] = 255;
+        c[119] = c[120] = 255;
+        CHECK(mcWideBand(l, m, r, 1024, &r0, &r1) && r0 == 100 && r1 == 140);
+    }
+    // ... a longer run elsewhere wins; one column alone is nothing
+    for (int i = 500; i < 541; ++i) l[i] = m[i] = r[i] = 200;
+    for (int i = 700; i < 1000; ++i) m[i] = 255;
+    CHECK(mcWideBand(l, m, r, 1024, &r0, &r1) && r0 == 500 && r1 == 541);
+    // ... not a sliver, not a sheet: from a 256th of the rows to a fifth of them
+    memset(l, 0, sizeof l), memset(m, 0, sizeof m), memset(r, 0, sizeof r);
+    for (int i = 0; i < 3; ++i) l[i] = m[i] = r[i] = 255;
+    r0 = r1 = -1;
+    CHECK(!mcWideBand(l, m, r, 1024, &r0, &r1) && r0 == -1 && r1 == -1);
+    l[3] = m[3] = r[3] = 255;
+    CHECK(mcWideBand(l, m, r, 1024, &r0, &r1) && r0 == 0 && r1 == 4);
+    CHECK(!mcWideBand(l, m, r, 1025, &r0, &r1));
+    for (int i = 0; i < 204; ++i) l[i] = m[i] = r[i] = 255;
+    CHECK(mcWideBand(l, m, r, 1020, &r0, &r1) && r0 == 0 && r1 == 204);
+    CHECK(!mcWideBand(l, m, r, 1019, &r0, &r1));
+    l[1023] = m[1023] = r[1023] = 255; // (the last row is looked at)
+    for (int i = 1000; i < 1023; ++i) l[i] = m[i] = r[i] = 255;
+    memset(l, 0, 204), memset(m, 0, 204), memset(r, 0, 204);
+    CHECK(mcWideBand(l, m, r, 1024, &r0, &r1) && r0 == 1000 && r1 == 1024);
+
+    // ... one row of 256 is a band, at its place; rows beyond the count are not looked at
+    memset(l, 0, sizeof l), memset(m, 0, sizeof m), memset(r, 0, sizeof r);
+    l[0] = m[0] = r[0] = 255;
+    CHECK(mcWideBand(l, m, r, 256, &r0, &r1) && r0 == 0 && r1 == 1);
+    l[0] = 0, l[5] = m[5] = r[5] = 255;
+    CHECK(mcWideBand(l, m, r, 256, &r0, &r1) && r0 == 5 && r1 == 6);
+    for (int i = 990; i < 1006; ++i) l[i] = m[i] = r[i] = 255;
+    CHECK(mcWideBand(l, m, r, 1000, &r0, &r1) && r0 == 990 && r1 == 1000);
+
+    // taken out of the near frame's and the far parts, added as one far part
+    McRects q = {};
+    mcAdd(q, 0.25f, 0.125f, 0.75f, 0.75f, MC_FAR);      // the middle
+    mcAdd(q, 0, 0.125f, 0.25f, 0.75f, MC_NEAR);         // a column
+    mcAdd(q, 0, 0, 1, 0.125f, MC_NEAR);                 // the top strip: not met
+    mcAdd(q, 0.5f, 0.25f, 0.625f, 0.5f, MC_FAR_OPAQUE); // a window: left as it is
+    mcAdd(q, 0.375f, 0.25f, 0.5f, 0.5f, MC_FAR_SMALL);  // a moved part: left as it is
+    mcAdd(q, 0.75f, 0.25f, 1, 0.5f, (float)MC_GLASS);   // a part on the glass: left as it is
+    mcAdd(q, 0.75f, 0.3125f, 1, 0.75f, MC_NEAR);        // a part that begins in the band: nothing above
+    mcAdd(q, 0.75f, 0.125f, 1, 0.34375f, MC_NEAR);      // one that ends in it: nothing below
+    McRects before = q;
+    mcWideOut(q, 0.375f, 0.375f, 1.25f); // (empty: nothing happens)
+    CHECK(q.n == before.n && memcmp(&q, &before, sizeof q) == 0);
+    mcWideOut(q, 0.3125f, 0.375f, 1.25f);
+    CHECK(q.n == 12);
+    const float want[12][5] = {{0.25f, 0.125f, 0.75f, 0.3125f, MC_FAR},
+                               {0, 0.125f, 0.25f, 0.3125f, MC_NEAR},
+                               {0, 0, 1, 0.125f, MC_NEAR},
+                               {0.5f, 0.25f, 0.625f, 0.5f, MC_FAR_OPAQUE},
+                               {0.375f, 0.25f, 0.5f, 0.5f, MC_FAR_SMALL},
+                               {0.75f, 0.25f, 1, 0.5f, (float)MC_GLASS},
+                               {0.75f, 0.3125f, 1, 0.3125f, MC_NEAR},
+                               {0.75f, 0.125f, 1, 0.3125f, MC_NEAR},
+                               {0.25f, 0.375f, 0.75f, 0.75f, MC_FAR},
+                               {0, 0.375f, 0.25f, 0.75f, MC_NEAR},
+                               {0.75f, 0.375f, 1, 0.75f, MC_NEAR},
+                               {0, 0.3125f, 1.25f, 0.375f, MC_FAR}};
+    for (int i = 0; i < 12; ++i)
+        for (int k = 0; k < 5; ++k) CHECK(q.rc[i][k] == want[i][k]);
+    // a part that only touches the band is not met
+    q = {};
+    mcAdd(q, 0, 0.125f, 1, 0.25f, MC_NEAR);
+    mcAdd(q, 0, 0.5f, 1, 0.75f, MC_FAR);
+    const float stale[5] = {0, 0.125f, 1, 0.75f, MC_NEAR}; // (what lies behind the list's end is not a part)
+    memcpy(q.rc[2], stale, sizeof stale);
+    mcWideOut(q, 0.25f, 0.5f, 1);
+    CHECK(q.n == 3 && q.rc[0][3] == 0.25f && q.rc[1][1] == 0.5f && q.rc[2][1] == 0.25f && q.rc[2][3] == 0.5f);
+
+    // the HUD's parts with a band: as without, the band taken out; none: as ever
+    McHud h = {};
+    h.T = 0.125f, h.B = 0.75f, h.L = 0.25f, h.R = 0.75f, h.UR = 1;
+    McRects a = {}, b = {};
+    mcHudRects(h, a);
+    h.wide[0] = 0.3125f, h.wide[1] = 0.375f;
+    mcHudRects(h, b);
+    mcWideOut(a, 0.3125f, 0.375f, 1);
+    CHECK(a.n == b.n && a.n == 9 && memcmp(a.rc, b.rc, sizeof(float) * 5 * a.n) == 0);
+    // ... also where the parts are too many for the cross-hair's own
+    h.cross[0] = 0.4375f, h.cross[1] = 0.4375f, h.cross[2] = 0.5625f, h.cross[3] = 0.5625f;
+    mcHudRects(h, b, 9);
+    CHECK(b.n == a.n && memcmp(a.rc, b.rc, sizeof(float) * 5 * a.n) == 0);
+    mcHudRects(h, b);
+    CHECK(b.n == 13 && b.rc[12][4] == MC_FAR && b.rc[12][0] == 0 && b.rc[12][2] == 1);
+}
 static void testHold() {
     // a menu: nothing held, whatever the state was
     McHold h = {MC_HOLD_FADING, 7, 2, 5};
@@ -1682,7 +1785,7 @@ static void testShape() {
 
 int main() {
     testM4(), testM4Inv(), testProj(), testEyeStep(), testStereo(), testAuto(), testAutoLimits(), testShape(),
-        testHold();
+        testHold(), testBand();
     testHolds(), testTurnNorm(), testTurnFit(), testEyeInMesh(), testHudCross(), testHudGlass(), testGlassPose(),
         testGlassScale(), testGlassAim();
     testGridMark(), testGridPlace(), testGridTri(), testGridCells(), testGridFree(), testGridRim(), testGridFit();

@@ -407,6 +407,7 @@ struct McHud {
     int nGlass; // parts shown on the cockpit's glass (at most MC_GLASSES)
     float glass[MC_GLASSES][4];
     float cross[4]; // the cross-hair with what belongs to it, shown smaller about its middle (empty: as it is)
+    float wide[2];  // v from..to: a band right across the picture, shown in one piece (empty: none; mcWideBand)
 };
 
 // the point u v lies in the rectangle r (not on its edge)
@@ -516,10 +517,50 @@ static inline void mcHudRectsWith(const McHud &h, McRects &q, bool shrink) {
     }
 }
 
+// The game writes a hint now and then - white on a dark box, right across the picture: wider than the far
+// middle, its ends lay in the near frame's columns (or on the monitors), the box cut in three. Such a band is
+// found in the HUD image (vr.cpp reads three columns of it: at the middle's two edges and between them) and shown
+// in one piece, far: the rows where all three columns hold something, the longest run of them. Not a sliver
+// (below a 256th of the rows), and nothing that lies over much of the picture (above a fifth: a sheet).
+enum { MC_WIDE_ALPHA = 8 };
+static inline bool mcWideBand(const unsigned char *l, const unsigned char *m, const unsigned char *r, int n, int *r0,
+                              int *r1) {
+    int best, at, run;
+    best = at = run = 0;
+    for (int i = 0; i < n; ++i) {
+        const bool on = l[i] >= MC_WIDE_ALPHA && m[i] >= MC_WIDE_ALPHA && r[i] >= MC_WIDE_ALPHA;
+        run = on ? run + 1 : 0;
+        if (run > best) best = run, at = i - run + 1;
+    }
+    if (best * 256 < n || best * 5 > n) return false;
+    *r0 = at, *r1 = at + best;
+    return true;
+}
+// the band v0..v1 taken out of the near frame's and the far parts (what they have above and below it stays), and
+// added as one far part 0..UR wide. Windows, the parts on the glass and the moved ones are left as they are.
+static inline void mcWideOut(McRects &q, float v0, float v1, float UR) {
+    if (!(v1 > v0)) return;
+    const int n0 = q.n;
+    for (int i = 0; i < n0; ++i) {
+        float *r = q.rc[i];
+        if (r[4] != MC_NEAR && r[4] != MC_FAR) continue;
+        const float u0 = r[0], u1 = r[2], bottom = r[3], kind = r[4];
+        const float band[4] = {-HUGE_VALF, v0, HUGE_VALF, v1};
+        if (!mcMeet(band, u0, r[1], u1, bottom)) continue;
+        r[3] = fmaxf(v0, r[1]); // (nothing above the band: a part without height, which is not shown)
+        mcAdd(q, u0, v1, u1, bottom, kind);
+    }
+    mcAdd(q, 0, v0, UR, v1, MC_FAR);
+}
+
 // (the cross-hair's own part costs up to four more: left as it is where the runtime would not show them all)
 static inline void mcHudRects(const McHud &h, McRects &q, int shown = MC_SHOWN) {
     mcHudRectsWith(h, q, true);
-    if (q.n > shown) mcHudRectsWith(h, q, false);
+    mcWideOut(q, h.wide[0], h.wide[1], h.UR);
+    if (q.n > shown) {
+        mcHudRectsWith(h, q, false);
+        mcWideOut(q, h.wide[0], h.wide[1], h.UR);
+    }
 }
 
 // ---- where a part on the glass lies (vr.cpp, mw5.cpp) ----
