@@ -543,6 +543,19 @@ bool g_fadeMenu;                        // the sheet is a paused battle's (blue)
 unsigned g_sheetCleanFrame =
     ~0u;             // the frame whose HUD image holds the sheet and the menu alone (draws.cpp: hudSheetPost)
 static int g_fadePt; // the point showing the sheet alone
+// Esc was pressed a moment ago (asked once or more a frame). g_escOpens: no menu was up at that press - one comes
+static bool g_escOpens;
+static bool vrEscLately() {
+    static unsigned esc = ~0u;
+    static bool down;
+    bool now = (GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0;
+    if (now) {
+        if (!down) g_escOpens = !g_fadeMenu;
+        esc = g_frame;
+    }
+    down = now;
+    return esc != ~0u && g_frame - esc < 25;
+}
 static void fadeProbe(ID3D11DeviceContext *ctx, ID3D11Texture2D *hud) {
     D3D11_TEXTURE2D_DESC d;
     hud->GetDesc(&d);
@@ -931,7 +944,9 @@ void vrOnPresent(IDXGISwapChain *swap, int eye) {
     // the HUD drawn in this frame
     if (ctx && g_hudLayerOn && g_hudTex && g_hudDrawnFrame == g_frame) mw5HighlightDraw(ctx); // the chosen part's frame
     if (ctx && g_hudLayerOn && g_hudTex && g_hudDrawnFrame == g_frame)
-        mw5HudCopy(ctx, g_hudTex); // for the own cockpit's monitors
+        // for the own cockpit's monitors - not while a paused battle's menu is up or coming up: the HUD's image
+        // is that menu then (a dark blue sheet), and the monitors keep what they showed when the battle stopped
+        if (!g_fadeMenu && !(vrEscLately() && g_escOpens)) mw5HudCopy(ctx, g_hudTex);
     if (ctx && g_hudLayerOn && g_hudTex && g_hudDrawnFrame == g_frame) fadeProbe(ctx, g_hudTex);
     if (ctx && fs.shouldRender && g_hudLayerOn && g_hudTex && g_hudDrawnFrame == g_frame) {
         uint32_t idx = 0;
@@ -1134,9 +1149,7 @@ void vrOnPresent(IDXGISwapChain *swap, int eye) {
         { // Esc was pressed a moment ago: the menu of a paused battle comes up. Its sheet fades in from nothing, and
             // until it can be told (some frames) the menu's lines stood small in the far middle with the cross-hair, in
             // wrong colours. No HUD for those moments; without a menu after them it is there again.
-            static unsigned esc = ~0u;
-            if (GetAsyncKeyState(VK_ESCAPE) & 0x8000) esc = g_frame;
-            if (esc != ~0u && g_frame - esc < 25 && !g_fadeMenu && !(g_fadeA > 0)) nr = 0;
+            if (vrEscLately() && !g_fadeMenu && !(g_fadeA > 0)) nr = 0;
         }
         bool crossNow = g_crossShown && g_crossSc != XR_NULL_HANDLE && nr > 0 && !(g_fadeA > 0) && !g_fadeMenu;
         for (int i = 0; i < nr; ++i) {
