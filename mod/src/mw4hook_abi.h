@@ -39,6 +39,8 @@ enum : uint32_t {
     HK_AT_GETCURSORPOS = 0xbb953, // mov eax, [HK_PTR_GETCURSORPOS]
     HK_AT_CLIPCURSOR = 0xbc0fd,   // mov eax, [HK_PTR_CLIPCURSOR]
     HK_AT_DRAWSHAPE = 0x2834c,    // call [HK_PTR_DRAWSHAPE]
+    HK_AT_FOG = 0x275ee,          // movups [HK_FOG], xmm0 (the deferred view keeps what it last told of the fog)
+    HK_FOG = 0x43c8c8,            // 5 floats; [3] the fog's start, [4] its end (m; both 0: no fog)
 };
 // --- mw4hook.dll: shaders (hashes of their bytecode) ---
 static const uint64_t HK_VS_TL = 0xad8cee09478ddb12ull;       // the CPU path's screen-space vertex shader

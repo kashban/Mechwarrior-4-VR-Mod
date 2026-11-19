@@ -1724,6 +1724,19 @@ static void testBand() {
     mcHudRects(h, b);
     CHECK(b.n == 13 && b.rc[12][4] == MC_FAR && b.rc[12][0] == 0 && b.rc[12][2] == 1);
 }
+static void testFogCut() {
+    // to a sixteenth beyond the fog's end
+    CHECK(mcFogCut(195, 910, 4000) == 966.875f);
+    CHECK(mcFogCut(0, 1024, 4000) == 1088);
+    // not where the far plane is as near already, and never farther than it
+    CHECK(mcFogCut(0, 1024, 1088) == 0 && mcFogCut(0, 1024, 1089) == 1088 && mcFogCut(0, 1024, 500) == 0);
+    // no fog (mw4hook gives 0, 0), or what is no fog's values
+    CHECK(mcFogCut(0, 0, 4000) == 0);
+    CHECK(mcFogCut(-1, 1024, 4000) == 0 && mcFogCut(1024, 1024, 4000) == 0 && mcFogCut(1025, 1024, 4000) == 0);
+    CHECK(mcFogCut(0, MC_FOG_LEAST, 4000) == 68 && mcFogCut(0, MC_FOG_LEAST - 1, 4000) == 0);
+    CHECK(mcFogCut(8, 16, 4000) == 0 && mcFogCut(NAN, 1024, 4000) == 0 && mcFogCut(0, NAN, 4000) == 0);
+    CHECK(mcFogCut(0, 1024, NAN) == 0);
+}
 static void testHold() {
     // a menu: nothing held, whatever the state was
     McHold h = {MC_HOLD_FADING, 7, 2, 5};
@@ -1823,7 +1836,7 @@ static void testShape() {
 
 int main() {
     testM4(), testM4Inv(), testProj(), testEyeStep(), testStereo(), testAuto(), testAutoLimits(), testAutoChange(),
-        testShape(), testHold(), testBand();
+        testShape(), testHold(), testBand(), testFogCut();
     testHolds(), testTurnNorm(), testTurnFit(), testEyeInMesh(), testHudCross(), testHudGlass(), testGlassPose(),
         testGlassScale(), testGlassAim();
     testGridMark(), testGridPlace(), testGridTri(), testGridCells(), testGridFree(), testGridRim(), testGridFit();

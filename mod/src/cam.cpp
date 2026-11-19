@@ -260,6 +260,36 @@ static void camLocalIni() {
 // the mech's own view; what is walked and culled with them while the camera is drawn (trees, tiles) then
 // vanished where the head looked past the torso's view. Before each eye's Draw they are made anew from that
 // eye's matrix, a little wider than the headset sees; after it the game's are back.
+// The far plane pulled in to where the map's fog is whole (core.h: mcFogCut; [vr] fog_cull=0: not). The fog's
+// distances are mw4hook's: its deferred view keeps what it last told of them.
+static float camFogCut(float farD) {
+    static int on = -1;
+    static const float *fog;
+    static float told = -1;
+    if (on < 0) {
+        on = GetPrivateProfileIntW(L"vr", L"fog_cull", 1, (g_dir + L"mw4vr.ini").c_str()) != 0;
+        uint8_t *base = hkBase();
+        uint8_t at[7] = {};
+        if (on && base && camRead(base + HK_AT_FOG, at, sizeof at) && at[0] == 0x0F && at[1] == 0x11 && at[2] == 0x05 &&
+            *(uint32_t *)(at + 3) == (uint32_t)(uintptr_t)(base + HK_FOG))
+            fog = (const float *)(base + HK_FOG);
+        else if (on)
+            logf("cam: mw4hook's fog distances are not where they were - the far plane stays where it is");
+    }
+    float v[5];
+    if (!fog || !camRead(fog, v, sizeof v)) return 0;
+    const float cut = mcFogCut(v[3], v[4], farD);
+    if (cut != told) {
+        told = cut;
+        if (cut > 0)
+            logf("cam: the fog is whole at %.0f m - nothing is drawn beyond %.0f m (the far plane: %.0f m)", v[4], cut,
+                 farD);
+        else
+            logf("cam: no fog that ends before the far plane (%.0f..%.0f m, far %.0f m) - drawn as far as that", v[3],
+                 v[4], farD);
+    }
+    return cut;
+}
 static float g_camPlanesSaved[24];
 static bool g_camPlanesIn;
 static void camPlanesWrite(uint8_t *cam, const float *base, const float *out) {
@@ -272,6 +302,7 @@ static void camPlanesWrite(uint8_t *cam, const float *base, const float *out) {
             logf("cam: the frustum planes at +0x1ac are not as expected (%.3f %.3f) - left alone", fr.d0, fr.d1);
         return;
     }
+    if (float cut = camFogCut(fr.farD)) fr.planes[3] -= fr.farD - cut;
     if (!g_camPlanesIn) memcpy(g_camPlanesSaved, pl, sizeof g_camPlanesSaved);
     g_camPlanesIn = true;
     memcpy(pl, fr.planes, sizeof fr.planes);

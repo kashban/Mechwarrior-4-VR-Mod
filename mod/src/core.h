@@ -317,6 +317,19 @@ static inline bool mcFrustumPlanes(const float *pl, const float *base, const flo
     return true;
 }
 
+// How far the camera's far plane - the one the game culls with - is pulled in (cam.cpp): to where the map's fog
+// is whole, and a little beyond. What lies farther is drawn in the fog's colour alone, and mw4hook draws far
+// (far_scale: four times the game's kilometre) - with nothing to see of it, three quarters of the processor's
+// time for a frame went into what the fog hides (Tharkad: 53 pictures a second, 89 without). 0: not pulled in -
+// no fog, values that are none, or the fog ends no nearer than the far plane.
+static const float MC_FOG_BEYOND = 1.0625f; // the plane lies this much of the fog's end away
+static const float MC_FOG_LEAST = 64;       // a fog's end nearer than this (m) is not believed
+static inline float mcFogCut(float fogStart, float fogEnd, float farD) {
+    if (!(fogStart >= 0 && fogEnd > fogStart && fogEnd >= MC_FOG_LEAST)) return 0;
+    const float cut = fogEnd * MC_FOG_BEYOND;
+    return cut < farD ? cut : 0;
+}
+
 // ---- the wide HUD (hud.cpp) ----
 
 // [vr] hud_extra_width as read: 1 (not wider) for anything outside 1..1.3

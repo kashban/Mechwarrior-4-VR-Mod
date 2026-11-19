@@ -16,6 +16,9 @@ double_draw=1
 ; of the two is faster where the battle is. Only with double_draw=1. New in v11.73: off until you have tried
 ; it. (8, 9: diagnosis - a file mw4vr_replay.txt, see mod/src/replay.cpp.) Read at the start
 replay_right=0
+; 1 = nothing is drawn beyond the map's fog (what lies there has the fog's colour alone; mw4hook's far_scale
+; draws four kilometres far, most of it unseen - up to twice the pictures a second); 0 = all of it
+fog_cull=1
 ; 1 = a battle's picture stays dark until the new terrain, grass and trees are there (two or three seconds),
 ; then it comes up; 0 = shown from the first frame, the old terrain first. Read at the start
 load_hold=1

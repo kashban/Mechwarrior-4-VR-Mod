@@ -121,6 +121,13 @@ a map that already filled the card's time (Jungle - Heavy: dense plants, drawn o
 order costs it about 2.5 ms a frame. Changing the targets alone, with nothing drawn for the right eye, costs
 nothing; what exactly the card loses was not found.
 
+**Nothing is drawn beyond the fog** (v11.84; `[vr] fog_cull=1`, `mcFogCut` in `mod/src/core.h`). mw4hook draws
+four kilometres far (`far_scale=4.0`); a map's fog is whole at about one. What lies beyond has the fog's colour
+alone, and drawing it took most of the processor's time for a frame. The far plane the game culls with is pulled
+in to a sixteenth beyond the fog's end (the distances are read from mw4hook); the projection stays as it is.
+Measured, looking ahead from the start: Tharkad 53 -> 89 pictures a second, Eaton - Bandit Hideaway at night
+37 -> 63, Styk 72 -> 79; the pictures compared on seven maps show no difference.
+
 **`replay_right=2`: whichever is faster** (v11.74; `mcAutoStep` in `mod/src/core.h`). Which of the two a frame
 waits for is told by the system's `Present`: it waits long when the graphics card is behind, hardly when the
 processor is. A battle's frames are watched 45 at a time. When they are slower than the headset's rate and the
