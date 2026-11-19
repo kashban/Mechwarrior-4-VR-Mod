@@ -21,10 +21,8 @@ void rpReadIni();
 // the context's methods no other unit hooks
 int rpHookContext(ID3D11DeviceContext *ctx);
 
-// what the game binds (hooks.cpp, draws.cpp follow the calls)
-void rpSrvSet(int stage, UINT start, UINT n, ID3D11ShaderResourceView *const *v);
-void rpOmSet(UINT n, ID3D11RenderTargetView *const *rtv, ID3D11DepthStencilView *dsv, bool uavs, UINT us, UINT un,
-             ID3D11UnorderedAccessView *const *uav);
+// draws.cpp: the game set its targets - with unordered-access views beside them from slot start (n: 0 = none)
+void rpOmUavs(UINT start, UINT n);
 // what the game writes
 void rpCbData(ID3D11Resource *r, const void *p, UINT sz);
 void rpMapped(ID3D11Resource *r, UINT sub, D3D11_MAP t, const D3D11_MAPPED_SUBRESOURCE *m);
@@ -60,6 +58,7 @@ void rpRightEnd(ID3D11DeviceContext *c);
 bool rpRightBeginCs(ID3D11DeviceContext *c);
 void rpRightEndCs(ID3D11DeviceContext *c);
 void rpTlMatrices(const float *kNear, bool nearOn, float *out32);
+void rpTlSeen(); // a CPU-path draw of the game runs our shader
 // draws.cpp: the game clears or copies - the right eye's call (null, false: there is none)
 ID3D11RenderTargetView *rpClearTwin(void *c, ID3D11RenderTargetView *v);
 ID3D11DepthStencilView *rpClearTwin(void *c, ID3D11DepthStencilView *v);

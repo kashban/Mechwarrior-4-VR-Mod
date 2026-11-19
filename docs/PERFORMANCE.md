@@ -131,6 +131,11 @@ eyes. Measured: Tharkad 51 pictures a second (the draws repeated from the second
 (never left the game's own way), Storm Patrol 55, Merc Alley 90. `mw4vr.log` tells each trial and its end.
 A trial that brings nothing is a second of the slower way.
 
+v11.75 mends what a first test in the headset found in v11.73 and v11.74: on a map where the game frees a
+texture that Direct3D had unbound by itself, the mod went on with the dead pointer (wrong pictures, then a
+crash); the plants were drawn for the right eye where the left eye sees them (their matrix lies in a buffer of
+its own); and a draw of the mod's own cockpit could set off a second "right eye's draw" inside the first.
+
 The switch is off by default until it has been seen in a headset.
 
 What was checked: the right eye's constants against what mw4hook itself writes for that eye (`replay_right=2`

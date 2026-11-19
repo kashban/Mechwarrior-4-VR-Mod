@@ -36,38 +36,7 @@ static int g_rpEye = -1;  // the pass that is running
 
 void rpReadIni() { g_rpMode = GetPrivateProfileIntW(L"vr", L"replay_right", 0, (g_dir + L"mw4vr.ini").c_str()); }
 
-// ---------------------------------------------------------------------------------------------
-// what the game has bound on the immediate context (beside what state.cpp follows)
-
 enum { RP_SRVS = 128, RP_UAVS = 8, RP_RTS = 8 };
-static ID3D11ShaderResourceView *g_rpSrv[ST_N][RP_SRVS];
-static ID3D11UnorderedAccessView *g_rpCsUav[RP_UAVS];
-static ID3D11RenderTargetView *g_rpRtv[RP_RTS];
-static ID3D11DepthStencilView *g_rpDsv;
-static UINT g_rpRtvN;
-static ID3D11UnorderedAccessView *g_rpOmUav[RP_UAVS];
-static UINT g_rpOmUavStart, g_rpOmUavN;
-
-void rpSrvSet(int stage, UINT start, UINT n, ID3D11ShaderResourceView *const *v) {
-    if (g_rpOwn) return;
-    for (UINT i = 0; i < n && start + i < RP_SRVS; ++i) g_rpSrv[stage][start + i] = v ? v[i] : nullptr;
-}
-void rpOmSet(UINT n, ID3D11RenderTargetView *const *rtv, ID3D11DepthStencilView *dsv, bool uavs, UINT us, UINT un,
-             ID3D11UnorderedAccessView *const *uav) {
-    if (g_rpOwn) return;
-    if (n != D3D11_KEEP_RENDER_TARGETS_AND_DEPTH_STENCIL) {
-        g_rpRtvN = n < RP_RTS ? n : RP_RTS;
-        for (UINT i = 0; i < RP_RTS; ++i) g_rpRtv[i] = i < g_rpRtvN && rtv ? rtv[i] : nullptr;
-        g_rpDsv = dsv;
-    }
-    if (!uavs) {
-        g_rpOmUavN = 0;
-    } else if (un != D3D11_KEEP_UNORDERED_ACCESS_VIEWS) {
-        g_rpOmUavStart = us;
-        g_rpOmUavN = un < RP_UAVS ? un : RP_UAVS;
-        for (UINT i = 0; i < g_rpOmUavN; ++i) g_rpOmUav[i] = uav ? uav[i] : nullptr;
-    }
-}
 
 // ---------------------------------------------------------------------------------------------
 // this frame's matrices (core.h has the arithmetic)
@@ -368,7 +337,7 @@ static void rpCompare(void *b, const uint8_t *right, UINT sz) {
 
 // hooks.cpp: the game wrote a constant buffer anew (all of it)
 void rpCbData(ID3D11Resource *r, const void *p, UINT sz) {
-    if (!g_rpMode || !p || !sz || sz > 8192 || g_rpOwn) return;
+    if (!g_rpMode || !p || !sz || sz > 8192) return;
     if (rpUsed()) {
         RpCb &c = g_rpCb[r];
         c.d.assign((const uint8_t *)p, (const uint8_t *)p + sz);
@@ -382,6 +351,7 @@ void rpCbData(ID3D11Resource *r, const void *p, UINT sz) {
     }
 }
 
+static void rpViewWritten(ID3D11Resource *r, const void *src);
 void rpMapped(ID3D11Resource *r, UINT sub, D3D11_MAP t, const D3D11_MAPPED_SUBRESOURCE *m) {
     if (!g_rpDump || g_rpEye < 0 || g_rpOwn || !m) return;
     g_rpMaps.push_back({r, sub, t, m->pData});
@@ -419,7 +389,8 @@ void rpUnmapping(ID3D11Resource *r, UINT sub) {
     }
 }
 void rpUpdated(ID3D11Resource *r, UINT sub, const D3D11_BOX *box, const void *src) {
-    (void)sub, (void)src;
+    (void)sub;
+    if (rpUsed() && !g_rpOwn && !box && src) rpViewWritten(r, src);
     if (!g_rpDump || g_rpEye < 0 || g_rpOwn) return;
     UINT bytes;
     std::string what = "UpdateSubresource " + rpDescribe(r, &bytes);
@@ -616,6 +587,14 @@ static std::unordered_map<const ShaderInfo *, int>
     g_rpInstBase;          // where a shader's g_mlrInstBase lies: slot * 65536 + offset; -1: nowhere
 static UINT g_rpInstances; // the draw in hand: its instances (0: not known)
 static unsigned g_rpStatRight, g_rpStatCb, g_rpStatRing, g_rpStatDisp; // this frame's right-eye work
+static unsigned g_rpStatPlain;                // ... its draws that got nothing of the right eye's own (but the targets)
+static uint64_t g_rpPlainVs, g_rpPlainPs;     // the first of them
+static unsigned g_rpStatNone, g_rpStatTl;     // draws without a target; CPU-path draws made for the right eye
+static unsigned g_rpStatTlLeft, g_rpStatSkip; // CPU-path draws of the left eye; draws under a once-a-frame label
+void rpTlSeen() {
+    if (g_rpLive) ++g_rpStatTlLeft;
+}
+static bool g_rpDrawTwin; // the draw in hand got something of the right eye's own (a buffer, the instances)
 
 typedef void(STDMETHODCALLTYPE *RPT_SetSrv)(ID3D11DeviceContext *, UINT, UINT, ID3D11ShaderResourceView *const *);
 typedef void(STDMETHODCALLTYPE *RPT_SetUav)(ID3D11DeviceContext *, UINT, UINT, ID3D11UnorderedAccessView *const *,
@@ -638,7 +617,7 @@ static void rpSetCb(ID3D11DeviceContext *c, int st, UINT slot, ID3D11Buffer *b) 
 
 // hooks.cpp: the game has mapped a buffer. true: its instances' buffer, and the memory it gets is ours
 bool rpRingMap(ID3D11DeviceContext *c, ID3D11Resource *r, D3D11_MAP t, D3D11_MAPPED_SUBRESOURCE *m) {
-    if (!rpUsed() || g_rpOwn || g_rpRing.empty()) return false;
+    if (!rpUsed() || g_rpRing.empty()) return false;
     auto it = g_rpRing.find(r);
     if (it == g_rpRing.end() || it->second.bad) return false;
     RpRing &ring = it->second;
@@ -657,6 +636,66 @@ bool rpRingUnmap(ID3D11Resource *r) {
     it->second.mapped = false;
     return true;
 }
+// The clutter (grass, plants) has its matrices into clip space - this frame's and the last one's - in a
+// structured buffer of one record (HK_RP_CLUTTER_VIEW_BYTES) that the game writes with UpdateSubresource: its
+// vertex shader reads no constant buffer for them. The right eye's draws read a twin with that eye's matrices.
+// (v11.73 and v11.74 left it out: the right eye saw the plants where the left eye sees them.)
+struct RpView {
+    float d[HK_RP_CLUTTER_VIEW_BYTES / 4] = {};
+    unsigned ver = 0, twinVer = ~0u, twinFrame = ~0u;
+    bool is = false; // (false: a buffer looked at and found to be another kind)
+    ID3D11Buffer *twin = nullptr;
+    ID3D11ShaderResourceView *srv = nullptr;
+};
+static std::unordered_map<void *, RpView> g_rpView;
+// the game writes a buffer anew, all of it
+static void rpViewWritten(ID3D11Resource *r, const void *src) {
+    auto it = g_rpView.find(r);
+    if (it == g_rpView.end()) {
+        RpView v;
+        D3D11_RESOURCE_DIMENSION dim;
+        r->GetType(&dim);
+        if (dim == D3D11_RESOURCE_DIMENSION_BUFFER) {
+            D3D11_BUFFER_DESC d;
+            ((ID3D11Buffer *)r)->GetDesc(&d);
+            v.is = (d.MiscFlags & D3D11_RESOURCE_MISC_BUFFER_STRUCTURED) && d.ByteWidth == HK_RP_CLUTTER_VIEW_BYTES &&
+                   d.StructureByteStride == HK_RP_CLUTTER_VIEW_BYTES && (d.BindFlags & D3D11_BIND_SHADER_RESOURCE);
+        }
+        it = g_rpView.emplace(r, v).first;
+    }
+    if (!it->second.is) return;
+    memcpy(it->second.d, src, sizeof it->second.d);
+    ++it->second.ver;
+}
+// the twin's view for such a buffer behind a vertex shader's resource slot; null: it is none
+static ID3D11ShaderResourceView *rpViewSrv(ID3D11DeviceContext *c, void *buf) {
+    auto it = g_rpView.find(buf);
+    if (it == g_rpView.end() || !it->second.is) return nullptr;
+    RpView &v = it->second;
+    if (!v.twin) {
+        D3D11_BUFFER_DESC n = {HK_RP_CLUTTER_VIEW_BYTES,
+                               D3D11_USAGE_DEFAULT,
+                               D3D11_BIND_SHADER_RESOURCE,
+                               0,
+                               D3D11_RESOURCE_MISC_BUFFER_STRUCTURED,
+                               HK_RP_CLUTTER_VIEW_BYTES};
+        if (FAILED(ORIG(PFN_CreateBuffer, g_dev, VT_Dev_CreateBuffer)(g_dev, &n, nullptr, &v.twin)) ||
+            FAILED(g_dev->CreateShaderResourceView(v.twin, nullptr, &v.srv))) {
+            ++g_rpMiss;
+            return nullptr;
+        }
+        logf("replay: the clutter's view %p has a twin", buf);
+    }
+    if (v.twinVer != v.ver || v.twinFrame != g_frame) {
+        float o[HK_RP_CLUTTER_VIEW_BYTES / 4];
+        mcM4MulF(g_rpKcF, v.d, o);
+        mcM4MulF(g_rpKcF, v.d + 16, o + 16);
+        c->UpdateSubresource(v.twin, 0, nullptr, o, 0, 0); // (our own: rpUpdated leaves it alone)
+        v.twinVer = v.ver, v.twinFrame = g_frame;
+    }
+    return v.srv;
+}
+
 // the first instance's record of the draw in hand, as the vertex shader is told it; false: not known
 static bool rpInstBase(CtxState *s, UINT *base) {
     const ShaderInfo *sh = s->st[ST_VS].sh;
@@ -679,7 +718,7 @@ static bool rpInstBase(CtxState *s, UINT *base) {
 // draws.cpp, before any draw of the game's: the records it reads of an instances' buffer the game writes into
 // our memory go into the game's buffer. instances: how many the draw has (0: not known - all of the buffer)
 void rpRingFeed(ID3D11DeviceContext *c, UINT instances) {
-    if (g_rpRing.empty() || g_rpOwn != 1 || (void *)c != (void *)g_imm) return;
+    if (g_rpRing.empty() || (void *)c != (void *)g_imm) return;
     CtxState *s = ctxOf(c);
     const ShaderInfo *sh = s->st[ST_VS].sh;
     if (!sh) return;
@@ -789,11 +828,15 @@ static void rpRightCbs(ID3D11DeviceContext *c, CtxState *s, int st) {
     ShaderInfo *sh = s->st[st].sh;
     if (!sh) return;
     for (const CBInfo &cb : sh->cbs) {
-        if (cb.slot >= CB_SLOTS || s->st[st].cbOff[cb.slot]) continue;
+        if (cb.slot >= CB_SLOTS) continue;
         void *b = s->st[st].cb[cb.slot];
         if (!b) continue;
         const RpPlan &plan = rpPlanOf(cb);
         if (plan.vars.empty()) continue;
+        if (s->st[st].cbOff[cb.slot]) { // a part of a larger buffer: what the game wrote there is not known
+            ++g_rpMiss;
+            continue;
+        }
         RpCb &x = g_rpCb[b];
         if (x.d.size() < cb.size) { // never seen written: nothing to work from
             ++g_rpMiss;
@@ -833,18 +876,68 @@ static void rpRightCbs(ID3D11DeviceContext *c, CtxState *s, int st) {
         if (g_rpSavedCbN < (int)(sizeof g_rpSavedCb / sizeof *g_rpSavedCb)) {
             g_rpSavedCb[g_rpSavedCbN++] = {st, cb.slot, b};
             rpSetCb(c, st, cb.slot, x.twin);
+            g_rpDrawTwin = true;
         }
     }
+}
+// What the game has bound is asked of the context when it is needed, and held (a reference each) until it is
+// put back. (v11.73 kept a book of the game's calls instead. Direct3D unbinds a texture by itself when it
+// becomes a target, and the game may free it then: the book's entry was a dead pointer, and on a map where that
+// happens the pictures went wrong and the game crashed.)
+static ID3D11ShaderResourceView *g_rpGot[ST_N][RP_SRVS];
+static UINT g_rpGotLo[ST_N], g_rpGotN[ST_N];
+static ID3D11RenderTargetView *g_rpCurRt[RP_RTS];
+static ID3D11DepthStencilView *g_rpCurDs;
+static UINT g_rpCurRtN;
+static ID3D11UnorderedAccessView *g_rpCurUav[RP_UAVS];
+// mw4hook binds unordered-access views beside its targets (OMSetRenderTargetsAndUnorderedAccessViews). Which
+// slots is taken from its call (draws.cpp tells: rpOmUavs) - a context is not asked "which slots" -, the views
+// themselves from the context. They go with the right eye's draw as they are, and are put back after it.
+enum { RP_OM_UAVS = 64 };
+static UINT g_rpOmUavAt, g_rpOmUavN; // the game's last call: from slot, so many (0: none)
+static ID3D11UnorderedAccessView *g_rpCurOmUav[RP_OM_UAVS];
+static UINT g_rpCurOmUavN;
+void rpOmUavs(UINT start, UINT n) { g_rpOmUavAt = start, g_rpOmUavN = n; }
+
+static void rpGetSrvs(ID3D11DeviceContext *c, int st, UINT lo, UINT n, ID3D11ShaderResourceView **v) {
+    if (st == ST_VS)
+        c->VSGetShaderResources(lo, n, v);
+    else if (st == ST_PS)
+        c->PSGetShaderResources(lo, n, v);
+    else
+        c->CSGetShaderResources(lo, n, v);
+}
+// the buffer behind a view (not held); null: a texture
+static void *rpViewBuffer(ID3D11ShaderResourceView *v) {
+    ID3D11Resource *r = nullptr;
+    v->GetResource(&r);
+    if (!r) return nullptr;
+    D3D11_RESOURCE_DIMENSION dim;
+    r->GetType(&dim);
+    r->Release();
+    return dim == D3D11_RESOURCE_DIMENSION_BUFFER ? r : nullptr;
 }
 // the stage's textures that have a twin, and (vertex shader) the instances' buffer
 static void rpRightSrvs(ID3D11DeviceContext *c, CtxState *s, int st) {
     ShaderInfo *sh = s->st[st].sh;
+    g_rpGotN[st] = 0;
     if (!sh) return;
+    int lo = RP_SRVS, hi = -1;
+    for (int slot : sh->srvSlots)
+        if (slot >= 0 && slot < RP_SRVS) lo = min(lo, slot), hi = max(hi, slot);
+    if (hi < 0) return;
+    g_rpGotLo[st] = (UINT)lo, g_rpGotN[st] = (UINT)(hi - lo + 1);
+    rpGetSrvs(c, st, g_rpGotLo[st], g_rpGotN[st], g_rpGot[st]);
     for (int slot : sh->srvSlots) {
         if (slot < 0 || slot >= RP_SRVS) continue;
-        ID3D11ShaderResourceView *v = g_rpSrv[st][slot], *t = nullptr;
+        ID3D11ShaderResourceView *v = g_rpGot[st][slot - lo], *t = nullptr;
         if (!v) continue;
-        if (st == ST_VS && slot < 64 && s->st[ST_VS].srvBuf[slot]) t = rpRingSrv(c, s, s->st[ST_VS].srvBuf[slot]);
+        if (st == ST_VS) {
+            void *buf = rpViewBuffer(v);
+            if (buf) t = rpViewSrv(c, buf);
+            if (buf && !t) t = rpRingSrv(c, s, buf);
+            if (t) g_rpDrawTwin = true;
+        }
         if (!t) t = rpTwinView(v, false);
         if (t == v || g_rpSavedSrvN >= (int)(sizeof g_rpSavedSrv / sizeof *g_rpSavedSrv)) continue;
         g_rpSavedSrv[g_rpSavedSrvN++] = {st, (UINT)slot, v};
@@ -857,60 +950,103 @@ static void rpRestore(ID3D11DeviceContext *c) {
     for (int i = 0; i < g_rpSavedSrvN; ++i)
         rpSetSrv(c, g_rpSavedSrv[i].stage, g_rpSavedSrv[i].slot, (ID3D11ShaderResourceView *)g_rpSavedSrv[i].was);
     g_rpSavedCbN = g_rpSavedSrvN = 0;
+    for (int st = 0; st < ST_N; ++st) {
+        for (UINT i = 0; i < g_rpGotN[st]; ++i)
+            if (g_rpGot[st][i]) g_rpGot[st][i]->Release();
+        g_rpGotN[st] = 0;
+    }
+}
+static void rpDropTargets() {
+    for (auto &v : g_rpCurRt)
+        if (v) v->Release(), v = nullptr;
+    if (g_rpCurDs) g_rpCurDs->Release(), g_rpCurDs = nullptr;
+    for (UINT i = 0; i < g_rpCurOmUavN; ++i)
+        if (g_rpCurOmUav[i]) g_rpCurOmUav[i]->Release(), g_rpCurOmUav[i] = nullptr;
+    g_rpCurRtN = g_rpCurOmUavN = 0;
+}
+// the targets (and the views beside them) set: the game's own, or twins for the right eye's draw
+static void rpSetTargets(ID3D11DeviceContext *c, ID3D11RenderTargetView *const *rt, ID3D11DepthStencilView *ds) {
+    if (!g_rpCurOmUavN) {
+        ORIG(PFN_OMSet, c, VT_Ctx_OMSetRenderTargets)(c, g_rpCurRtN, rt, ds);
+        return;
+    }
+    UINT keep[RP_OM_UAVS]; // (-1: a view's counter stays where it is)
+    memset(keep, 0xff, sizeof keep);
+    ORIG(RPT_OmU, c, VT_Ctx_OMSetRenderTargetsAndUAVs)(c, g_rpCurRtN, rt, ds, g_rpOmUavAt, g_rpCurOmUavN, g_rpCurOmUav,
+                                                       keep);
 }
 
-bool rpStereo(void *c) { return g_rpLive && c == (void *)g_imm && g_rpSkip < 0 && !g_rpBroken; }
+bool rpStereo(void *c) {
+    if (!g_rpLive || c != (void *)g_imm || g_rpBroken) return false;
+    if (g_rpSkip >= 0) ++g_rpStatSkip;
+    return g_rpSkip < 0;
+}
 
 bool rpRightBegin(ID3D11DeviceContext *c, UINT instances) {
     g_rpInstances = instances;
-    if (!g_rpRtvN && !g_rpDsv) return false; // nothing of the pass's pictures is written
-    ID3D11RenderTargetView *rt[RP_RTS] = {};
-    for (UINT i = 0; i < g_rpRtvN; ++i) rt[i] = rpTwinView(g_rpRtv[i], true);
-    ID3D11DepthStencilView *ds = rpTwinView(g_rpDsv, true);
-    // a target without a twin (a kind of texture this unit makes none of) would be drawn into twice
-    bool same = ds && ds == g_rpDsv;
-    for (UINT i = 0; i < g_rpRtvN; ++i) same |= rt[i] && rt[i] == g_rpRtv[i];
-    if (same) {
+    if (g_rpOmUavN > RP_OM_UAVS) { // (more views than a context has slots for: not a call this unit knows)
         ++g_rpMiss;
         return false;
     }
-    if (g_rpOmUavN) {
-        ID3D11UnorderedAccessView *u[RP_UAVS] = {};
-        UINT keep[RP_UAVS];
-        for (UINT i = 0; i < g_rpOmUavN; ++i) u[i] = rpTwinView(g_rpOmUav[i], true), keep[i] = ~0u;
-        ORIG(RPT_OmU, c, VT_Ctx_OMSetRenderTargetsAndUAVs)(c, g_rpRtvN, rt, ds, g_rpOmUavStart, g_rpOmUavN, u, keep);
-    } else {
-        ORIG(PFN_OMSet, c, VT_Ctx_OMSetRenderTargets)(c, g_rpRtvN, rt, ds);
+    g_rpCurOmUavN = g_rpOmUavN;
+    if (g_rpCurOmUavN)
+        c->OMGetRenderTargetsAndUnorderedAccessViews(RP_RTS, g_rpCurRt, &g_rpCurDs, g_rpOmUavAt, g_rpCurOmUavN,
+                                                     g_rpCurOmUav);
+    else
+        c->OMGetRenderTargets(RP_RTS, g_rpCurRt, &g_rpCurDs);
+    for (UINT i = 0; i < RP_RTS; ++i)
+        if (g_rpCurRt[i]) g_rpCurRtN = i + 1;
+    if (!g_rpCurRtN && !g_rpCurDs) { // nothing of the pass's pictures is written
+        ++g_rpStatNone;
+        rpDropTargets();
+        return false;
     }
+    ID3D11RenderTargetView *rt[RP_RTS] = {};
+    for (UINT i = 0; i < g_rpCurRtN; ++i) rt[i] = rpTwinView(g_rpCurRt[i], true);
+    ID3D11DepthStencilView *ds = rpTwinView(g_rpCurDs, true);
+    // a target without a twin (a kind of texture this unit makes none of) would be drawn into twice
+    bool same = ds && ds == g_rpCurDs;
+    for (UINT i = 0; i < g_rpCurRtN; ++i) same |= rt[i] && rt[i] == g_rpCurRt[i];
+    if (same) {
+        ++g_rpMiss;
+        rpDropTargets();
+        return false;
+    }
+    rpSetTargets(c, rt, ds);
     CtxState *s = ctxOf(c);
     g_rpSavedCbN = g_rpSavedSrvN = 0;
+    g_rpDrawTwin = false;
     for (int st = ST_VS; st <= ST_PS; ++st) rpRightSrvs(c, s, st), rpRightCbs(c, s, st);
     g_rpTl = eyeTlRightPre(c);
     ++g_rpStatRight;
+    if (g_rpTl) ++g_rpStatTl;
+    if (!g_rpDrawTwin && !g_rpTl && !g_rpStatPlain++) { // the first draw of the frame that got nothing: which
+        g_rpPlainVs = s->st[ST_VS].sh ? s->st[ST_VS].sh->hash : 0;
+        g_rpPlainPs = s->st[ST_PS].sh ? s->st[ST_PS].sh->hash : 0;
+    }
     return true;
 }
 void rpRightEnd(ID3D11DeviceContext *c) {
     if (g_rpTl) eyeTlRightPost(c);
     rpRestore(c);
-    if (g_rpOmUavN) {
-        UINT keep[RP_UAVS];
-        for (UINT i = 0; i < g_rpOmUavN; ++i) keep[i] = ~0u;
-        ORIG(RPT_OmU, c, VT_Ctx_OMSetRenderTargetsAndUAVs)(c, g_rpRtvN, g_rpRtv, g_rpDsv, g_rpOmUavStart, g_rpOmUavN,
-                                                           g_rpOmUav, keep);
-    } else {
-        ORIG(PFN_OMSet, c, VT_Ctx_OMSetRenderTargets)(c, g_rpRtvN, g_rpRtv, g_rpDsv);
-    }
+    rpSetTargets(c, g_rpCurRt, g_rpCurDs);
+    rpDropTargets();
 }
 // A dispatch: again for the right eye only when it writes a texture that is an eye's own (has a twin). What
 // compute shaders write otherwise is shared: buffers (culling, levels of detail), textures made once (baked).
 bool rpRightBeginCs(ID3D11DeviceContext *c) {
     ID3D11UnorderedAccessView *u[RP_UAVS];
     bool any = false;
+    c->CSGetUnorderedAccessViews(0, RP_UAVS, g_rpCurUav);
     for (int i = 0; i < RP_UAVS; ++i) {
-        u[i] = rpTwinView(g_rpCsUav[i], false);
-        any |= u[i] != g_rpCsUav[i];
+        u[i] = rpTwinView(g_rpCurUav[i], false);
+        any |= u[i] != g_rpCurUav[i];
     }
-    if (!any) return false;
+    if (!any) {
+        for (auto &x : g_rpCurUav)
+            if (x) x->Release(), x = nullptr;
+        return false;
+    }
     CtxState *s = ctxOf(c);
     g_rpSavedCbN = g_rpSavedSrvN = 0;
     rpRightSrvs(c, s, ST_CS), rpRightCbs(c, s, ST_CS);
@@ -920,7 +1056,9 @@ bool rpRightBeginCs(ID3D11DeviceContext *c) {
 }
 void rpRightEndCs(ID3D11DeviceContext *c) {
     rpRestore(c);
-    ORIG(RPT_SetUav, c, VT_Ctx_CSSetUnorderedAccessViews)(c, 0, RP_UAVS, g_rpCsUav, nullptr);
+    ORIG(RPT_SetUav, c, VT_Ctx_CSSetUnorderedAccessViews)(c, 0, RP_UAVS, g_rpCurUav, nullptr);
+    for (auto &x : g_rpCurUav)
+        if (x) x->Release(), x = nullptr;
 }
 
 // draws.cpp: the CPU path's shader for the right eye's draw - the matrix for what is near (the cockpit: the
@@ -959,6 +1097,7 @@ void rpFrameDone(double presentMs) {
     LONGLONG now = perfNow();
     double frame = last ? (double)(now - last) * 1000.0 / (double)perfFreq() : 0;
     last = now;
+    g_rpOwn = 0;
     if (g_rpMode != RP_AUTO || g_rpBroken || g_camBothFrame + 1 != g_frame || frame <= 0 || frame > 250) return;
     int r = mcAutoStep(g_rpAuto, frame, presentMs);
     static unsigned told;
@@ -975,7 +1114,8 @@ void rpFrameDone(double presentMs) {
 bool rpBegin(const float *c0, const float *c1) {
     if (!rpBuildK(c0, c1)) return false;
     g_rpMiss = 0;
-    g_rpStatRight = g_rpStatCb = g_rpStatRing = g_rpStatDisp = 0;
+    g_rpStatRight = g_rpStatCb = g_rpStatRing = g_rpStatDisp = g_rpStatPlain = g_rpStatNone = g_rpStatTl = 0;
+    g_rpStatTlLeft = g_rpStatSkip = 0;
     g_rpLive = true;
     return true;
 }
@@ -993,17 +1133,29 @@ bool rpEnd() {
         }
         return false;
     }
+    static unsigned toldTl;
+    if (g_rpStatTl != g_rpStatTlLeft && toldTl++ < 12)
+        logf("replay: frame %u: %u CPU-path draws for the left eye, %u made for the right - %u draws had no target, "
+             "%u were under a once-a-frame label, %u for the right eye in all",
+             g_frame, g_rpStatTlLeft, g_rpStatTl, g_rpStatNone, g_rpStatSkip, g_rpStatRight);
+    static unsigned toldPlain;
+    if (g_rpStatRight > 60 && g_rpStatPlain * 2 > g_rpStatRight && toldPlain++ < 8)
+        logf("replay: frame %u: %u of the right eye's %u draws got none of its own constants - the first with VS "
+             "%016llx PS %016llx",
+             g_frame, g_rpStatPlain, g_rpStatRight, (unsigned long long)g_rpPlainVs, (unsigned long long)g_rpPlainPs);
     static unsigned frames;
     if (frames++ % 1800 == 0)
-        logf("replay: frame %u: the right eye made from the left eye's draws - %u draws, %u dispatches, %u constant "
-             "buffers, %u instances; %u twins of textures, matrices %.2g apart",
-             g_frame, g_rpStatRight, g_rpStatDisp, g_rpStatCb, g_rpStatRing, (unsigned)g_rpTwin.size(), g_rpErr);
+        logf("replay: frame %u: the right eye made from the left eye's draws - %u draws (%u of the CPU path, %u got "
+             "none of the eye's own constants, %u more had no target), %u dispatches, %u constant buffers, %u "
+             "instances; %u twins of textures, matrices %.2g apart",
+             g_frame, g_rpStatRight, g_rpStatTl, g_rpStatPlain, g_rpStatNone, g_rpStatDisp, g_rpStatCb, g_rpStatRing,
+             (unsigned)g_rpTwin.size(), g_rpErr);
     return true;
 }
 // a battle is over (a menu is up): the twins go, the next battle's targets and buffers are others
 void rpIdle() {
     g_rpAuto = mcAutoStart(); // (the next battle is another place)
-    if (g_rpTwin.empty() && g_rpCb.empty() && g_rpRing.empty()) return;
+    if (g_rpTwin.empty() && g_rpCb.empty() && g_rpRing.empty() && g_rpView.empty()) return;
     if (!g_rpTwin.empty()) logf("replay: %u twins of textures released", (unsigned)g_rpTwin.size());
     rpPurge();
     for (auto &x : g_rpCb)
@@ -1014,10 +1166,16 @@ void rpIdle() {
         if (x.second.twin) x.second.twin->Release();
     }
     g_rpRing.clear();
+    for (auto &x : g_rpView) {
+        if (x.second.srv) x.second.srv->Release();
+        if (x.second.twin) x.second.twin->Release();
+    }
+    g_rpView.clear();
 }
 
 void rpPassBegin(int eye) {
     g_rpSkip = -1;
+    g_rpOwn = 0; // (a hook left by an exception must not leave the count standing)
     if (g_rpMode >= RP_COMPARE && eye == 0) {
         static unsigned first = ~0u;
         if (first == ~0u && g_camBothFrame != ~0u) first = g_frame;
@@ -1084,19 +1242,17 @@ static void STDMETHODCALLTYPE R_Flush(ID3D11DeviceContext1 *c) {
 static void STDMETHODCALLTYPE R_PSSetShaderResources(ID3D11DeviceContext *c, UINT s, UINT n,
                                                      ID3D11ShaderResourceView *const *v) {
     ORIG(RPT_SetSrv, c, VT_Ctx_PSSetShaderResources)(c, s, n, v);
-    if (rpGame(c)) rpSeen(RPI_PSSetShaderResources), rpSrvSet(ST_PS, s, n, v);
+    if (rpGame(c)) rpSeen(RPI_PSSetShaderResources);
 }
 static void STDMETHODCALLTYPE R_CSSetShaderResources(ID3D11DeviceContext *c, UINT s, UINT n,
                                                      ID3D11ShaderResourceView *const *v) {
     ORIG(RPT_SetSrv, c, VT_Ctx_CSSetShaderResources)(c, s, n, v);
-    if (rpGame(c)) rpSeen(RPI_CSSetShaderResources), rpSrvSet(ST_CS, s, n, v);
+    if (rpGame(c)) rpSeen(RPI_CSSetShaderResources);
 }
 static void STDMETHODCALLTYPE R_CSSetUnorderedAccessViews(ID3D11DeviceContext *c, UINT s, UINT n,
                                                           ID3D11UnorderedAccessView *const *u, const UINT *ic) {
     ORIG(RPT_SetUav, c, VT_Ctx_CSSetUnorderedAccessViews)(c, s, n, u, ic);
-    if (!rpGame(c) || g_rpOwn) return;
-    rpSeen(RPI_CSSetUnorderedAccessViews);
-    for (UINT i = 0; i < n && s + i < RP_UAVS; ++i) g_rpCsUav[s + i] = u ? u[i] : nullptr;
+    if (rpGame(c)) rpSeen(RPI_CSSetUnorderedAccessViews);
 }
 // What the pass clears and copies, it clears and copies for the right eye too. (The runtime writes these
 // methods' vtable slots anew in every frame, as it does the draws': draws.cpp hooks them in Direct3D's code and

@@ -69,6 +69,8 @@ static const uint64_t HK_PS_BACKDROP = 0x3c49bfee1754587bull; // a small camera'
 #define HK_RP_INST_PREV 224 // where last frame's matrix lies in it
 // the constant that tells a vertex shader its first instance's record
 #define HK_RP_INST_BASE_VAR "g_mlrInstBase"
+// the clutter's view: a structured buffer of one record - the matrix into clip space, last frame's
+#define HK_RP_CLUTTER_VIEW_BYTES 128
 // labels inside the main camera's pass under which things are made once a frame, not once an eye
 #define HK_RP_ONCE_LABELS L"RTIN tree of sun shadow", L"sun shadows:", L"terrain VT:"
 // --- MW4Mercs.exe ---

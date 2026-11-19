@@ -86,6 +86,7 @@ static bool eyeTlPre(ID3D11DeviceContext *c) {
     ORIG(PFN_SetCB, c, VT_Ctx_VSSetConstantBuffers)(c, 12, 1, &g_eyeCB);
     InterlockedIncrement(&g_statTlSwaps);
     g_eyeTlOn = true;
+    rpTlSeen();
     return true;
 }
 
@@ -323,11 +324,20 @@ static void mw5Right(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw, int ck) {
     g_camPassEye = 0;
 }
 
+// hpNested: Direct3D has more than one implementation of a draw method (the variants hooked here), and one of
+// them may call another at its beginning - where our hook sits. The mod's own draws (our cockpit) go straight to
+// an implementation, so a hook can be entered from inside a hook. Such a call is passed on and nothing else:
+// it is no draw of the game's. (replay.cpp made a second "right eye's draw" inside the first then, and the
+// targets it put back were the wrong ones - a flicker in every frame where it happened.)
 template <int V> static void STDMETHODCALLTYPE HP_Draw(ID3D11DeviceContext *c, UINT a, UINT b) {
     PerfScope perfHook(PF_HOOK);
     onWork(c, "Draw", false);
-    if ((void *)c == (void *)g_imm) rpWork("Draw");
     RpOwn own;
+    if (g_rpOwn > 1) { // (see hpNested)
+        ((PFN_U2)g_tr[SL_DRAW][V])(c, a, b);
+        return;
+    }
+    if ((void *)c == (void *)g_imm) rpWork("Draw");
     rpRingFeed(c, 1);
     ++g_m5AllDraws;
     if (eyeHidden(c)) return;
@@ -351,8 +361,12 @@ template <int V> static void STDMETHODCALLTYPE HP_Draw(ID3D11DeviceContext *c, U
 template <int V> static void STDMETHODCALLTYPE HP_DrawIndexed(ID3D11DeviceContext *c, UINT a, UINT b, INT d) {
     PerfScope perfHook(PF_HOOK);
     onWork(c, "DrawIndexed", false);
-    if ((void *)c == (void *)g_imm) rpWork("DrawIndexed");
     RpOwn own;
+    if (g_rpOwn > 1) { // (see hpNested)
+        ((PFN_U2I)g_tr[SL_DRAWIDX][V])(c, a, b, d);
+        return;
+    }
+    if ((void *)c == (void *)g_imm) rpWork("DrawIndexed");
     rpRingFeed(c, 1);
     ++g_m5AllDraws;
     if (eyeHidden(c)) return;
@@ -376,8 +390,12 @@ template <int V>
 static void STDMETHODCALLTYPE HP_DrawInstanced(ID3D11DeviceContext *c, UINT a, UINT b, UINT d, UINT e) {
     PerfScope perfHook(PF_HOOK);
     onWork(c, "DrawInstanced", false);
-    if ((void *)c == (void *)g_imm) rpWork("DrawInstanced");
     RpOwn own;
+    if (g_rpOwn > 1) { // (see hpNested)
+        ((PFN_U4)g_tr[SL_DRAWINST][V])(c, a, b, d, e);
+        return;
+    }
+    if ((void *)c == (void *)g_imm) rpWork("DrawInstanced");
     rpRingFeed(c, b);
     if (eyeHidden(c)) return;
     bool sw = eyeTlPre(c);
@@ -397,8 +415,12 @@ template <int V>
 static void STDMETHODCALLTYPE HP_DrawIndexedInstanced(ID3D11DeviceContext *c, UINT a, UINT b, UINT d, INT e, UINT f) {
     PerfScope perfHook(PF_HOOK);
     onWork(c, "DrawIndexedInstanced", false);
-    if ((void *)c == (void *)g_imm) rpWork("DrawIndexedInstanced");
     RpOwn own;
+    if (g_rpOwn > 1) { // (see hpNested)
+        ((PFN_U3IU)g_tr[SL_DRAWIDXINST][V])(c, a, b, d, e, f);
+        return;
+    }
+    if ((void *)c == (void *)g_imm) rpWork("DrawIndexedInstanced");
     rpRingFeed(c, b);
     if (eyeHidden(c)) return;
     bool sw = eyeTlPre(c);
@@ -418,8 +440,12 @@ template <int V>
 static void STDMETHODCALLTYPE HP_DrawInstancedIndirect(ID3D11DeviceContext *c, ID3D11Buffer *b, UINT o) {
     PerfScope perfHook(PF_HOOK);
     onWork(c, "DrawInstancedIndirect", false);
-    if ((void *)c == (void *)g_imm) rpWork("DrawInstancedIndirect");
     RpOwn own;
+    if (g_rpOwn > 1) { // (see hpNested)
+        ((PFN_BU)g_tr[SL_DRAWINSTIND][V])(c, b, o);
+        return;
+    }
+    if ((void *)c == (void *)g_imm) rpWork("DrawInstancedIndirect");
     rpRingFeed(c, 0);
     if (eyeHidden(c)) return;
     bool sheet = hudSheetPre(c);
@@ -439,8 +465,12 @@ template <int V>
 static void STDMETHODCALLTYPE HP_DrawIndexedInstancedIndirect(ID3D11DeviceContext *c, ID3D11Buffer *b, UINT o) {
     PerfScope perfHook(PF_HOOK);
     onWork(c, "DrawIndexedInstancedIndirect", false);
-    if ((void *)c == (void *)g_imm) rpWork("DrawIndexedInstancedIndirect");
     RpOwn own;
+    if (g_rpOwn > 1) { // (see hpNested)
+        ((PFN_BU)g_tr[SL_DRAWIDXINSTIND][V])(c, b, o);
+        return;
+    }
+    if ((void *)c == (void *)g_imm) rpWork("DrawIndexedInstancedIndirect");
     rpRingFeed(c, 0);
     if (eyeHidden(c)) return;
     bool hw = hudWidePre(c);
@@ -457,13 +487,17 @@ static void STDMETHODCALLTYPE HP_DrawIndexedInstancedIndirect(ID3D11DeviceContex
 template <int V> static void STDMETHODCALLTYPE HP_Dispatch(ID3D11DeviceContext *c, UINT x, UINT y, UINT z) {
     PerfScope perfHook(PF_HOOK);
     onWork(c, "Dispatch", true);
-    if ((void *)c == (void *)g_imm) rpWork("Dispatch");
     RpOwn own;
+    if (g_rpOwn > 1) { // (see hpNested)
+        ((PFN_U3)g_tr[SL_DISP][V])(c, x, y, z);
+        return;
+    }
+    if ((void *)c == (void *)g_imm) rpWork("Dispatch");
     {
         PerfScope perfD3d(PF_D3D);
         ((PFN_U3)g_tr[SL_DISP][V])(c, x, y, z);
     }
-    if (rpStereo(c) && g_rpOwn == 1 && rpRightBeginCs(c)) {
+    if (rpStereo(c) && rpRightBeginCs(c)) {
         ((PFN_U3)g_tr[SL_DISP][V])(c, x, y, z);
         rpRightEndCs(c);
     }
@@ -471,13 +505,17 @@ template <int V> static void STDMETHODCALLTYPE HP_Dispatch(ID3D11DeviceContext *
 template <int V> static void STDMETHODCALLTYPE HP_DispatchIndirect(ID3D11DeviceContext *c, ID3D11Buffer *b, UINT o) {
     PerfScope perfHook(PF_HOOK);
     onWork(c, "DispatchIndirect", true);
-    if ((void *)c == (void *)g_imm) rpWork("DispatchIndirect");
     RpOwn own;
+    if (g_rpOwn > 1) { // (see hpNested)
+        ((PFN_BU)g_tr[SL_DISPIND][V])(c, b, o);
+        return;
+    }
+    if ((void *)c == (void *)g_imm) rpWork("DispatchIndirect");
     {
         PerfScope perfD3d(PF_D3D);
         ((PFN_BU)g_tr[SL_DISPIND][V])(c, b, o);
     }
-    if (rpStereo(c) && g_rpOwn == 1 && rpRightBeginCs(c)) {
+    if (rpStereo(c) && rpRightBeginCs(c)) {
         ((PFN_BU)g_tr[SL_DISPIND][V])(c, b, o);
         rpRightEndCs(c);
     }
@@ -639,8 +677,8 @@ void hotpatchScan(ID3D11DeviceContext *ctx) {
 
 void STDMETHODCALLTYPE H_OMSetRenderTargets(ID3D11DeviceContext *c, UINT n, ID3D11RenderTargetView *const *rtv,
                                             ID3D11DepthStencilView *dsv) {
-    if ((void *)c == (void *)g_imm) rpOmSet(n, rtv, dsv, false, 0, 0, nullptr);
     if (g_cap) setRTs(ctxOf(c), n, rtv, dsv);
+    if ((void *)c == (void *)g_imm) rpOmUavs(0, 0);
     if (n >= 1 && n <= 8 && rtv && hudSwap(rtv[0]) != rtv[0]) { // inside the HUD pass: our layer texture
         ID3D11RenderTargetView *v[8];
         memcpy(v, rtv, n * sizeof *v);
@@ -658,7 +696,7 @@ void STDMETHODCALLTYPE H_OMSetRenderTargetsAndUAVs(ID3D11DeviceContext *c, UINT 
                                                    ID3D11DepthStencilView *dsv, UINT us, UINT un,
                                                    ID3D11UnorderedAccessView *const *uav, const UINT *ic) {
     if (g_cap && n != D3D11_KEEP_RENDER_TARGETS_AND_DEPTH_STENCIL) setRTs(ctxOf(c), n, rtv, dsv);
-    if ((void *)c == (void *)g_imm) rpOmSet(n, rtv, dsv, true, us, un, uav);
+    if ((void *)c == (void *)g_imm && un != D3D11_KEEP_UNORDERED_ACCESS_VIEWS) rpOmUavs(us, uav ? un : 0);
     // which buffers stand behind the clutter's g_ctView (u75) and g_ctWind (u76): logged once each
     static int seen75, seen76;
     if (uav && un != D3D11_KEEP_UNORDERED_ACCESS_VIEWS)

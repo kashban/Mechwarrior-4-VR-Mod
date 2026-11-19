@@ -249,7 +249,6 @@ void STDMETHODCALLTYPE H_VSSetShaderResources(ID3D11DeviceContext *c, UINT start
                                               ID3D11ShaderResourceView *const *v) {
     CtxState *s = ctxOf(c);
     for (UINT i = 0; i < n && start + i < 64; ++i) s->st[ST_VS].srvBuf[start + i] = viewBuffer(v ? v[i] : nullptr);
-    if ((void *)c == (void *)g_imm) rpSrvSet(ST_VS, start, n, v);
     ORIG(PFN_SetSRV, c, VT_Ctx_VSSetShaderResources)(c, start, n, v);
 }
 
