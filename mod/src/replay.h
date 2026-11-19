@@ -3,8 +3,11 @@
 #define MW4VR_REPLAY_H
 
 // [vr] replay_right: 0 = the game draws both eyes; 1 = the right eye's picture is made from the left eye's
-// draws; 2, 3 = as 0, with a file for diagnosis (replay.cpp)
+// draws; 2 = whichever of the two is faster where the battle is; 8, 9 = as 0, with a file for diagnosis
+enum { RP_OFF = 0, RP_ON = 1, RP_AUTO = 2, RP_COMPARE = 8, RP_DUMP = 9 };
 extern int g_rpMode;
+// the right eye's picture may be made from the left eye's draws (now, or later in this battle)
+static inline bool rpUsed() { return g_rpMode == RP_ON || g_rpMode == RP_AUTO; }
 extern volatile bool g_rpLive; // the left eye's pass runs, and each draw of it is made for the right eye too
 extern volatile LONG g_rpOwn;  // > 0: the calls that follow are the mod's own (not the game's)
 // the mod's own work inside a hook: what it calls on the context is not the game's
@@ -46,6 +49,8 @@ bool rpBegin(const float *c0, const float *c1);
 bool rpEnd();
 void rpIdle();
 void rpCheckK(const float *c0, const float *c1);
+// main.cpp, after every Present: the time the system's Present took (ms)
+void rpFrameDone(double presentMs);
 
 // draws.cpp: a draw or dispatch of the left eye's pass is made again for the right eye
 bool rpStereo(void *c);

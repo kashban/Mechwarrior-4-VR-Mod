@@ -59,7 +59,7 @@ log, the shaders' table, the contexts' table) has a mutex. The build optimises a
 | `core.h` | The arithmetic and the decisions, free of Windows and the game: matrices, frustum planes, which part of the HUD goes where, what a cockpit file may hold. **The only part the tests can reach** - what can be decided without Direct3D belongs here. |
 | `head` | The head's pose as a change of the camera. |
 | `cam` | The camera hook: both eyes drawn in every frame. |
-| `replay` | `[vr] replay_right=1`: the game draws the world for the left eye alone, and each draw of that pass is made a second time for the right eye - into twins of the pass's targets, with the constants that hold the eye's view worked out anew. |
+| `replay` | `[vr] replay_right=1`: the game draws the world for the left eye alone, and each draw of that pass is made a second time for the right eye - into twins of the pass's targets, with the constants that hold the eye's view worked out anew. `replay_right=2`: that, or the game drawing both eyes, whichever is faster where the battle is. |
 | `mech` | Which mech's cockpit this is (a profile for each), the cockpit's sway with the mech's steps, whether the camera sits in the mech or looks at it from outside. |
 | `hud` | The HUD pass drawn into a texture of our own; the eyes' textures. |
 | `vr` | OpenXR: the session, the swap chains, the layers of a frame, the settings in `mw4vr.ini`, the hot keys for seat and sizes. |

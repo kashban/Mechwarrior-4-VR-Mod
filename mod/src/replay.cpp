@@ -20,9 +20,10 @@
 // M into the left eye's clip space is Kc M for the right eye, Kc = P Hv P^-1; one out of it M Kc^-1; a position
 // in the world p becomes Kw^-1 p, Kw = C0 C1^-1 (the eyes' camera matrices).
 //
-// [vr] replay_right: 0 = off, the game draws both eyes; 1 = on; 2 = off, and once the right eye's constants
-// are compared with what this unit would have made (mw4vr_replay.txt); 3 = off, and once what both passes do is
-// written down (mw4vr_replay.txt). 2 and 3 are for diagnosis.
+// [vr] replay_right: 0 = off, the game draws both eyes; 1 = on; 2 = whichever is faster where the battle is
+// (core.h: mcAutoStep - on eases the processor and costs the graphics card a little); 8 = off, and once the
+// right eye's constants are compared with what this unit would have made (mw4vr_replay.txt); 9 = off, and once
+// what both passes do is written down (mw4vr_replay.txt). 8 and 9 are for diagnosis.
 
 #include "mod.h"
 
@@ -368,7 +369,7 @@ static void rpCompare(void *b, const uint8_t *right, UINT sz) {
 // hooks.cpp: the game wrote a constant buffer anew (all of it)
 void rpCbData(ID3D11Resource *r, const void *p, UINT sz) {
     if (!g_rpMode || !p || !sz || sz > 8192 || g_rpOwn) return;
-    if (g_rpMode == 1) {
+    if (rpUsed()) {
         RpCb &c = g_rpCb[r];
         c.d.assign((const uint8_t *)p, (const uint8_t *)p + sz);
         ++c.ver;
@@ -637,7 +638,7 @@ static void rpSetCb(ID3D11DeviceContext *c, int st, UINT slot, ID3D11Buffer *b) 
 
 // hooks.cpp: the game has mapped a buffer. true: its instances' buffer, and the memory it gets is ours
 bool rpRingMap(ID3D11DeviceContext *c, ID3D11Resource *r, D3D11_MAP t, D3D11_MAPPED_SUBRESOURCE *m) {
-    if (g_rpMode != 1 || g_rpOwn || g_rpRing.empty()) return false;
+    if (!rpUsed() || g_rpOwn || g_rpRing.empty()) return false;
     auto it = g_rpRing.find(r);
     if (it == g_rpRing.end() || it->second.bad) return false;
     RpRing &ring = it->second;
@@ -950,7 +951,25 @@ void rpLabel(const wchar_t *name, int depth, bool open) {
 }
 
 // can this frame's right eye be made from the left eye's draws?
-bool rpWanted() { return g_rpMode == 1 && !g_rpBroken && g_rpP.ok; }
+static McAuto g_rpAuto = mcAutoStart(); // replay_right=2: which way, and the watching (core.h)
+bool rpWanted() { return (g_rpMode == RP_ON || (g_rpMode == RP_AUTO && g_rpAuto.replay)) && !g_rpBroken && g_rpP.ok; }
+// main.cpp, after every Present. A battle's frames (both eyes drawn) are what is watched.
+void rpFrameDone(double presentMs) {
+    static LONGLONG last;
+    LONGLONG now = perfNow();
+    double frame = last ? (double)(now - last) * 1000.0 / (double)perfFreq() : 0;
+    last = now;
+    if (g_rpMode != RP_AUTO || g_rpBroken || g_camBothFrame + 1 != g_frame || frame <= 0 || frame > 250) return;
+    int r = mcAutoStep(g_rpAuto, frame, presentMs);
+    static unsigned told;
+    if (r == MC_AUTO_NONE || told++ > 60) return;
+    const char *other = g_rpAuto.replay ? "the left eye's draws repeated" : "the game drawing both eyes";
+    if (r == MC_AUTO_TRY)
+        logf("replay: frame %u: %.1f ms a frame - trying %s", g_frame, g_rpAuto.before, other);
+    else
+        logf("replay: frame %u: %.1f ms a frame in the trial, %.1f before it - %s from now on", g_frame, g_rpAuto.after,
+             g_rpAuto.before, other);
+}
 
 // before the left eye's pass; c0, c1: the eyes' camera matrices. false: the game draws the right eye
 bool rpBegin(const float *c0, const float *c1) {
@@ -983,6 +1002,7 @@ bool rpEnd() {
 }
 // a battle is over (a menu is up): the twins go, the next battle's targets and buffers are others
 void rpIdle() {
+    g_rpAuto = mcAutoStart(); // (the next battle is another place)
     if (g_rpTwin.empty() && g_rpCb.empty() && g_rpRing.empty()) return;
     if (!g_rpTwin.empty()) logf("replay: %u twins of textures released", (unsigned)g_rpTwin.size());
     rpPurge();
@@ -998,12 +1018,12 @@ void rpIdle() {
 
 void rpPassBegin(int eye) {
     g_rpSkip = -1;
-    if (g_rpMode >= 2 && eye == 0) {
+    if (g_rpMode >= RP_COMPARE && eye == 0) {
         static unsigned first = ~0u;
         if (first == ~0u && g_camBothFrame != ~0u) first = g_frame;
         // (the dump: the frame before the one written is followed too - what a map changes is told against it)
         bool on = first != ~0u && g_frame - first >= 450;
-        if (g_rpMode == 3) {
+        if (g_rpMode == RP_DUMP) {
             if (on && g_rpDump && g_frame - first >= 451) {
                 for (auto &m : g_rpCount) memset(m, 0, sizeof m);
                 for (int e = 0; e < 2; ++e) g_rpWork[e].clear(), g_rpWrites[e].clear();
@@ -1126,7 +1146,7 @@ int rpHookContext(ID3D11DeviceContext *ctx) {
     RP_PATCH(PSSetShaderResources)
     RP_PATCH(CSSetShaderResources)
     RP_PATCH(CSSetUnorderedAccessViews)
-    if (g_rpMode == 3) { // every other method too: which does the pass call?
+    if (g_rpMode == RP_DUMP) { // every other method too: which does the pass call?
 #define X(Name, P, A) RP_PATCH(Name)
         RP_METHODS(X)
 #undef X

@@ -183,10 +183,12 @@ static HRESULT STDMETHODCALLTYPE H_Present(IDXGISwapChain *sc, UINT si, UINT fl)
     }
     DWORD t1 = GetTickCount();
     HRESULT hr;
+    LONGLONG q0 = perfNow();
     {
         PerfScope perf(PF_SYS);
         hr = ORIG(PFN_Present, sc, VT_Sc_Present)(sc, si, fl);
     }
+    if (!(fl & DXGI_PRESENT_TEST)) rpFrameDone((double)(perfNow() - q0) * 1000.0 / (double)perfFreq());
     g_presOurs = t1 - t0, g_presReal = GetTickCount() - t1;
     if (!(fl & DXGI_PRESENT_TEST)) perfFrame(e2eTime());
     return hr;
@@ -664,7 +666,7 @@ BOOL WINAPI DllMain(HINSTANCE h, DWORD reason, LPVOID) {
         if (g_dbg) g_shlog = _wfsopen((g_dir + L"mw4vr_shaders.txt").c_str(), L"w", _SH_DENYNO);
         wchar_t exe[MAX_PATH];
         GetModuleFileNameW(nullptr, exe, MAX_PATH);
-        logf("MW4VR v11.73 (debug level %d) loaded into %s", g_dbg, narrow(exe).c_str());
+        logf("MW4VR v11.74 (debug level %d) loaded into %s", g_dbg, narrow(exe).c_str());
         if (!loadReal()) logf("ERROR: the system d3d11.dll could not be loaded");
         rpReadIni();
     }

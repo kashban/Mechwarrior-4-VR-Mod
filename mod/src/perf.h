@@ -24,6 +24,16 @@ static inline LONGLONG perfNow() {
     QueryPerformanceCounter(&q);
     return q.QuadPart;
 }
+// its ticks a second
+static inline LONGLONG perfFreq() {
+    static LONGLONG f;
+    if (!f) {
+        LARGE_INTEGER q;
+        QueryPerformanceFrequency(&q);
+        f = q.QuadPart;
+    }
+    return f;
+}
 // the time between its making and its end goes to one part (nothing is done while no record is written)
 struct PerfScope {
     int part;

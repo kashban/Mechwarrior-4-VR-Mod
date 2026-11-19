@@ -479,14 +479,14 @@ static int __cdecl camDraw(uint8_t *cam, void *edxv, void *arg) {
             camPreEye(cam, e);
             g_lblEye = e;
             g_camPassEye = e;
-            if (e == 0 && (rpWanted() || g_rpMode == 2)) {
+            if (e == 0 && (rpWanted() || g_rpMode == RP_COMPARE)) {
                 float c1[12], Rc[9], tc[3], k1[16];
                 camEyeMatrix(g_camBase, 1, c1, Rc, tc);
                 g_kEyeOverride = 1;
                 buildK();
                 memcpy(k1, g_K, sizeof k1);
                 eyeTlRightSet(k1, g_kOn && g_kTlOnly);
-                if (g_rpMode == 2)
+                if (g_rpMode == RP_COMPARE)
                     rpCheckK(g_camWritten, c1);
                 else
                     replay = rpBegin(g_camWritten, c1);

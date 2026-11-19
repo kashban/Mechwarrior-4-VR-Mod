@@ -1291,8 +1291,104 @@ static void testStereo() {
     CHECK(!mcStereo(p, hv, c0, zero, &s));
 }
 
+// ---------------------------------------------------------------- which way the right eye is made
+// n frames of one length and wait; the last step's answer, and that every step before it said "nothing"
+static int autoRun(McAuto &a, int n, double frame, double wait) {
+    int r = MC_AUTO_NONE;
+    for (int i = 0; i < n; ++i) {
+        if (r != MC_AUTO_NONE) return -1;
+        r = mcAutoStep(a, frame, wait);
+    }
+    return r;
+}
+static void testAuto() {
+    g_test = "auto";
+    // a battle begins with the game drawing both eyes, and a rest
+    McAuto a = mcAutoStart();
+    CHECK(!a.replay && !a.trying && a.rest == MC_AUTO_START && a.n == 0 && a.sum == 0 && a.waits == 0 && a.pause == 0);
+    CHECK(autoRun(a, MC_AUTO_START, 30, 0.1) == MC_AUTO_NONE && a.rest == 0 && a.n == 0);
+    // the game draws both eyes, slow, and the graphics card is not what it waits for: replay is tried
+    CHECK(autoRun(a, MC_AUTO_WINDOW - 1, 30, 0.1) == MC_AUTO_NONE && !a.replay && !a.trying);
+    CHECK(mcAutoStep(a, 30, 0.1) == MC_AUTO_TRY && a.replay && a.trying && a.before == 30 && a.n == 0 && a.sum == 0);
+    // the first frames of the trial do not count (very slow here); the rest are faster by more than a sixteenth
+    CHECK(autoRun(a, MC_AUTO_SETTLE, 500, 0.1) == MC_AUTO_NONE);
+    CHECK(autoRun(a, MC_AUTO_TRIAL - MC_AUTO_SETTLE - 1, 28, 0.1) == MC_AUTO_NONE && a.trying);
+    CHECK(mcAutoStep(a, 28, 0.1) == MC_AUTO_KEEP && a.replay && !a.trying && a.rest == MC_AUTO_KEPT_REST && a.pause == 0);
+    CHECK(a.after == 28 && a.before == 30);
+    CHECK(a.n == 0 && a.sum == 0);
+    // rest: nothing is watched, whatever the frames are
+    CHECK(autoRun(a, MC_AUTO_KEPT_REST, 99, 9) == MC_AUTO_NONE && a.rest == 0 && a.n == 0 && a.sum == 0 && a.waits == 0);
+    // replay, slow, the graphics card is the limit: the game's own way is tried; it is no faster - back
+    CHECK(autoRun(a, MC_AUTO_WINDOW, 20, 5) == MC_AUTO_TRY && !a.replay && a.before == 20);
+    CHECK(autoRun(a, MC_AUTO_TRIAL, 20, 5) == MC_AUTO_BACK && a.replay && !a.trying);
+    CHECK(a.pause == MC_AUTO_PAUSE && a.rest == MC_AUTO_PAUSE);
+    // and after the rest again, with the same end: twice the rest, up to the longest
+    unsigned want = MC_AUTO_PAUSE;
+    for (int i = 0; i < 6; ++i) {
+        CHECK(autoRun(a, (int)a.rest, 20, 5) == MC_AUTO_NONE);
+        CHECK(autoRun(a, MC_AUTO_WINDOW, 20, 5) == MC_AUTO_TRY);
+        CHECK(autoRun(a, MC_AUTO_TRIAL, 20, 5) == MC_AUTO_BACK);
+        want = want * 2 > MC_AUTO_PAUSE_MAX ? (unsigned)MC_AUTO_PAUSE_MAX : want * 2;
+        CHECK(a.pause == want && a.rest == want);
+    }
+    CHECK(a.pause == MC_AUTO_PAUSE_MAX);
+    // a trial kept forgets the pauses
+    a.rest = 0;
+    CHECK(autoRun(a, MC_AUTO_WINDOW, 20, 5) == MC_AUTO_TRY);
+    CHECK(autoRun(a, MC_AUTO_TRIAL, 10, 5) == MC_AUTO_KEEP && !a.replay && a.pause == 0);
+}
+// no trial where the other way cannot help; the limits themselves
+static void testAutoLimits() {
+    g_test = "autoLimits";
+    struct {
+        bool replay;
+        double frame, wait;
+        bool tries;
+    } const cases[] = {
+        {false, 30, 0.5, true},               // the game's way, slow, the processor: replay
+        {false, 30, 5, false},                // ... the graphics card: replay would cost it more
+        {false, 30, MC_AUTO_CPU, false},      // (at the limit: not under it)
+        {false, MC_AUTO_SLOW, 0.5, false},    // not slower than the headset
+        {false, MC_AUTO_SLOW + 0.125, 0.5, true},
+        {false, 11, 0.1, false},
+        {true, 30, 5, true},                  // replay, slow, the graphics card: the game's way
+        {true, 30, 0.5, false},               // ... the processor: the game's way costs it a pass more
+        {true, 30, MC_AUTO_GPU, false},       // (at the limit: not above it)
+        {true, 30, 1.5, false},               // between the two limits: neither
+        {false, 30, 1.5, false},
+        {true, MC_AUTO_SLOW, 5, false},
+        {true, MC_AUTO_SLOW + 0.125, 5, true},
+    };
+    for (const auto &c : cases) {
+        McAuto a = {};
+        a.replay = c.replay;
+        int r = autoRun(a, MC_AUTO_WINDOW, c.frame, c.wait);
+        CHECK(r == (c.tries ? MC_AUTO_TRY : MC_AUTO_NONE));
+        CHECK(a.replay == (c.tries ? !c.replay : c.replay) && a.trying == c.tries && a.n == 0 && a.waits == 0);
+    }
+    // the window's mean counts, not a frame of it: one long frame among short ones is no reason
+    McAuto a = {};
+    CHECK(autoRun(a, MC_AUTO_WINDOW - 1, 11, 0.1) == MC_AUTO_NONE);
+    CHECK(mcAutoStep(a, 30, 0.1) == MC_AUTO_NONE && !a.trying);
+    // ... and the waits' mean: one long wait among none
+    CHECK(autoRun(a, MC_AUTO_WINDOW - 1, 30, 0) == MC_AUTO_NONE);
+    CHECK(mcAutoStep(a, 30, 22.5) == MC_AUTO_TRY); // (22.5 / 45 = 0.5: under the limit)
+    // kept only when faster by a sixteenth: 32 -> 30 is just that much, and not enough; a little under is
+    a = {};
+    CHECK(autoRun(a, MC_AUTO_WINDOW, 32, 0.1) == MC_AUTO_TRY);
+    CHECK(autoRun(a, MC_AUTO_TRIAL, 30, 0.1) == MC_AUTO_BACK && !a.replay);
+    a = {};
+    CHECK(autoRun(a, MC_AUTO_WINDOW, 32, 0.1) == MC_AUTO_TRY);
+    CHECK(autoRun(a, MC_AUTO_TRIAL, 29.875, 0.1) == MC_AUTO_KEEP && a.replay);
+    // the trial's mean is of the frames that count alone
+    a = {};
+    CHECK(autoRun(a, MC_AUTO_WINDOW, 32, 0.1) == MC_AUTO_TRY);
+    CHECK(autoRun(a, MC_AUTO_SETTLE, 1, 0.1) == MC_AUTO_NONE); // (fast frames that do not count)
+    CHECK(autoRun(a, MC_AUTO_TRIAL - MC_AUTO_SETTLE, 31, 0.1) == MC_AUTO_BACK && a.after == 31);
+}
+
 int main() {
-    testM4(), testM4Inv(), testProj(), testEyeStep(), testStereo();
+    testM4(), testM4Inv(), testProj(), testEyeStep(), testStereo(), testAuto(), testAutoLimits();
     testHolds(), testTurnNorm(), testTurnFit(), testEyeInMesh(), testHudCross(), testHudGlass(), testGlassPose(), testGlassScale(), testGlassAim();
     testGridMark(), testGridPlace(), testGridTri(), testGridCells(), testGridFree(), testGridRim(), testGridFit();
     testMul34(), testViewAxis();

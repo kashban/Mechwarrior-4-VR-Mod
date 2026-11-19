@@ -157,6 +157,72 @@ static inline void mcM4Point(const McM4 &k, float *f) {
         f[i] = (float)(k.m[i * 4] * x + k.m[i * 4 + 1] * y + k.m[i * 4 + 2] * z + k.m[i * 4 + 3]);
 }
 
+// ---- which way the right eye is made (replay.cpp, [vr] replay_right=2) ----
+// Two ways: the game draws both eyes, or it draws the left one and the mod repeats its draws for the right one
+// ("replay"). Replay saves the processor a pass and costs the graphics card a little; which is faster depends
+// on which of the two the frame waits for. That is told by how long the system's Present waits: long - for the
+// graphics card; hardly - the processor is the limit (or neither: the headset's rate is reached).
+// The frames of a battle are watched a window at a time. When they are slower than the headset's and the limit
+// is the one the other way would ease, the other way is tried for some frames, and kept if it is faster by a
+// sixteenth; if not, it is not tried again for a while, each time twice as long.
+struct McAuto {
+    bool replay;    // the way in use
+    bool trying;    // the other way is being tried
+    unsigned n;     // frames of the window or the trial so far
+    double sum;     // their lengths (ms)
+    double waits;   // their waits in Present (ms)
+    double before;  // the mean length before the trial
+    double after;   // the mean length in the last trial
+    unsigned rest;  // frames until a trial may begin again
+    unsigned pause; // the rest after the last trial that brought nothing
+};
+// Counted in frames: the rest when a battle begins (it loads still); the frames watched at a time; the frames of
+// a trial that do not count (new textures, histories) and all its frames; the rest after a trial that was kept,
+// after a first one that brought nothing, and the longest.
+enum { MC_AUTO_START = 120, MC_AUTO_WINDOW = 45, MC_AUTO_SETTLE = 25, MC_AUTO_TRIAL = 70 };
+enum { MC_AUTO_KEPT_REST = 225, MC_AUTO_PAUSE = 900, MC_AUTO_PAUSE_MAX = 7200 };
+enum { MC_AUTO_NONE, MC_AUTO_TRY, MC_AUTO_KEEP, MC_AUTO_BACK };
+static const double MC_AUTO_SLOW = 11.625; // a mean frame longer than this (ms) is slower than 90 a second
+static const double MC_AUTO_GPU = 2.0;     // a mean wait in Present above this: the graphics card is the limit
+static const double MC_AUTO_CPU = 0.75;    // one under this: it is not
+static const double MC_AUTO_GAIN = 0.9375; // a trial is kept when its frames are this much of the ones before
+// a battle begins: the game draws both eyes
+static inline McAuto mcAutoStart() {
+    McAuto a = {};
+    a.rest = MC_AUTO_START;
+    return a;
+}
+// one frame of a battle: its length and the time the system's Present waited in it (ms). What happened:
+// nothing, a trial began (a.replay is the other way now), a trial was kept, or it was not (a.replay is back)
+static inline int mcAutoStep(McAuto &a, double frame, double wait) {
+    if (!a.trying) {
+        if (a.rest) {
+            --a.rest;
+            return MC_AUTO_NONE;
+        }
+        a.sum += frame, a.waits += wait;
+        if (++a.n < MC_AUTO_WINDOW) return MC_AUTO_NONE;
+        double mean = a.sum / MC_AUTO_WINDOW, w = a.waits / MC_AUTO_WINDOW;
+        a.n = 0, a.sum = 0, a.waits = 0;
+        bool other = a.replay ? w > MC_AUTO_GPU : w < MC_AUTO_CPU;
+        if (!(mean > MC_AUTO_SLOW && other)) return MC_AUTO_NONE;
+        a.before = mean, a.replay = !a.replay, a.trying = true;
+        return MC_AUTO_TRY;
+    }
+    if (++a.n > MC_AUTO_SETTLE) a.sum += frame;
+    if (a.n < MC_AUTO_TRIAL) return MC_AUTO_NONE;
+    double mean = a.sum / (MC_AUTO_TRIAL - MC_AUTO_SETTLE);
+    a.n = 0, a.sum = 0, a.trying = false, a.after = mean;
+    if (mean < a.before * MC_AUTO_GAIN) {
+        a.pause = 0, a.rest = MC_AUTO_KEPT_REST;
+        return MC_AUTO_KEEP;
+    }
+    a.replay = !a.replay;
+    a.pause = a.pause ? (unsigned)fmin(a.pause * 2.0, (double)MC_AUTO_PAUSE_MAX) : MC_AUTO_PAUSE;
+    a.rest = a.pause;
+    return MC_AUTO_BACK;
+}
+
 // ---- the camera's frustum planes (cam.cpp) ----
 // Six planes (normal, d: inside is n.p <= d): far, near, right, left, bottom, top.
 struct McFrustum {

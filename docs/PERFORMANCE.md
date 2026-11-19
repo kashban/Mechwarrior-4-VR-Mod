@@ -14,7 +14,8 @@ a Mad Cat walking for half a minute, no fighting). How to measure: [below](#meas
   ([what to ask its author for](#what-mw4hook-could-do)).
 - Since v11.73 the mod can do the next best thing itself: let the game draw the left eye alone and repeat each
   of its draws for the right eye (`[vr] replay_right=1`, off by default). Where the processor is the limit that
-  is half as fast again; where the graphics card is, it is slower
+  is half as fast again; where the graphics card is, it is slower - and with `replay_right=2` (v11.74) the mod
+  takes whichever is faster where the battle is
   ([the right eye from the left eye's draws](#the-right-eye-from-the-left-eyes-draws)).
 
 ## The maps
@@ -118,8 +119,19 @@ and their constants are the mod's work now, about 1.5 ms.
 left, right, each pair with a change of all render targets between them, instead of one eye after the other. On
 a map that already filled the card's time (Jungle - Heavy: dense plants, drawn over each other many times) that
 order costs it about 2.5 ms a frame. Changing the targets alone, with nothing drawn for the right eye, costs
-nothing; what exactly the card loses was not found. So the switch is off by default: on for maps where the
-processor is the limit, off where the card is.
+nothing; what exactly the card loses was not found.
+
+**`replay_right=2`: whichever is faster** (v11.74; `mcAutoStep` in `mod/src/core.h`). Which of the two a frame
+waits for is told by the system's `Present`: it waits long when the graphics card is behind, hardly when the
+processor is. A battle's frames are watched 45 at a time. When they are slower than the headset's rate and the
+limit is the one the other way would ease - the processor while the game draws both eyes, the graphics card
+while the draws are repeated - the other way is tried for 70 frames and kept if it is faster by a sixteenth; if
+not, the next trial waits 900 frames, then twice as long each time. A battle begins with the game drawing both
+eyes. Measured: Tharkad 51 pictures a second (the draws repeated from the second second on), Jungle - Heavy 87
+(never left the game's own way), Storm Patrol 55, Merc Alley 90. `mw4vr.log` tells each trial and its end.
+A trial that brings nothing is a second of the slower way.
+
+The switch is off by default until it has been seen in a headset.
 
 What was checked: the right eye's constants against what mw4hook itself writes for that eye (`replay_right=2`
 writes the comparison - the matrices agree to 2e-4, the camera's place exactly); pictures of both ways on a
