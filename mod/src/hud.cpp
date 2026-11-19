@@ -190,7 +190,7 @@ void hudEnd(ID3D11DeviceContext *c) {
 ID3D11Texture2D *g_eyeTex[2];
 unsigned g_eyeTexFrame[2] = {~0u, ~0u};
 UINT g_eyeTexW, g_eyeTexH;
-bool eyeGrab(int e) {
+bool eyeGrab(int e, bool twin) {
     if (!g_hudKnownRtv || !g_dev || !g_imm) return false;
     ID3D11Resource *res = nullptr;
     g_hudKnownRtv->GetResource(&res);
@@ -218,9 +218,11 @@ bool eyeGrab(int e) {
         g_eyeTexH = d.Height;
         logf("eye: textures %ux%u for both eyes per frame", d.Width, d.Height);
     }
-    bool ok = g_eyeTex[e] != nullptr && d.SampleDesc.Count == 1;
+    // (replay.cpp: the right eye was drawn into the twin of the frame's texture)
+    ID3D11Texture2D *from = twin ? rpTwinOf(t) : t;
+    bool ok = g_eyeTex[e] != nullptr && d.SampleDesc.Count == 1 && from;
     if (ok) {
-        g_imm->CopyResource(g_eyeTex[e], t);
+        g_imm->CopyResource(g_eyeTex[e], from);
         g_eyeTexFrame[e] = g_frame;
     }
     t->Release();

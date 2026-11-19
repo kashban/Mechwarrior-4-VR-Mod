@@ -33,6 +33,18 @@ extern const int VT_Ctx_VSSetConstantBuffers, VT_Ctx_PSSetConstantBuffers, VT_Ct
     VT_Ctx_DrawIndexedInstancedIndirect, VT_Ctx_Dispatch, VT_Ctx_DispatchIndirect, VT_Ctx_Map, VT_Ctx_Unmap,
     VT_Ctx_UpdateSubresource, VT_Ctx_UpdateSubresource1, VT_Ctx_OMSetRenderTargets, VT_Ctx_OMSetRenderTargetsAndUAVs,
     VT_Ctx_RSSetViewports, VT_Ctx_ExecuteCommandList, VT_Ctx_FinishCommandList;
+extern const int VT_Ctx_PSSetShaderResources, VT_Ctx_PSSetSamplers, VT_Ctx_IASetInputLayout, VT_Ctx_IASetVertexBuffers,
+    VT_Ctx_IASetIndexBuffer, VT_Ctx_GSSetConstantBuffers, VT_Ctx_GSSetShader, VT_Ctx_IASetPrimitiveTopology,
+    VT_Ctx_VSSetSamplers, VT_Ctx_Begin, VT_Ctx_End, VT_Ctx_GSSetShaderResources, VT_Ctx_GSSetSamplers,
+    VT_Ctx_OMSetBlendState, VT_Ctx_OMSetDepthStencilState, VT_Ctx_SOSetTargets, VT_Ctx_DrawAuto, VT_Ctx_RSSetState,
+    VT_Ctx_RSSetScissorRects, VT_Ctx_CopySubresourceRegion, VT_Ctx_CopyResource, VT_Ctx_CopyStructureCount,
+    VT_Ctx_ClearRenderTargetView, VT_Ctx_ClearUnorderedAccessViewUint, VT_Ctx_ClearUnorderedAccessViewFloat,
+    VT_Ctx_ClearDepthStencilView, VT_Ctx_GenerateMips, VT_Ctx_ResolveSubresource, VT_Ctx_HSSetShaderResources,
+    VT_Ctx_HSSetShader, VT_Ctx_HSSetSamplers, VT_Ctx_HSSetConstantBuffers, VT_Ctx_DSSetShaderResources,
+    VT_Ctx_DSSetShader, VT_Ctx_DSSetSamplers, VT_Ctx_DSSetConstantBuffers, VT_Ctx_CSSetShaderResources,
+    VT_Ctx_CSSetUnorderedAccessViews, VT_Ctx_CSSetSamplers, VT_Ctx_ClearState, VT_Ctx_Flush,
+    VT_Ctx_CopySubresourceRegion1, VT_Ctx_DiscardResource, VT_Ctx_DiscardView, VT_Ctx_ClearView, VT_Ctx_DiscardView1,
+    VT_Ctx_SetPredication, VT_Ctx_SetResourceMinLOD;
 extern const int VT_Ann_BeginEvent, VT_Ann_EndEvent, VT_Ann_SetMarker, VT_Ann_GetStatus;
 extern const int VT_Fac_CreateSwapChain, VT_Fac_CreateSwapChainForHwnd;
 extern const int VT_Sc_Present, VT_Sc_Present1, VT_Sc_ResizeBuffers;

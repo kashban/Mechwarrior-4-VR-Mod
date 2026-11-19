@@ -287,6 +287,28 @@ static void camPlanesRestore(uint8_t *cam) {
     memcpy(cam + CAM_PLANES, g_camPlanesSaved, sizeof g_camPlanesSaved);
 }
 
+// the camera matrix of an eye: the game's (base) moved by that eye's pose; Rc, tc: the pose in the camera's
+// own coordinates
+static void camEyeMatrix(const float *base, int eye, float *out, float *Rc, float *tc) {
+    // head pose in view space (R columns = new axes, t) -> camera-local: Rc = A R A^T, tc = A t
+    const float *A = g_camA, *R = g_vrR[eye], *t = g_vrT[eye];
+    float AR[9];
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 3; ++j)
+            AR[i * 3 + j] = A[i * 3 + 0] * R[0 * 3 + j] + A[i * 3 + 1] * R[1 * 3 + j] + A[i * 3 + 2] * R[2 * 3 + j];
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 3; ++j)
+            Rc[i * 3 + j] = AR[i * 3 + 0] * A[j * 3 + 0] + AR[i * 3 + 1] * A[j * 3 + 1] + AR[i * 3 + 2] * A[j * 3 + 2];
+    for (int i = 0; i < 3; ++i) tc[i] = A[i * 3 + 0] * t[0] + A[i * 3 + 1] * t[1] + A[i * 3 + 2] * t[2];
+    // camera -> world: M' = M [Rc tc]; rows of m: (M00 M01 M02 Tx)
+    for (int i = 0; i < 3; ++i) {
+        for (int j = 0; j < 3; ++j)
+            out[i * 4 + j] =
+                base[i * 4 + 0] * Rc[0 * 3 + j] + base[i * 4 + 1] * Rc[1 * 3 + j] + base[i * 4 + 2] * Rc[2 * 3 + j];
+        out[i * 4 + 3] = base[i * 4 + 3] + base[i * 4 + 0] * tc[0] + base[i * 4 + 1] * tc[1] + base[i * 4 + 2] * tc[2];
+    }
+}
+
 static void camPreEye(uint8_t *cam, int eyeOv) {
     InterlockedIncrement(&g_statCamCalls);
     {
@@ -336,16 +358,9 @@ static void camPreEye(uint8_t *cam, int eyeOv) {
         camLocalRestore();
         return;
     }
-    // head pose in view space (R columns = new axes, t) -> camera-local: Rc = A R A^T, tc = A t
-    const float *A = g_camA, *R = g_vrR[eye], *t = g_vrT[eye];
-    float AR[9], Rc[9], tc[3];
-    for (int i = 0; i < 3; ++i)
-        for (int j = 0; j < 3; ++j)
-            AR[i * 3 + j] = A[i * 3 + 0] * R[0 * 3 + j] + A[i * 3 + 1] * R[1 * 3 + j] + A[i * 3 + 2] * R[2 * 3 + j];
-    for (int i = 0; i < 3; ++i)
-        for (int j = 0; j < 3; ++j)
-            Rc[i * 3 + j] = AR[i * 3 + 0] * A[j * 3 + 0] + AR[i * 3 + 1] * A[j * 3 + 1] + AR[i * 3 + 2] * A[j * 3 + 2];
-    for (int i = 0; i < 3; ++i) tc[i] = A[i * 3 + 0] * t[0] + A[i * 3 + 1] * t[1] + A[i * 3 + 2] * t[2];
+    const float *A = g_camA, *t = g_vrT[eye];
+    float out[12], Rc[9], tc[3];
+    camEyeMatrix(base, eye, out, Rc, tc);
     if (g_camLocal > 0 && eyeOv <= 0) { // once per frame: the middle between the eyes, for the game's next update
         float tm[3], tcm[3];
         bool two = g_vrPoseOk[0] && g_vrPoseOk[1];
@@ -354,14 +369,6 @@ static void camPreEye(uint8_t *cam, int eyeOv) {
         camLocalWrite(cam, Rc, tcm);
     } else if (g_camLocal <= 0) {
         camLocalRestore();
-    }
-    // camera -> world: M' = M [Rc tc]; rows of m: (M00 M01 M02 Tx)
-    float out[12];
-    for (int i = 0; i < 3; ++i) {
-        for (int j = 0; j < 3; ++j)
-            out[i * 4 + j] =
-                base[i * 4 + 0] * Rc[0 * 3 + j] + base[i * 4 + 1] * Rc[1 * 3 + j] + base[i * 4 + 2] * Rc[2 * 3 + j];
-        out[i * 4 + 3] = base[i * 4 + 3] + base[i * 4 + 0] * tc[0] + base[i * 4 + 1] * tc[1] + base[i * 4 + 2] * tc[2];
     }
     memcpy(m, out, sizeof out);
     if (g_camPlanes > 0) camPlanesWrite(cam, base, out);
@@ -452,26 +459,56 @@ static int __cdecl camDraw(uint8_t *cam, void *edxv, void *arg) {
     }
     // the left eye: drawn, its picture taken out of the frame; then the right eye over it
     int r = 0;
+    bool replay = false; // the right eye's picture is made with the left eye's draws (replay.cpp)
     for (int e = 0; e < 2; ++e) {
-        camPreEye(cam, e);
-        g_lblEye = e;
-        g_camPassEye = e;
-        g_kEyeOverride = e;
-        buildK(); // the cockpit's extra movement for this eye
-        g_kEyeOverride = -1;
-        LONG before = g_tonemapCount;
-        g_camInMain = true;
-        {
-            PerfScope perf(PF_EYE0 + e);
-            r = camCallOrig(cam, edxv, arg);
-        }
-        g_camInMain = false;
-        g_camPassEye = -1;
-        camPost(cam);
         bool ok = false;
-        if (g_tonemapCount != before) {
+        LONG before = g_tonemapCount;
+        if (e == 1 && replay) {
+            // not drawn by the game: its picture is in the twin of the frame's texture
+            memcpy(g_camEyeBase[1], g_camBase, sizeof g_camBase);
+            g_camEyeBaseOk[1] = true;
+            g_camEye = 1;
             PerfScope perf(PF_GRAB);
-            ok = eyeGrab(e);
+            ok = eyeGrab(1, true);
+            if (!ok) { // the game draws it after all
+                replay = false;
+                --e;
+                continue;
+            }
+        } else {
+            camPreEye(cam, e);
+            g_lblEye = e;
+            g_camPassEye = e;
+            if (e == 0 && (rpWanted() || g_rpMode == 2)) {
+                float c1[12], Rc[9], tc[3], k1[16];
+                camEyeMatrix(g_camBase, 1, c1, Rc, tc);
+                g_kEyeOverride = 1;
+                buildK();
+                memcpy(k1, g_K, sizeof k1);
+                eyeTlRightSet(k1, g_kOn && g_kTlOnly);
+                if (g_rpMode == 2)
+                    rpCheckK(g_camWritten, c1);
+                else
+                    replay = rpBegin(g_camWritten, c1);
+            }
+            g_kEyeOverride = e;
+            buildK(); // the cockpit's extra movement for this eye
+            g_kEyeOverride = -1;
+            g_camInMain = true;
+            rpPassBegin(e);
+            {
+                PerfScope perf(PF_EYE0 + e);
+                r = camCallOrig(cam, edxv, arg);
+            }
+            rpPassEnd(e);
+            if (e == 0 && replay) replay = rpEnd();
+            g_camInMain = false;
+            g_camPassEye = -1;
+            camPost(cam);
+            if (g_tonemapCount != before) {
+                PerfScope perf(PF_GRAB);
+                ok = eyeGrab(e);
+            }
         }
         if (!ok) {
             static int fails;

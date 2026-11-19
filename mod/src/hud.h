@@ -44,6 +44,6 @@ static inline ID3D11RenderTargetView *hudSwap(ID3D11RenderTargetView *v) {
 extern ID3D11Texture2D *g_eyeTex[2];
 extern unsigned g_eyeTexFrame[2];
 extern UINT g_eyeTexW, g_eyeTexH;
-bool eyeGrab(int e);
+bool eyeGrab(int e, bool twin = false);
 
 #endif // MW4VR_HUD_H

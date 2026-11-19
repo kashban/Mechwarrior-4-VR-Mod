@@ -17,7 +17,8 @@ void e2ePass(int e, int *v) {
 // CPU path: while in "3D" and an eye is active, draws with VS ad8cee09 run our replacement shader
 // (same work + clip.x offset), its offset in our own constant buffer at b12; both restored after.
 
-static ID3D11Buffer *g_eyeCB;
+static ID3D11Buffer *g_eyeCB, *g_eyeCBR;
+static bool g_eyeTlOn; // the draw in hand runs our shader
 static float g_eyeCBval = 1e30f;
 
 void createEyeVS() {
@@ -39,9 +40,10 @@ void createEyeVS() {
     hr = ORIG(PFN_CreateShader, g_dev, VT_Dev_CreateVertexShader)(g_dev, code->GetBufferPointer(),
                                                                   code->GetBufferSize(), nullptr, (void **)&vs);
     code->Release();
-    D3D11_BUFFER_DESC bd = {80, D3D11_USAGE_DYNAMIC, D3D11_BIND_CONSTANT_BUFFER, D3D11_CPU_ACCESS_WRITE, 0, 0};
+    D3D11_BUFFER_DESC bd = {144, D3D11_USAGE_DYNAMIC, D3D11_BIND_CONSTANT_BUFFER, D3D11_CPU_ACCESS_WRITE, 0, 0};
     ID3D11Buffer *cb = nullptr;
     HRESULT hr2 = ORIG(PFN_CreateBuffer, g_dev, VT_Dev_CreateBuffer)(g_dev, &bd, nullptr, &cb);
+    if (SUCCEEDED(hr2)) hr2 = ORIG(PFN_CreateBuffer, g_dev, VT_Dev_CreateBuffer)(g_dev, &bd, nullptr, &g_eyeCBR);
     if (FAILED(hr) || FAILED(hr2) || !vs || !cb) {
         logf("eye: replacement shader or its buffer not created (0x%08lx, 0x%08lx)", hr, hr2);
         return;
@@ -68,7 +70,7 @@ static bool eyeTlPre(ID3D11DeviceContext *c) {
     if (cbFrame != g_tlEpoch) {
         D3D11_MAPPED_SUBRESOURCE m;
         if (SUCCEEDED(ORIG(PFN_Map, c, VT_Ctx_Map)(c, g_eyeCB, 0, D3D11_MAP_WRITE_DISCARD, 0, &m))) {
-            float v[20] = {};
+            float v[36] = {};
             memcpy(v, g_K, 64);
             v[16] = g_near;
             v[17] = g_kTlOnly ? g_cockpitRange : 1e30f; // camera mode: the cockpit alone
@@ -83,11 +85,56 @@ static bool eyeTlPre(ID3D11DeviceContext *c) {
     ORIG(PFN_SetShader, c, VT_Ctx_VSSetShader)(c, g_eyeVS, nullptr, 0);
     ORIG(PFN_SetCB, c, VT_Ctx_VSSetConstantBuffers)(c, 12, 1, &g_eyeCB);
     InterlockedIncrement(&g_statTlSwaps);
+    g_eyeTlOn = true;
     return true;
 }
 
 static void eyeTlPost(ID3D11DeviceContext *c) {
     CtxState *s = ctxOf(c);
+    g_eyeTlOn = false;
+    ORIG(PFN_SetShader, c, VT_Ctx_VSSetShader)(c, s->st[ST_VS].obj, nullptr, 0);
+    ID3D11Buffer *prev = (ID3D11Buffer *)s->st[ST_VS].cb[12];
+    ORIG(PFN_SetCB, c, VT_Ctx_VSSetConstantBuffers)(c, 12, 1, &prev);
+}
+
+// The right eye's copy of a CPU-path draw (replay.cpp): our shader with the step from the left eye's view to
+// the right eye's for every vertex, and for what is near (the cockpit) the right eye's own movement on top.
+static float g_eyeRNear[16];
+static bool g_eyeRNearOn;
+void eyeTlRightSet(const float *k, bool on) {
+    memcpy(g_eyeRNear, k, sizeof g_eyeRNear);
+    g_eyeRNearOn = on;
+}
+bool eyeTlRightPre(ID3D11DeviceContext *c) {
+    ShaderInfo *sh = ctxOf(c)->st[ST_VS].sh;
+    if (!g_eyeVS || !g_eyeCBR || !sh || sh->hash != HK_VS_TL) return false;
+    static unsigned frame = ~0u;
+    if (frame != g_frame) {
+        D3D11_MAPPED_SUBRESOURCE m;
+        if (FAILED(ORIG(PFN_Map, c, VT_Ctx_Map)(c, g_eyeCBR, 0, D3D11_MAP_WRITE_DISCARD, 0, &m))) return false;
+        float v[36] = {}, k[32];
+        rpTlMatrices(g_eyeRNear, g_eyeRNearOn, k);
+        memcpy(v, k, 64);
+        memcpy(v + 20, k + 16, 64);
+        v[16] = g_near;
+        v[17] = g_eyeRNearOn ? g_cockpitRange : 0.0f;
+        v[18] = (g_kTlOnly && mw5Active()) ? g_cockpitRange * max(1.0f, g_vr.cockpitScale / 1.9f) : 0.0f;
+        v[19] = 1;
+        memcpy(m.pData, v, sizeof v);
+        ORIG(PFN_Unmap, c, VT_Ctx_Unmap)(c, g_eyeCBR, 0);
+        frame = g_frame;
+    }
+    ORIG(PFN_SetShader, c, VT_Ctx_VSSetShader)(c, g_eyeVS, nullptr, 0);
+    ORIG(PFN_SetCB, c, VT_Ctx_VSSetConstantBuffers)(c, 12, 1, &g_eyeCBR);
+    return true;
+}
+// back to what the left eye's draw runs with
+void eyeTlRightPost(ID3D11DeviceContext *c) {
+    CtxState *s = ctxOf(c);
+    if (g_eyeTlOn) {
+        ORIG(PFN_SetCB, c, VT_Ctx_VSSetConstantBuffers)(c, 12, 1, &g_eyeCB);
+        return;
+    }
     ORIG(PFN_SetShader, c, VT_Ctx_VSSetShader)(c, s->st[ST_VS].obj, nullptr, 0);
     ID3D11Buffer *prev = (ID3D11Buffer *)s->st[ST_VS].cb[12];
     ORIG(PFN_SetCB, c, VT_Ctx_VSSetConstantBuffers)(c, 12, 1, &prev);
@@ -269,9 +316,19 @@ void e2eState(int *v) {
     v[3] = g_fadeMenu && !g_menuMode && g_sheetCleanFrame == g_frame ? 1 : 0;
 }
 
+// our own cockpit, in the right eye's copy of the draw the left eye's got it at (replay.cpp)
+static void mw5Right(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw, int ck) {
+    g_camPassEye = 1;
+    mw5Draw(c, draw, ck);
+    g_camPassEye = 0;
+}
+
 template <int V> static void STDMETHODCALLTYPE HP_Draw(ID3D11DeviceContext *c, UINT a, UINT b) {
     PerfScope perfHook(PF_HOOK);
     onWork(c, "Draw", false);
+    if ((void *)c == (void *)g_imm) rpWork("Draw");
+    RpOwn own;
+    rpRingFeed(c, 1);
     ++g_m5AllDraws;
     if (eyeHidden(c)) return;
     if (smallCamBackdrop(c)) return;
@@ -283,12 +340,20 @@ template <int V> static void STDMETHODCALLTYPE HP_Draw(ID3D11DeviceContext *c, U
         PerfScope perfD3d(PF_D3D);
         ((PFN_U2)g_tr[SL_DRAW][V])(c, a, b);
     }
+    if (rpStereo(c) && rpRightBegin(c, 1)) {
+        if (sw && g_mw5On) mw5Right(c, (Mw5PFN_DrawIdx)g_tr[SL_DRAWIDX][V], ck);
+        ((PFN_U2)g_tr[SL_DRAW][V])(c, a, b);
+        rpRightEnd(c);
+    }
     if (hw) hudWidePost(c);
     if (sw) eyeTlPost(c);
 }
 template <int V> static void STDMETHODCALLTYPE HP_DrawIndexed(ID3D11DeviceContext *c, UINT a, UINT b, INT d) {
     PerfScope perfHook(PF_HOOK);
     onWork(c, "DrawIndexed", false);
+    if ((void *)c == (void *)g_imm) rpWork("DrawIndexed");
+    RpOwn own;
+    rpRingFeed(c, 1);
     ++g_m5AllDraws;
     if (eyeHidden(c)) return;
     bool sw = eyeTlPre(c);
@@ -299,6 +364,11 @@ template <int V> static void STDMETHODCALLTYPE HP_DrawIndexed(ID3D11DeviceContex
         PerfScope perfD3d(PF_D3D);
         ((PFN_U2I)g_tr[SL_DRAWIDX][V])(c, a, b, d);
     }
+    if (rpStereo(c) && rpRightBegin(c, 1)) {
+        if (sw && g_mw5On) mw5Right(c, (Mw5PFN_DrawIdx)g_tr[SL_DRAWIDX][V], ck);
+        ((PFN_U2I)g_tr[SL_DRAWIDX][V])(c, a, b, d);
+        rpRightEnd(c);
+    }
     if (hw) hudWidePost(c);
     if (sw) eyeTlPost(c);
 }
@@ -306,12 +376,19 @@ template <int V>
 static void STDMETHODCALLTYPE HP_DrawInstanced(ID3D11DeviceContext *c, UINT a, UINT b, UINT d, UINT e) {
     PerfScope perfHook(PF_HOOK);
     onWork(c, "DrawInstanced", false);
+    if ((void *)c == (void *)g_imm) rpWork("DrawInstanced");
+    RpOwn own;
+    rpRingFeed(c, b);
     if (eyeHidden(c)) return;
     bool sw = eyeTlPre(c);
     bool hw = hudWidePre(c);
     {
         PerfScope perfD3d(PF_D3D);
         ((PFN_U4)g_tr[SL_DRAWINST][V])(c, a, b, d, e);
+    }
+    if (rpStereo(c) && rpRightBegin(c, b)) {
+        ((PFN_U4)g_tr[SL_DRAWINST][V])(c, a, b, d, e);
+        rpRightEnd(c);
     }
     if (hw) hudWidePost(c);
     if (sw) eyeTlPost(c);
@@ -320,12 +397,19 @@ template <int V>
 static void STDMETHODCALLTYPE HP_DrawIndexedInstanced(ID3D11DeviceContext *c, UINT a, UINT b, UINT d, INT e, UINT f) {
     PerfScope perfHook(PF_HOOK);
     onWork(c, "DrawIndexedInstanced", false);
+    if ((void *)c == (void *)g_imm) rpWork("DrawIndexedInstanced");
+    RpOwn own;
+    rpRingFeed(c, b);
     if (eyeHidden(c)) return;
     bool sw = eyeTlPre(c);
     bool hw = hudWidePre(c);
     {
         PerfScope perfD3d(PF_D3D);
         ((PFN_U3IU)g_tr[SL_DRAWIDXINST][V])(c, a, b, d, e, f);
+    }
+    if (rpStereo(c) && rpRightBegin(c, b)) {
+        ((PFN_U3IU)g_tr[SL_DRAWIDXINST][V])(c, a, b, d, e, f);
+        rpRightEnd(c);
     }
     if (hw) hudWidePost(c);
     if (sw) eyeTlPost(c);
@@ -334,12 +418,19 @@ template <int V>
 static void STDMETHODCALLTYPE HP_DrawInstancedIndirect(ID3D11DeviceContext *c, ID3D11Buffer *b, UINT o) {
     PerfScope perfHook(PF_HOOK);
     onWork(c, "DrawInstancedIndirect", false);
+    if ((void *)c == (void *)g_imm) rpWork("DrawInstancedIndirect");
+    RpOwn own;
+    rpRingFeed(c, 0);
     if (eyeHidden(c)) return;
     bool sheet = hudSheetPre(c);
     bool hw = hudWidePre(c);
     {
         PerfScope perfD3d(PF_D3D);
         ((PFN_BU)g_tr[SL_DRAWINSTIND][V])(c, b, o);
+    }
+    if (rpStereo(c) && rpRightBegin(c, 0)) {
+        ((PFN_BU)g_tr[SL_DRAWINSTIND][V])(c, b, o);
+        rpRightEnd(c);
     }
     if (hw) hudWidePost(c);
     if (sheet) hudSheetPost(c);
@@ -348,34 +439,54 @@ template <int V>
 static void STDMETHODCALLTYPE HP_DrawIndexedInstancedIndirect(ID3D11DeviceContext *c, ID3D11Buffer *b, UINT o) {
     PerfScope perfHook(PF_HOOK);
     onWork(c, "DrawIndexedInstancedIndirect", false);
+    if ((void *)c == (void *)g_imm) rpWork("DrawIndexedInstancedIndirect");
+    RpOwn own;
+    rpRingFeed(c, 0);
     if (eyeHidden(c)) return;
     bool hw = hudWidePre(c);
     {
         PerfScope perfD3d(PF_D3D);
         ((PFN_BU)g_tr[SL_DRAWIDXINSTIND][V])(c, b, o);
     }
+    if (rpStereo(c) && rpRightBegin(c, 0)) {
+        ((PFN_BU)g_tr[SL_DRAWIDXINSTIND][V])(c, b, o);
+        rpRightEnd(c);
+    }
     if (hw) hudWidePost(c);
 }
 template <int V> static void STDMETHODCALLTYPE HP_Dispatch(ID3D11DeviceContext *c, UINT x, UINT y, UINT z) {
     PerfScope perfHook(PF_HOOK);
     onWork(c, "Dispatch", true);
+    if ((void *)c == (void *)g_imm) rpWork("Dispatch");
+    RpOwn own;
     {
         PerfScope perfD3d(PF_D3D);
         ((PFN_U3)g_tr[SL_DISP][V])(c, x, y, z);
+    }
+    if (rpStereo(c) && g_rpOwn == 1 && rpRightBeginCs(c)) {
+        ((PFN_U3)g_tr[SL_DISP][V])(c, x, y, z);
+        rpRightEndCs(c);
     }
 }
 template <int V> static void STDMETHODCALLTYPE HP_DispatchIndirect(ID3D11DeviceContext *c, ID3D11Buffer *b, UINT o) {
     PerfScope perfHook(PF_HOOK);
     onWork(c, "DispatchIndirect", true);
+    if ((void *)c == (void *)g_imm) rpWork("DispatchIndirect");
+    RpOwn own;
     {
         PerfScope perfD3d(PF_D3D);
         ((PFN_BU)g_tr[SL_DISPIND][V])(c, b, o);
+    }
+    if (rpStereo(c) && g_rpOwn == 1 && rpRightBeginCs(c)) {
+        ((PFN_BU)g_tr[SL_DISPIND][V])(c, b, o);
+        rpRightEndCs(c);
     }
 }
 template <int V>
 static void STDMETHODCALLTYPE HP_Upd(ID3D11DeviceContext *c, ID3D11Resource *r, UINT sub, const D3D11_BOX *box,
                                      const void *src, UINT rp, UINT dp) {
     if (!ctxOf(c)->foreign) updateCommon(r, box, src);
+    if ((void *)c == (void *)g_imm) rpUpdated(r, sub, box, src);
     if (g_cap) snapshot(r, src, box ? box->left : 0, box ? box->right - box->left : 0);
     ((PFN_Update)g_tr[SL_UPD][V])(c, r, sub, box, src, rp, dp);
 }
@@ -383,8 +494,57 @@ template <int V>
 static void STDMETHODCALLTYPE HP_Upd1(ID3D11DeviceContext *c, ID3D11Resource *r, UINT sub, const D3D11_BOX *box,
                                       const void *src, UINT rp, UINT dp, UINT fl) {
     if (!ctxOf(c)->foreign) updateCommon(r, box, src);
+    if ((void *)c == (void *)g_imm) rpUpdated(r, sub, box, src);
     if (g_cap) snapshot(r, src, box ? box->left : 0, box ? box->right - box->left : 0);
     ((PFN_Update1)g_tr[SL_UPD1][V])(c, r, sub, box, src, rp, dp, fl);
+}
+
+// what the main camera's pass clears and copies, it clears and copies for the right eye too (replay.cpp)
+typedef void(STDMETHODCALLTYPE *PFN_ClearRtv)(ID3D11DeviceContext *, ID3D11RenderTargetView *, const FLOAT *);
+typedef void(STDMETHODCALLTYPE *PFN_ClearDsv)(ID3D11DeviceContext *, ID3D11DepthStencilView *, UINT, FLOAT, UINT8);
+typedef void(STDMETHODCALLTYPE *PFN_ClearUavU)(ID3D11DeviceContext *, ID3D11UnorderedAccessView *, const UINT *);
+typedef void(STDMETHODCALLTYPE *PFN_ClearUavF)(ID3D11DeviceContext *, ID3D11UnorderedAccessView *, const FLOAT *);
+typedef void(STDMETHODCALLTYPE *PFN_CopyRes)(ID3D11DeviceContext *, ID3D11Resource *, ID3D11Resource *);
+typedef void(STDMETHODCALLTYPE *PFN_CopyReg)(ID3D11DeviceContext *, ID3D11Resource *, UINT, UINT, UINT, UINT,
+                                             ID3D11Resource *, UINT, const D3D11_BOX *);
+typedef void(STDMETHODCALLTYPE *PFN_GenMips)(ID3D11DeviceContext *, ID3D11ShaderResourceView *);
+template <int V>
+static void STDMETHODCALLTYPE HP_ClearRtv(ID3D11DeviceContext *c, ID3D11RenderTargetView *v, const FLOAT *f) {
+    ((PFN_ClearRtv)g_tr[SL_CLRRTV][V])(c, v, f);
+    if (ID3D11RenderTargetView *t = rpClearTwin(c, v)) ((PFN_ClearRtv)g_tr[SL_CLRRTV][V])(c, t, f);
+}
+template <int V>
+static void STDMETHODCALLTYPE HP_ClearDsv(ID3D11DeviceContext *c, ID3D11DepthStencilView *v, UINT fl, FLOAT d,
+                                          UINT8 st) {
+    ((PFN_ClearDsv)g_tr[SL_CLRDSV][V])(c, v, fl, d, st);
+    if (ID3D11DepthStencilView *t = rpClearTwin(c, v)) ((PFN_ClearDsv)g_tr[SL_CLRDSV][V])(c, t, fl, d, st);
+}
+template <int V>
+static void STDMETHODCALLTYPE HP_ClearUavU(ID3D11DeviceContext *c, ID3D11UnorderedAccessView *v, const UINT *f) {
+    ((PFN_ClearUavU)g_tr[SL_CLRUAVU][V])(c, v, f);
+    if (ID3D11UnorderedAccessView *t = rpClearTwin(c, v)) ((PFN_ClearUavU)g_tr[SL_CLRUAVU][V])(c, t, f);
+}
+template <int V>
+static void STDMETHODCALLTYPE HP_ClearUavF(ID3D11DeviceContext *c, ID3D11UnorderedAccessView *v, const FLOAT *f) {
+    ((PFN_ClearUavF)g_tr[SL_CLRUAVF][V])(c, v, f);
+    if (ID3D11UnorderedAccessView *t = rpClearTwin(c, v)) ((PFN_ClearUavF)g_tr[SL_CLRUAVF][V])(c, t, f);
+}
+template <int V>
+static void STDMETHODCALLTYPE HP_CopyRes(ID3D11DeviceContext *c, ID3D11Resource *d, ID3D11Resource *sr) {
+    ((PFN_CopyRes)g_tr[SL_COPYRES][V])(c, d, sr);
+    ID3D11Resource *td, *ts;
+    if (rpCopyTwins(c, d, sr, &td, &ts)) ((PFN_CopyRes)g_tr[SL_COPYRES][V])(c, td, ts);
+}
+template <int V>
+static void STDMETHODCALLTYPE HP_CopyReg(ID3D11DeviceContext *c, ID3D11Resource *d, UINT ds, UINT x, UINT y, UINT z,
+                                         ID3D11Resource *sr, UINT ss, const D3D11_BOX *b) {
+    ((PFN_CopyReg)g_tr[SL_COPYREG][V])(c, d, ds, x, y, z, sr, ss, b);
+    ID3D11Resource *td, *ts;
+    if (rpCopyTwins(c, d, sr, &td, &ts)) ((PFN_CopyReg)g_tr[SL_COPYREG][V])(c, td, ds, x, y, z, ts, ss, b);
+}
+template <int V> static void STDMETHODCALLTYPE HP_GenMips(ID3D11DeviceContext *c, ID3D11ShaderResourceView *v) {
+    ((PFN_GenMips)g_tr[SL_GENMIPS][V])(c, v);
+    if (ID3D11ShaderResourceView *t = rpMipsTwin(c, v)) ((PFN_GenMips)g_tr[SL_GENMIPS][V])(c, t);
 }
 
 #define HP_ROW(f) {(void *)&f<0>, (void *)&f<1>, (void *)&f<2>, (void *)&f<3>}
@@ -397,7 +557,14 @@ static void *const g_hpHook[SL_N][HP_VARS] = {HP_ROW(HP_Draw),
                                               HP_ROW(HP_Dispatch),
                                               HP_ROW(HP_DispatchIndirect),
                                               HP_ROW(HP_Upd),
-                                              HP_ROW(HP_Upd1)};
+                                              HP_ROW(HP_Upd1),
+                                              HP_ROW(HP_ClearRtv),
+                                              HP_ROW(HP_ClearDsv),
+                                              HP_ROW(HP_ClearUavU),
+                                              HP_ROW(HP_ClearUavF),
+                                              HP_ROW(HP_CopyRes),
+                                              HP_ROW(HP_CopyReg),
+                                              HP_ROW(HP_GenMips)};
 
 static bool hotpatch(void *fn, void *hook) {
     uint8_t *p = (uint8_t *)fn;
@@ -427,9 +594,17 @@ void hotpatchScan(ID3D11DeviceContext *ctx) {
                              VT_Ctx_Dispatch,
                              VT_Ctx_DispatchIndirect,
                              VT_Ctx_UpdateSubresource,
-                             VT_Ctx_UpdateSubresource1};
+                             VT_Ctx_UpdateSubresource1,
+                             VT_Ctx_ClearRenderTargetView,
+                             VT_Ctx_ClearDepthStencilView,
+                             VT_Ctx_ClearUnorderedAccessViewUint,
+                             VT_Ctx_ClearUnorderedAccessViewFloat,
+                             VT_Ctx_CopyResource,
+                             VT_Ctx_CopySubresourceRegion,
+                             VT_Ctx_GenerateMips};
     void **vt = *(void ***)ctx;
-    for (int s = 0; s < SL_N; ++s) {
+    // (the clears' and copies' hooks are for replay.cpp alone: not placed without it)
+    for (int s = 0; s < (g_rpMode ? SL_N : SL_CLRRTV); ++s) {
         void *fn = vt[slots[s]];
         HMODULE m = nullptr;
         GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
@@ -464,6 +639,7 @@ void hotpatchScan(ID3D11DeviceContext *ctx) {
 
 void STDMETHODCALLTYPE H_OMSetRenderTargets(ID3D11DeviceContext *c, UINT n, ID3D11RenderTargetView *const *rtv,
                                             ID3D11DepthStencilView *dsv) {
+    if ((void *)c == (void *)g_imm) rpOmSet(n, rtv, dsv, false, 0, 0, nullptr);
     if (g_cap) setRTs(ctxOf(c), n, rtv, dsv);
     if (n >= 1 && n <= 8 && rtv && hudSwap(rtv[0]) != rtv[0]) { // inside the HUD pass: our layer texture
         ID3D11RenderTargetView *v[8];
@@ -482,6 +658,7 @@ void STDMETHODCALLTYPE H_OMSetRenderTargetsAndUAVs(ID3D11DeviceContext *c, UINT 
                                                    ID3D11DepthStencilView *dsv, UINT us, UINT un,
                                                    ID3D11UnorderedAccessView *const *uav, const UINT *ic) {
     if (g_cap && n != D3D11_KEEP_RENDER_TARGETS_AND_DEPTH_STENCIL) setRTs(ctxOf(c), n, rtv, dsv);
+    if ((void *)c == (void *)g_imm) rpOmSet(n, rtv, dsv, true, us, un, uav);
     // which buffers stand behind the clutter's g_ctView (u75) and g_ctWind (u76): logged once each
     static int seen75, seen76;
     if (uav && un != D3D11_KEEP_UNORDERED_ACCESS_VIEWS)

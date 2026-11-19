@@ -1138,7 +1138,161 @@ static void testCockpitFile() {
     CHECK(mcGroupBytes(10, 30, 4, MC_GROUP_TEX + 1) == 0);
 }
 
+// ---------------------------------------------------------------- the right eye's view from the left eye's
+static bool nearlyD(double a, double b, double eps = 1e-12) { return fabs(a - b) <= eps; }
+static bool sameM4(const McM4 &a, const double *want, double eps = 1e-12) {
+    for (int i = 0; i < 16; ++i)
+        if (!nearlyD(a.m[i], want[i], eps)) return false;
+    return true;
+}
+static void testM4() {
+    g_test = "m4";
+    const McM4 a = {{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}}, b = {{2, 0, 1, 3, 1, 3, 0, -2, 0, 1, 2, 5, 4, -1, 3, 1}};
+    const double ab[16] = {20, 5, 19, 18, 48, 17, 43, 46, 76, 29, 67, 74, 104, 41, 91, 102}, ba[16] = {50, 56, 62, 68, -10, -8, -6, -4, 88, 96, 104, 112, 39, 46, 53, 60};
+    CHECK(sameM4(mcM4Mul(a, b), ab, 0));
+    CHECK(sameM4(mcM4Mul(b, a), ba, 0));
+    const float c[12] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
+    const double c4[16] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 0, 0, 0, 1};
+    CHECK(sameM4(mcM4From34(c), c4, 0));
+    const float x[3] = {1, 2, 3}, y[3] = {4, -5, 6};
+    CHECK(mcDot3d(x, y) == 12);
+    // the largest difference, whichever way and wherever
+    McM4 d = a;
+    CHECK(mcM4Apart(a, d) == 0);
+    d.m[0] += 0.5, d.m[7] -= 2, d.m[15] += 1;
+    CHECK(mcM4Apart(a, d) == 2 && mcM4Apart(d, a) == 2);
+    d = a, d.m[15] += 3;
+    CHECK(mcM4Apart(a, d) == 3);
+    d = a, d.m[0] -= 4;
+    CHECK(mcM4Apart(a, d) == 4);
+    // floats times doubles, either way round
+    float f[16] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}, g[16] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
+    float f17[18], g17[18]; // nothing is written before or past the sixteen
+    f17[0] = g17[0] = f17[17] = g17[17] = -77;
+    memcpy(f17 + 1, f, sizeof f), memcpy(g17 + 1, g, sizeof g);
+    mcM4Left(b, f17 + 1), mcM4Right(b, g17 + 1);
+    for (int i = 0; i < 16; ++i) CHECK(f17[i + 1] == (float)ba[i] && g17[i + 1] == (float)ab[i]);
+    CHECK(f17[0] == -77 && g17[0] == -77 && f17[17] == -77 && g17[17] == -77);
+    float kf[16], af[16], ff[18];
+    ff[0] = ff[17] = -77;
+    for (int i = 0; i < 16; ++i) kf[i] = (float)b.m[i], af[i] = (float)a.m[i];
+    mcM4MulF(kf, af, ff + 1);
+    for (int i = 0; i < 16; ++i) CHECK(ff[i + 1] == (float)ba[i]);
+    CHECK(ff[0] == -77 && ff[17] == -77);
+    float pt[4] = {2, 3, 5, -77};
+    const McM4 aff = {{2, 7, 1, 10, 4, 3, 6, 20, 1, 8, 9, 30, 9, 9, 9, 9}};
+    mcM4Point(aff, pt);
+    CHECK(pt[0] == 40 && pt[1] == 67 && pt[2] == 101 && pt[3] == -77);
+}
+static void testM4Inv() {
+    g_test = "m4Inv";
+    const McM4 m = {{2, 1, 0, 3, 1, 1, 0, -2, 0, 0, 1, 5, 0, 0, 0, 1}}, m2 = {{0, 1, 0, 1, 1, 0, 0, 2, 0, 0, 2, 4, 0, 0, 0, 1}}, g = {{1, 2, 0, 1, 0, 1, 3, 2, 2, 0, 1, -3, 0, 0, 0, 1}};
+    const double mi[16] = {1, -1, 0, -5, -1, 2, 0, 7, 0, 0, 1, -5, 0, 0, 0, 1}, m2i[16] = {0, 1, 0, -2, 1, 0, 0, -1, 0, 0, 0.5, -2, 0, 0, 0, 1}, gi[16] = {0.076923076923076927, -0.15384615384615385, 0.46153846153846156, 1.6153846153846154, 0.46153846153846156, 0.076923076923076927, -0.23076923076923078, -1.3076923076923077, -0.15384615384615385, 0.30769230769230771, 0.076923076923076927, -0.23076923076923078, 0, 0, 0, 1};
+    McM4 o;
+    CHECK(mcM4InvAffine(m, &o) && sameM4(o, mi, 0));
+    CHECK(mcM4InvAffine(m2, &o) && sameM4(o, m2i, 0)); // (a negative determinant)
+    CHECK(mcM4InvAffine(g, &o) && sameM4(o, gi));
+    const double id[16] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+    CHECK(sameM4(mcM4Mul(g, o), id) && sameM4(mcM4Mul(o, g), id));
+    // none: flat; and just under the limit - at it there is one
+    McM4 flat = {{1, 2, 3, 0, 2, 4, 6, 0, 0, 0, 1, 0, 0, 0, 0, 1}}, keep = {{7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7}};
+    o = keep;
+    CHECK(!mcM4InvAffine(flat, &o) && sameM4(o, keep.m, 0));
+    McM4 tiny = {{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, MC_DET_MIN, 0, 0, 0, 0, 1}};
+    CHECK(mcM4InvAffine(tiny, &o) && o.m[10] == 1 / MC_DET_MIN);
+    tiny.m[10] = -MC_DET_MIN;
+    CHECK(mcM4InvAffine(tiny, &o) && o.m[10] == -1 / MC_DET_MIN);
+    tiny.m[10] = MC_DET_MIN / 2;
+    CHECK(!mcM4InvAffine(tiny, &o));
+    tiny.m[10] = -MC_DET_MIN / 2;
+    CHECK(!mcM4InvAffine(tiny, &o));
+}
+static void testProj() {
+    g_test = "proj";
+    float w[16] = {0.25, 1.5, 0, -8.25, -0.5, 0, 2, -12.5, 0.125, 0, 0, 0.375, 1, 0, 0, -3};
+    McProj p = mcProjFrom(w);
+    CHECK(p.ok && p.p00 == 1.5 && p.p11 == 2 && p.j0 == 0.25 && p.j1 == -0.5 && p.a == 0.125 && p.b == 0.75);
+    const double pm[16] = {1.5, 0, 0.25, 0, 0, 2, -0.5, 0, 0, 0, 0.125, 0.75, 0, 0, 1, 0};
+    const double id[16] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+    CHECK(sameM4(mcProjM(p), pm, 0));
+    CHECK(sameM4(mcM4Mul(mcProjM(p), mcProjInv(p)), id) && sameM4(mcM4Mul(mcProjInv(p), mcProjM(p)), id));
+    const McProj q = {2, 4, 0.5, -0.25, 0.125, 0.5, true};
+    const double qi[16] = {0.5, 0, 0, -0.25, 0, 0.25, 0, 0.0625, 0, 0, 0, 1, 0, 0, 2, -0.25};
+    CHECK(sameM4(mcProjInv(q), qi, 0));
+    // not a world -> clip matrix: the w row is no unit vector (at the limit it still is one)
+    float v[16];
+    memcpy(v, w, sizeof v), v[12] = 1 + (float)MC_PROJ_UNIT;
+    CHECK(mcProjFrom(v).ok);
+    v[12] = 1 + 2 * (float)MC_PROJ_UNIT;
+    CHECK(!mcProjFrom(v).ok && mcProjFrom(v).p00 == 0);
+    v[12] = 1 - (float)MC_PROJ_UNIT;
+    CHECK(mcProjFrom(v).ok);
+    v[12] = 1 - 2 * (float)MC_PROJ_UNIT;
+    CHECK(!mcProjFrom(v).ok);
+    // scales and the near term at their limits: not enough; just above: enough
+    const float lim = (float)MC_PROJ_MIN, nearLim = (float)MC_PROJ_NEAR;
+    float u[16] = {0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0};
+    CHECK(mcProjFrom(u).ok && mcProjFrom(u).p00 == 1 && mcProjFrom(u).p11 == 1 && mcProjFrom(u).b == 1);
+    u[1] = lim;
+    CHECK(!mcProjFrom(u).ok);
+    u[1] = lim * 1.5f;
+    CHECK(mcProjFrom(u).ok);
+    u[1] = 1, u[6] = lim;
+    CHECK(!mcProjFrom(u).ok);
+    u[6] = lim * 1.5f;
+    CHECK(mcProjFrom(u).ok);
+    u[6] = 1, u[11] = nearLim;
+    CHECK(!mcProjFrom(u).ok);
+    u[11] = 0.0001220703125f; // (2^-13, whatever the constant says)
+    CHECK(!mcProjFrom(u).ok);
+    u[11] = 0.000123f;
+    CHECK(mcProjFrom(u).ok);
+    u[11] = -nearLim;
+    CHECK(!mcProjFrom(u).ok);
+    u[11] = nearLim * 1.5f;
+    CHECK(mcProjFrom(u).ok);
+    u[11] = -nearLim * 1.5f;
+    CHECK(mcProjFrom(u).ok && mcProjFrom(u).b < 0);
+}
+static void testEyeStep() {
+    g_test = "eyeStep";
+    const float r0[9] = {0, -1, 0, 1, 0, 0, 0, 0, 1}, r1[9] = {1, 0, 0, 0, 0, -1, 0, 1, 0}, t0[3] = {1, 2, 3}, t1[3] = {0.5, -1, 4};
+    const double h[16] = {0, -1, 0, 0.5, 0, 0, 1, -1, -1, 0, 0, -3, 0, 0, 0, 1};
+    CHECK(sameM4(mcEyeStep(r0, t0, r1, t1), h, 0));
+    const double id[16] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+    CHECK(sameM4(mcEyeStep(r0, t0, r0, t0), id, 0)); // one eye: no step
+}
+static void testStereo() {
+    g_test = "stereo";
+    const McProj p = {1.5, 2, 0.25, -0.5, 0.125, 0.75, true};
+    const float c0[12] = {0, 0, 1, 100, 1, 0, 0, 20, 0, 1, 0, -50}, c1[12] = {-0.28, 0, 0.96, 99.984375, 0.96, 0, 0.28, 20.0625, 0, 1, 0, -49.96875};
+    const McM4 hv = {{0.96000000000000008, 0, -0.28000000000000008, -0.064375000000000002, 0, 1, 0, -0.03125, 0.28000000000000008, 0, 0.95999999999999996, -0.0025000000000000044, 0, 0, 0, 1}};
+    const double kc[16] = {1.0066666666666668, 0, -0.12958333333333333, -0.41546875000000022, -0.093333333333333351, 1, -0.081666666666666665, 0.053541666666666668, 0.023333333333333338, 0, 0.99958333333333327, -0.010781249999999985, 0.1866666666666667, 0, -0.0033333333333333392, 0.91374999999999995};
+    const double kci[16] = {0.91333333333333322, 0, 0.11979166666666666, 0.41669270833333344, 0.093333333333333338, 1, 0.09375, -0.015052083333333299, -0.023333333333333334, 0, 0.99739583333333326, 0.001158854166666665, -0.18666666666666668, 0, -0.020833333333333332, 1.0092708333333333};
+    const double kct[16] = {1.0066666666666668, 0, 0, -0.43166666666666687, -0.093333333333333351, 1, 0, 0.043333333333333335, 0.023333333333333338, 0, 1, -0.010833333333333327, 0.1866666666666667, 0, 0, 0.91333333333333333};
+    const double kw[16] = {0.95999999999999996, 0.28000000000000008, 0, -1.602499999999992, -0.28000000000000008, 0.96000000000000008, 0, 28.735624999999999, 0, 0, 1, -0.03125, 0, 0, 0, 1};
+    const double kwi[16] = {0.95999999999999996, -0.28000000000000003, 0, 9.5843750000000085, 0.28000000000000003, 0.95999999999999996, 0, -27.137500000000003, 0, 0, 1, 0.03125, 0, 0, 0, 1};
+    McStereo s;
+    CHECK(mcStereo(p, hv, c0, c1, &s));
+    CHECK(sameM4(s.kc, kc, 1e-9) && sameM4(s.kcInv, kci, 1e-9) && sameM4(s.kcTurn, kct, 1e-9));
+    CHECK(sameM4(s.kw, kw, 1e-4) && sameM4(s.kwInv, kwi, 1e-4));
+    // the two ways to the right eye's world -> clip matrix meet
+    const McM4 w = {{0.25, 1.5, 0, -55, -0.5, 0, 2, 150, 0.125, 0, 0, -11.75, 1, 0, 0, -100}};
+    CHECK(mcM4Apart(mcM4Mul(s.kc, w), mcM4Mul(w, s.kw)) < 1e-4);
+    // none without a projection, or with a matrix that has no inverse
+    McProj bad = p;
+    bad.ok = false;
+    CHECK(!mcStereo(bad, hv, c0, c1, &s));
+    McM4 flat = hv;
+    for (int i = 0; i < 12; ++i) flat.m[i] = 0;
+    CHECK(!mcStereo(p, flat, c0, c1, &s));
+    const float zero[12] = {};
+    CHECK(!mcStereo(p, hv, zero, c1, &s));
+    CHECK(!mcStereo(p, hv, c0, zero, &s));
+}
+
 int main() {
+    testM4(), testM4Inv(), testProj(), testEyeStep(), testStereo();
     testHolds(), testTurnNorm(), testTurnFit(), testEyeInMesh(), testHudCross(), testHudGlass(), testGlassPose(), testGlassScale(), testGlassAim();
     testGridMark(), testGridPlace(), testGridTri(), testGridCells(), testGridFree(), testGridRim(), testGridFit();
     testMul34(), testViewAxis();

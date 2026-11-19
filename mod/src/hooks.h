@@ -41,6 +41,13 @@ enum {
     SL_DISPIND,
     SL_UPD,
     SL_UPD1,
+    SL_CLRRTV,
+    SL_CLRDSV,
+    SL_CLRUAVU,
+    SL_CLRUAVF,
+    SL_COPYRES,
+    SL_COPYREG,
+    SL_GENMIPS,
     SL_N
 };
 enum { HP_VARS = 4 };

@@ -12,7 +12,8 @@ cbuffer Frame : register(b0) {
 
 cbuffer Eye : register(b12) {
     row_major float4x4 g_K; // this frame's clip-space transform (head pose / eye): clip' = K clip
-    float4 g_eyeN;          // x: n of the projection (clip.z of a point = n); y: only nearer than this (view z); z > 0: what is nearer than z is not drawn (our own cockpit, mw5.inc)
+    float4 g_eyeN;          // x: n of the projection (clip.z of a point = n); y: only nearer than this (view z); z > 0: what is nearer than z is not drawn (our own cockpit, mw5.inc); w > 0: g_K2 for the other vertices
+    row_major float4x4 g_K2; // the step from the left eye's view to the right eye's (replay.cpp)
 };
 
 struct VSIn {
@@ -57,6 +58,11 @@ VSOut main(VSIn v) {
         o.pos = asfloat(0x7fc00000).xxxx;
     } else if (persp && w < g_eyeN.y) {
         float4 c = mul(g_K, float4(o.pos.x, o.pos.y, g_eyeN.x, w));
+        o.pos.xy = c.xy;
+        o.pos.z = c.w * z;
+        o.pos.w = c.w;
+    } else if (persp && g_eyeN.w > 0.0) {
+        float4 c = mul(g_K2, float4(o.pos.x, o.pos.y, g_eyeN.x, w));
         o.pos.xy = c.xy;
         o.pos.z = c.w * z;
         o.pos.w = c.w;

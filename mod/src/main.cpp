@@ -130,6 +130,7 @@ static INT STDMETHODCALLTYPE H_BeginEvent(ID3DUserDefinedAnnotation *a, LPCWSTR 
             dumpSlots(g_imm, what.c_str());
         }
     }
+    if (!s->deferred) rpLabel(name, s->depth, true);
     ++s->depth;
     {
         std::string l = narrow(name);
@@ -143,6 +144,7 @@ static INT STDMETHODCALLTYPE H_EndEvent(ID3DUserDefinedAnnotation *a) {
     CtxState *s = ctxOfAnn(a);
     if (g_cap) flushPending(s);
     if (s->depth > 0) --s->depth;
+    if (!s->deferred) rpLabel(nullptr, s->depth, false);
     if (!s->labels.empty()) s->labels.pop_back();
     if (s->depth == 0 && !s->deferred) {
         if (g_in3D) hudEnd((ID3D11DeviceContext *)s->self); // a small camera's redirect ends with its "3D"
@@ -269,6 +271,7 @@ int hookContext(ID3D11DeviceContext *ctx, bool deferred, bool repair) {
     PT(ctx, VT_Ctx_RSSetViewports, H_RSSetViewports);
     PT(ctx, VT_Ctx_ExecuteCommandList, H_ExecuteCommandList);
     PT(ctx, VT_Ctx_FinishCommandList, H_FinishCommandList);
+    n += rpHookContext(ctx);
 
     ID3D11DeviceContext1 *c1 = nullptr;
     if (SUCCEEDED(ctx->QueryInterface(__uuidof(ID3D11DeviceContext1), (void **)&c1))) {
@@ -661,8 +664,9 @@ BOOL WINAPI DllMain(HINSTANCE h, DWORD reason, LPVOID) {
         if (g_dbg) g_shlog = _wfsopen((g_dir + L"mw4vr_shaders.txt").c_str(), L"w", _SH_DENYNO);
         wchar_t exe[MAX_PATH];
         GetModuleFileNameW(nullptr, exe, MAX_PATH);
-        logf("MW4VR v11.72 (debug level %d) loaded into %s", g_dbg, narrow(exe).c_str());
+        logf("MW4VR v11.73 (debug level %d) loaded into %s", g_dbg, narrow(exe).c_str());
         if (!loadReal()) logf("ERROR: the system d3d11.dll could not be loaded");
+        rpReadIni();
     }
     return TRUE;
 }

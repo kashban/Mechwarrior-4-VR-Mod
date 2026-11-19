@@ -23,6 +23,140 @@ static inline void mcViewAxis(const float *m, const float *A, int k, float *v) {
 
 static inline float mcDot3(const float *a, const float *b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
 
+// ---- the right eye's view from the left eye's (replay.cpp) ----
+// 4x4 matrices of doubles, row-major, on column vectors: the world's coordinates are large against an eye's 6 cm.
+struct McM4 {
+    double m[16];
+};
+static inline McM4 mcM4Mul(const McM4 &a, const McM4 &b) {
+    McM4 r;
+    for (int i = 0; i < 4; ++i)
+        for (int j = 0; j < 4; ++j)
+            r.m[i * 4 + j] = a.m[i * 4] * b.m[j] + a.m[i * 4 + 1] * b.m[4 + j] + a.m[i * 4 + 2] * b.m[8 + j] +
+                             a.m[i * 4 + 3] * b.m[12 + j];
+    return r;
+}
+// a 3x4 (rows: axes, the fourth column the translation) as a 4x4
+static inline McM4 mcM4From34(const float *c) {
+    McM4 r = {{c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7], c[8], c[9], c[10], c[11], 0, 0, 0, 1}};
+    return r;
+}
+// (limits as powers of two)
+static const double MC_DET_MIN = 1.0 / 1099511627776.0; // a determinant under 2^-40: no inverse
+static const double MC_PROJ_UNIT = 1.0 / 64;            // how far the w row may be from a unit vector
+static const double MC_PROJ_MIN = 1.0 / 16;             // the smallest scale of a projection
+static const double MC_PROJ_NEAR = 1.0 / 8192;          // its smallest near term
+// the inverse of a matrix whose last row is 0 0 0 1; false: it has none
+static inline bool mcM4InvAffine(const McM4 &a, McM4 *out) {
+    const double *m = a.m;
+    double c0 = m[5] * m[10] - m[6] * m[9], c1 = m[6] * m[8] - m[4] * m[10], c2 = m[4] * m[9] - m[5] * m[8];
+    double det = m[0] * c0 + m[1] * c1 + m[2] * c2;
+    if (fabs(det) < MC_DET_MIN) return false;
+    const double r[] = {c0 / det, (m[2] * m[9] - m[1] * m[10]) / det, (m[1] * m[6] - m[2] * m[5]) / det,
+                        c1 / det, (m[0] * m[10] - m[2] * m[8]) / det, (m[2] * m[4] - m[0] * m[6]) / det,
+                        c2 / det, (m[1] * m[8] - m[0] * m[9]) / det,  (m[0] * m[5] - m[1] * m[4]) / det};
+    McM4 o = {{r[0], r[1], r[2], -(r[0] * m[3] + r[1] * m[7] + r[2] * m[11]), r[3], r[4], r[5],
+               -(r[3] * m[3] + r[4] * m[7] + r[5] * m[11]), r[6], r[7], r[8],
+               -(r[6] * m[3] + r[7] * m[7] + r[8] * m[11]), 0, 0, 0, 1}};
+    *out = o;
+    return true;
+}
+// The projection, read from a world -> clip matrix W = P V (rows of W: x, y, depth, w; the w row is the view's
+// unit forward axis):  P = [p00 0 j0 0 | 0 p11 j1 0 | 0 0 a b | 0 0 1 0]  on a view-space point (x right, y up,
+// z forward, 1). ok: W is such a matrix.
+struct McProj {
+    double p00, p11, j0, j1, a, b;
+    bool ok;
+};
+static inline double mcDot3d(const float *a, const float *b) {
+    return (double)a[0] * b[0] + (double)a[1] * b[1] + (double)a[2] * b[2];
+}
+static inline McProj mcProjFrom(const float *w) {
+    McProj p = {};
+    const float *f = w + 12;
+    if (fabs(sqrt(mcDot3d(f, f)) - 1) > MC_PROJ_UNIT) return p;
+    p.j0 = mcDot3d(w, f);
+    p.j1 = mcDot3d(w + 4, f);
+    p.p00 = sqrt(mcDot3d(w, w) - p.j0 * p.j0);
+    p.p11 = sqrt(mcDot3d(w + 4, w + 4) - p.j1 * p.j1);
+    p.a = mcDot3d(w + 8, f);
+    p.b = w[11] - p.a * w[15];
+    p.ok = p.p00 > MC_PROJ_MIN && p.p11 > MC_PROJ_MIN && fabs(p.b) > MC_PROJ_NEAR;
+    return p;
+}
+static inline McM4 mcProjM(const McProj &p) {
+    McM4 r = {{p.p00, 0, p.j0, 0, 0, p.p11, p.j1, 0, 0, 0, p.a, p.b, 0, 0, 1, 0}};
+    return r;
+}
+static inline McM4 mcProjInv(const McProj &p) {
+    McM4 r = {{1 / p.p00, 0, 0, -p.j0 / p.p00, 0, 1 / p.p11, 0, -p.j1 / p.p11, 0, 0, 0, 1, 0, 0, 1 / p.b, -p.a / p.b}};
+    return r;
+}
+// The step from the left eye's view space to the right eye's. An eye's pose: R (3x3, columns = the eye's axes)
+// and t, both in the game camera's view space - a point x of the eye's own space is R x + t there. So a point x
+// of the left eye's space is R1^T (R0 x + t0 - t1) in the right eye's.
+static inline McM4 mcEyeStep(const float *R0, const float *t0, const float *R1, const float *t1) {
+    McM4 h = {};
+    for (int i = 0; i < 3; ++i) {
+        h.m[i * 4 + 3] =
+            R1[i] * ((double)t0[0] - t1[0]) + R1[3 + i] * ((double)t0[1] - t1[1]) + R1[6 + i] * ((double)t0[2] - t1[2]);
+        for (int j = 0; j < 3; ++j)
+            h.m[i * 4 + j] = (double)R1[i] * R0[j] + (double)R1[3 + i] * R0[3 + j] + (double)R1[6 + i] * R0[6 + j];
+    }
+    h.m[15] = 1;
+    return h;
+}
+// The right eye's matrices from the left eye's. With the projection P (the eyes share it) and the step Hv:
+// a matrix M into the left eye's clip space is kc M for the right eye, one out of it M kcInv; for a thing that
+// goes with the eye (the sky) kcTurn M - the eyes' turn against each other without the step between them.
+// With the eyes' camera matrices c0, c1 (3x4, camera -> world): a place p in the world that is fixed to the
+// camera is kwInv p for the right eye; kw is its inverse (a matrix W from the world into something fixed to the
+// camera becomes W kw - and kc W = W kw for the world -> clip matrix: the check of all this).
+struct McStereo {
+    McM4 kc, kcInv, kcTurn, kw, kwInv;
+};
+static inline bool mcStereo(const McProj &p, const McM4 &hv, const float *c0, const float *c1, McStereo *s) {
+    McM4 hvInv, c0i, c1i, C0 = mcM4From34(c0), C1 = mcM4From34(c1);
+    if (!p.ok || !mcM4InvAffine(hv, &hvInv) || !mcM4InvAffine(C0, &c0i) || !mcM4InvAffine(C1, &c1i)) return false;
+    McM4 P = mcProjM(p), Pi = mcProjInv(p), turn = hv;
+    turn.m[3] = turn.m[7] = turn.m[11] = 0;
+    s->kc = mcM4Mul(mcM4Mul(P, hv), Pi);
+    s->kcInv = mcM4Mul(mcM4Mul(P, hvInv), Pi);
+    s->kcTurn = mcM4Mul(mcM4Mul(P, turn), Pi);
+    s->kw = mcM4Mul(C0, c1i);
+    s->kwInv = mcM4Mul(C1, c0i);
+    return true;
+}
+// the largest difference of an element
+static inline double mcM4Apart(const McM4 &a, const McM4 &b) {
+    double e = 0;
+    for (int i = 0; i < 16; ++i) e = fmax(e, fabs(a.m[i] - b.m[i]));
+    return e;
+}
+// a 4x4 of floats (a shader's constant) times a 4x4 of doubles, either way round, back into the floats
+static inline McM4 mcM4OfFloats(const float *f) {
+    McM4 m = {{f[0], f[1], f[2], f[3], f[4], f[5], f[6], f[7], f[8], f[9], f[10], f[11], f[12], f[13], f[14], f[15]}};
+    return m;
+}
+static inline void mcM4ToFloats(const McM4 &m, float *f) {
+    for (int i = 0; i < 16; ++i) f[i] = (float)m.m[i];
+}
+static inline void mcM4Left(const McM4 &k, float *f) { mcM4ToFloats(mcM4Mul(k, mcM4OfFloats(f)), f); }
+static inline void mcM4Right(const McM4 &k, float *f) { mcM4ToFloats(mcM4Mul(mcM4OfFloats(f), k), f); }
+// the same in floats alone (many matrices a frame: the instances): out = k f; out must not be k or f
+static inline void mcM4MulF(const float *k, const float *f, float *out) {
+    for (int i = 0; i < 4; ++i)
+        for (int j = 0; j < 4; ++j)
+            out[i * 4 + j] =
+                k[i * 4] * f[j] + k[i * 4 + 1] * f[4 + j] + k[i * 4 + 2] * f[8 + j] + k[i * 4 + 3] * f[12 + j];
+}
+// a place (3 floats) through an affine matrix
+static inline void mcM4Point(const McM4 &k, float *f) {
+    double x = f[0], y = f[1], z = f[2];
+    for (int i = 0; i < 3; ++i)
+        f[i] = (float)(k.m[i * 4] * x + k.m[i * 4 + 1] * y + k.m[i * 4 + 2] * z + k.m[i * 4 + 3]);
+}
+
 // ---- the camera's frustum planes (cam.cpp) ----
 // Six planes (normal, d: inside is n.p <= d): far, near, right, left, bottom, top.
 struct McFrustum {

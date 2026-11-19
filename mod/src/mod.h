@@ -21,6 +21,7 @@
 #include "vr.h"
 #include "mw5.h"
 #include "draws.h"
+#include "replay.h"
 #include "cross.h"
 #include "main.h"
 

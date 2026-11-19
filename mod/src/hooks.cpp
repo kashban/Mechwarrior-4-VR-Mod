@@ -70,6 +70,7 @@ void onPresent(IDXGISwapChain *sc) {
             eye = (g_frame & 1) ? 0 : 1;
         mouseInstall();
         menuModeUpdate();
+        if (g_menuMode) rpIdle();
         mouseCapture();
         camKeepKey();
         mw5OnPresent();
@@ -248,6 +249,7 @@ void STDMETHODCALLTYPE H_VSSetShaderResources(ID3D11DeviceContext *c, UINT start
                                               ID3D11ShaderResourceView *const *v) {
     CtxState *s = ctxOf(c);
     for (UINT i = 0; i < n && start + i < 64; ++i) s->st[ST_VS].srvBuf[start + i] = viewBuffer(v ? v[i] : nullptr);
+    if ((void *)c == (void *)g_imm) rpSrvSet(ST_VS, start, n, v);
     ORIG(PFN_SetSRV, c, VT_Ctx_VSSetShaderResources)(c, start, n, v);
 }
 
@@ -292,9 +294,13 @@ HRESULT STDMETHODCALLTYPE H_Map(ID3D11DeviceContext *c, ID3D11Resource *r, UINT 
         hr = ORIG(PFN_Map, c, VT_Ctx_Map)(c, r, sub, t, fl, m);
     }
     InterlockedIncrement(&g_statMaps);
+    if (SUCCEEDED(hr) && (void *)c == (void *)g_imm) {
+        rpMapped(r, sub, t, m);
+        if (m && rpRingMap(c, r, t, m)) return hr; // (the game writes into our memory: nothing is mapped)
+    }
     if (SUCCEEDED(hr) && m && t != D3D11_MAP_READ && !ctxOf(c)->foreign) {
         UINT sz = cbSize(r);
-        if (sz && (g_cap || eyeKind(sz) || sz == 48)) { // what is looked at when it is unmapped
+        if (sz && (g_cap || g_rpMode || eyeKind(sz) || sz == 48)) { // what is looked at when it is unmapped
             CtxState *s = ctxOf(c);
             s->mapped[r] = m->pData;
             s->mapType[r] = (int)t;
@@ -303,6 +309,10 @@ HRESULT STDMETHODCALLTYPE H_Map(ID3D11DeviceContext *c, ID3D11Resource *r, UINT 
     return hr;
 }
 void STDMETHODCALLTYPE H_Unmap(ID3D11DeviceContext *c, ID3D11Resource *r, UINT sub) {
+    if ((void *)c == (void *)g_imm) {
+        rpUnmapping(r, sub);
+        if (rpRingUnmap(r)) return;
+    }
     CtxState *s = ctxOf(c);
     auto it = s->mapped.find(r);
     if (it != s->mapped.end()) {
@@ -312,6 +322,7 @@ void STDMETHODCALLTYPE H_Unmap(ID3D11DeviceContext *c, ID3D11Resource *r, UINT s
         // only whole-buffer rewrites: a NO_OVERWRITE map may only fill a part we know nothing about
         if (kind && t == D3D11_MAP_WRITE_DISCARD) eyeLayoutFrom(kind, (const uint8_t *)it->second, sz);
         if (sz == 48 && t == D3D11_MAP_WRITE_DISCARD) frameCbSeen(r, it->second);
+        if (t == D3D11_MAP_WRITE_DISCARD && (void *)c == (void *)g_imm) rpCbData(r, it->second, sz);
         if (g_cap) snapshot(r, it->second, 0, 0);
         s->mapped.erase(it);
         s->mapType.erase(r);
@@ -346,13 +357,21 @@ const char *g_slName[SL_N] = {"Draw",
                               "Dispatch",
                               "DispatchIndirect",
                               "UpdateSubresource",
-                              "UpdateSubresource1"};
+                              "UpdateSubresource1",
+                              "ClearRenderTargetView",
+                              "ClearDepthStencilView",
+                              "ClearUnorderedAccessViewUint",
+                              "ClearUnorderedAccessViewFloat",
+                              "CopyResource",
+                              "CopySubresourceRegion",
+                              "GenerateMips"};
 
 // what an UpdateSubresource writes (the data itself is passed on as it is)
 void updateCommon(ID3D11Resource *r, const D3D11_BOX *box, const void *&src) {
     if (!src) return;
     UINT csz = cbSize(r);
     if (csz == 48 && !box) frameCbSeen(r, src);
+    if (csz && !box) rpCbData(r, src, csz);
     int kind = eyeKind(csz);
     if (kind && !box)
         eyeLayoutFrom(kind, (const uint8_t *)src, csz);

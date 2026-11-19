@@ -12,6 +12,10 @@ a Mad Cat walking for half a minute, no fighting). How to measure: [below](#meas
 - The mod's own share of a frame was 1.7 ms and is 0.9 ms since v11.72.
 - What would help most is not in this mod: mw4hook walking its scene once for both eyes
   ([what to ask its author for](#what-mw4hook-could-do)).
+- Since v11.73 the mod can do the next best thing itself: let the game draw the left eye alone and repeat each
+  of its draws for the right eye (`[vr] replay_right=1`, off by default). Where the processor is the limit that
+  is half as fast again; where the graphics card is, it is slower
+  ([the right eye from the left eye's draws](#the-right-eye-from-the-left-eyes-draws)).
 
 ## The maps
 
@@ -85,6 +89,47 @@ Tried, without effect: mw4hook's statistics off (`[observer] enabled=0`); the mo
 
 The picture is the same: nothing of what is drawn was changed.
 
+## The right eye from the left eye's draws
+
+`[vr] replay_right=1` (v11.73, `mod/src/replay.cpp`). mw4hook's work for a pass - which things, in which
+order, with which states - is the same for the eye 6 cm to the side. So the game draws the main camera once, for
+the left eye, and the mod makes every draw of that pass a second time at once: into twins of the pass's targets,
+with the constants that hold the eye's view worked out for the right eye. What is made once a frame anyway (the
+sun's shadows, the terrain's pages) is not repeated; culling and levels of detail are the left eye's for both.
+
+Measured on 2026-11-19, as above (a Mad Cat walking, 2600 x 2600 an eye, one run each; two runs of a map differ
+by about 1 ms a frame):
+
+| Map | The game draws both eyes | `replay_right=1` | A frame (ms) | What limits it then |
+|---|---|---|---|---|
+| 33 Tharkad - Resupply | 32 pictures a second | 50 | 20.2 | the processor (the left eye's pass 17.7 ms) |
+| 2 Eaton - Bandit Hideaway | 38 | 48 | 20.8 | the processor |
+| 13 New Exford - Storm Patrol | 49 | 56 | 17.9 | the processor, the graphics card close behind |
+| 1 Eaton - Governor's Mansion | 53 | 80 | 12.5 | the processor |
+| 16 Styk - Reinforcement | 61 | 79 | 12.7 | the processor |
+| 24 Hesperus II - 'Mech Works | 75 | 89 | 11.2 | the headset |
+| 48 Jungle - Heavy | 86 | **71** | 14.0 | the graphics card (7 ms of the frame waiting for it) |
+| 0 Eaton - Merc Alley, 10 Halloran V | 90 | 90 | 11.1 | the headset |
+
+The pass that is left costs a little more than the left eye's did (16.0 -> 17.7 ms on Tharkad): the second draws
+and their constants are the mod's work now, about 1.5 ms.
+
+**Why it can be slower.** The graphics card gets the same draws as before, but in another order: left, right,
+left, right, each pair with a change of all render targets between them, instead of one eye after the other. On
+a map that already filled the card's time (Jungle - Heavy: dense plants, drawn over each other many times) that
+order costs it about 2.5 ms a frame. Changing the targets alone, with nothing drawn for the right eye, costs
+nothing; what exactly the card loses was not found. So the switch is off by default: on for maps where the
+processor is the limit, off where the card is.
+
+What was checked: the right eye's constants against what mw4hook itself writes for that eye (`replay_right=2`
+writes the comparison - the matrices agree to 2e-4, the camera's place exactly); pictures of both ways on a
+still scene (the right eyes differ no more than the left eyes do, by clouds and wind); the end-to-end test,
+26 of 26 with the switch on.
+
+What is not the same as when the game draws both eyes: culling, the levels of detail and the order of the
+see-through things are the left eye's; fog and the terrain's detail are worked out from the left eye's place
+(3 cm off). Not checked yet: a battle with many mechs, the zoom window, a headset on a head.
+
 ## What mw4hook could do
 
 For the author of MW4Engine DX11 - the numbers above are what such a request rests on:
@@ -109,6 +154,9 @@ powershell -File tools\e2e\run.ps1 -Game <the game's folder> -Pilot <pilot> -Run
 - `-Samples`: also where the render thread is, about every millisecond, by module and by stretch of code
   (`mw4vr_perf_samples.txt`). For the mod's own functions build it with `set MW4VR_MAP=1` first: the map file
   `mod\build\d3d11.map` says which function lies where.
+- `[vr] replay_right=2` or `3` in `mw4vr.ini` (the game draws both eyes itself then): once, some seconds into a
+  battle, `mw4vr_replay.txt` - with 2 the right eye's constants as mw4hook wrote them against what `replay.cpp`
+  makes of the left eye's; with 3 what each eye's pass called and wrote.
 - `-Map <number>`: an instant action map; mw4hook's log names it. Maps of the multiplayer list (Concourse Pro
   among them) cannot be started this way.
 - mw4hook's own clocks: `[observer] report_seconds=5`, `timing=1` and `[d3d11] gpu_profile=1` in `mw4hook.ini`.

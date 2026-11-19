@@ -10,6 +10,11 @@ tracking=1
 ; 1 = both eyes are drawn in every frame (no trails on moving things, no ghosting; costs GPU time);
 ; 0 = the eyes alternate frame by frame
 double_draw=1
+; 1 = the game draws the world for the left eye only, and each of its draws is made a second time for the
+; right eye by the mod (much faster where the processor is the limit - docs/PERFORMANCE.md); 0 = the game
+; draws the world twice, once for each eye. Only with double_draw=1. New in v11.73: off until you have tried it.
+; (2, 3: diagnosis - a file mw4vr_replay.txt, see mod/src/replay.cpp.) Read at the start
+replay_right=0
 ; the game renders at this height whatever the size of its window (the width follows the window's shape);
 ; 0 = at the window's size. More pixels = sharper and slower. Read at the start
 render_height=2600

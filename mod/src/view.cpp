@@ -18,6 +18,7 @@ static void eyeLearnLayout(const float *m) {
     } else if (fabsf(rm - 1) < 0.02f && fabsf(cm - 1) > 0.05f) {
         idx = 3;
         p00 = len3(m[0], m[1], m[2]);
+        if (g_camInMain) rpLearnProj(m);
         if (p00 > 0) {
             g_right[0] = m[0] / p00;
             g_right[1] = m[1] / p00;

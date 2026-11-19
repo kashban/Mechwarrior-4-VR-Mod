@@ -49,6 +49,28 @@ static const uint64_t HK_PS_BACKDROP = 0x3c49bfee1754587bull; // a small camera'
 #define HK_LBL_SSAA_SIZE L"resolution, "
 #define HK_LBL_CAMERA L"camera:" // "camera: perspective, viewport X,Y WxH (...)"
 #define HK_LBL_VIEWPORT L"viewport "
+
+// ---- the right eye's picture from the left eye's draws (replay.cpp) ----
+// The shaders' constants that hold the eye's view: name, kind, bytes into the variable. Kinds: 1 = a matrix
+// into clip space, 2 = a matrix out of clip space, 3 = a position in the world, 4 = an object's matrix into
+// clip space (beside the object's matrix into the world, HK_RP_OBJ_VAR). Found by comparing what mw4hook writes
+// for the two eyes ([vr] replay_right=2). Left as the left eye's, though they differ: the camera's place in
+// g_mlrFog and g_rtin (fog and the terrain's levels of detail 3 cm off), and the counters of the passes in
+// g_vAo, g_vAo2, g_vOrigin, g_vSsgi2.
+#define HK_RP_VARS                                                                                                     \
+    {"g_mlrToClip", 4, 0}, {"g_mlrPrevToClip", 4, 0}, {"g_vWorldToClip", 1, 0}, {"g_vSsgiPrevClip", 1, 0},             \
+        {"g_vClipToWorld", 2, 0}, {"g_vCam", 3, 0}, {"g_vFog", 3, 32}, {"g_fClipToWorld", 2, 0}, {"g_fFog", 3, 32},    \
+        {"g_camPos", 3, 0}, {"g_cultCam", 3, 0}, {"g_cardToClip", 1, 0}, {"g_cardCam", 3, 0},                          \
+        {"g_wClipToWorld", 2, 0}, {"g_wCam", 3, 0}, {"g_rToClip", 1, 0}, {"g_rEye", 3, 0}
+#define HK_RP_OBJ_VAR "g_mlrToWorld"
+// an instance's record in the structured buffer the instanced shaders read: 288 bytes, the matrix into clip
+// space first, last frame's last
+#define HK_RP_INST_BYTES 288
+#define HK_RP_INST_PREV 224 // where last frame's matrix lies in it
+// the constant that tells a vertex shader its first instance's record
+#define HK_RP_INST_BASE_VAR "g_mlrInstBase"
+// labels inside the main camera's pass under which things are made once a frame, not once an eye
+#define HK_RP_ONCE_LABELS L"RTIN tree of sun shadow", L"sun shadows:", L"terrain VT:"
 // --- MW4Mercs.exe ---
 static const uintptr_t GM_CAMERA_DRAW = 0x4b6ec0; // CameraElement::Draw (mw4hook puts a jmp there)
 static const uintptr_t GM_HWND = 0x1241050;       // HWND of the game's window
