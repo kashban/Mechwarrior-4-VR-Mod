@@ -126,8 +126,11 @@ waits for is told by the system's `Present`: it waits long when the graphics car
 processor is. A battle's frames are watched 45 at a time. When they are slower than the headset's rate and the
 limit is the one the other way would ease - the processor while the game draws both eyes, the graphics card
 while the draws are repeated - the other way is tried for 70 frames and kept if it is faster by a sixteenth; if
-not, the next trial waits 900 frames, then twice as long each time. A battle begins with the game drawing both
-eyes. Measured: Tharkad 51 pictures a second (the draws repeated from the second second on), Jungle - Heavy 87
+not, the next trial waits 900 frames, then twice as long each time. Since v11.78 a battle begins with the draws
+repeated (on most maps the faster way: its first seconds are not spent finding that out; until then it began
+with the game drawing both eyes), and the game's own way is tried only where it can win: the processor's part of
+a frame, with three quarters of the left eye's pass again for the second one, must still come out a sixteenth
+under the frame as it is. Measured with v11.74: Tharkad 51 pictures a second (the draws repeated from the second second on), Jungle - Heavy 87
 (never left the game's own way), Storm Patrol 55, Merc Alley 90. `mw4vr.log` tells each trial and its end.
 A trial that brings nothing is a second of the slower way.
 

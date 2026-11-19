@@ -1143,6 +1143,8 @@ void rpLabel(const wchar_t *name, int depth, bool open) {
 
 // can this frame's right eye be made from the left eye's draws?
 static McAuto g_rpAuto = mcAutoStart(); // replay_right=2: which way, and the watching (core.h)
+static double g_rpPassMs;               // the last pass of the main camera for the left eye
+static LONGLONG g_rpPassT0;
 bool rpWanted() { return (g_rpMode == RP_ON || (g_rpMode == RP_AUTO && g_rpAuto.replay)) && !g_rpBroken && g_rpP.ok; }
 // main.cpp, after every Present. A battle's frames (both eyes drawn) are what is watched.
 void rpFrameDone(double presentMs) {
@@ -1152,7 +1154,7 @@ void rpFrameDone(double presentMs) {
     last = now;
     g_rpOwn = 0;
     if (g_rpMode != RP_AUTO || g_rpBroken || g_camBothFrame + 1 != g_frame || frame <= 0 || frame > 250) return;
-    int r = mcAutoStep(g_rpAuto, frame, presentMs);
+    int r = mcAutoStep(g_rpAuto, frame, presentMs, g_rpPassMs);
     static unsigned told;
     if (r == MC_AUTO_NONE || told++ > 60) return;
     const char *other = g_rpAuto.replay ? "the left eye's draws repeated" : "the game drawing both eyes";
@@ -1228,6 +1230,7 @@ void rpIdle() {
 
 void rpPassBegin(int eye) {
     g_rpSkip = -1;
+    if (eye == 0) g_rpPassT0 = perfNow();
     g_rpOwn = 0; // (a hook left by an exception must not leave the count standing)
     if (g_rpMode >= RP_COMPARE && eye == 0) {
         static unsigned first = ~0u;
@@ -1248,6 +1251,7 @@ void rpPassBegin(int eye) {
     g_rpEye = eye;
 }
 void rpPassEnd(int eye) {
+    if (eye == 0) g_rpPassMs = (double)(perfNow() - g_rpPassT0) * 1000.0 / (double)perfFreq();
     g_rpEye = -1;
     g_rpSkip = -1;
     g_rpMaps.clear();

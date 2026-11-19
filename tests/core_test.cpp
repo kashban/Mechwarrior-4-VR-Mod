@@ -1293,27 +1293,30 @@ static void testStereo() {
 
 // ---------------------------------------------------------------- which way the right eye is made
 // n frames of one length and wait; the last step's answer, and that every step before it said "nothing"
-static int autoRun(McAuto &a, int n, double frame, double wait) {
+static int autoRun(McAuto &a, int n, double frame, double wait, double pass = 0) {
     int r = MC_AUTO_NONE;
     for (int i = 0; i < n; ++i) {
         if (r != MC_AUTO_NONE) return -1;
-        r = mcAutoStep(a, frame, wait);
+        r = mcAutoStep(a, frame, wait, pass);
     }
     return r;
 }
 static void testAuto() {
     g_test = "auto";
-    // a battle begins with the game drawing both eyes, and a rest
+    // a battle begins with replay, and a rest
     McAuto a = mcAutoStart();
-    CHECK(!a.replay && !a.trying && a.rest == MC_AUTO_START && a.n == 0 && a.sum == 0 && a.waits == 0 && a.pause == 0);
+    CHECK(a.replay && !a.trying && a.rest == MC_AUTO_START && a.n == 0 && a.sum == 0 && a.waits == 0 && a.pause == 0);
+    CHECK(a.passes == 0);
     CHECK(autoRun(a, MC_AUTO_START, 30, 0.1) == MC_AUTO_NONE && a.rest == 0 && a.n == 0);
+    a.replay = false; // (the rest of this test: from the game's own way)
     // the game draws both eyes, slow, and the graphics card is not what it waits for: replay is tried
     CHECK(autoRun(a, MC_AUTO_WINDOW - 1, 30, 0.1) == MC_AUTO_NONE && !a.replay && !a.trying);
-    CHECK(mcAutoStep(a, 30, 0.1) == MC_AUTO_TRY && a.replay && a.trying && a.before == 30 && a.n == 0 && a.sum == 0);
+    CHECK(mcAutoStep(a, 30, 0.1, 9) == MC_AUTO_TRY && a.replay && a.trying && a.before == 30 && a.n == 0 && a.sum == 0);
+    CHECK(a.passes == 0);
     // the first frames of the trial do not count (very slow here); the rest are faster by more than a sixteenth
     CHECK(autoRun(a, MC_AUTO_SETTLE, 500, 0.1) == MC_AUTO_NONE);
     CHECK(autoRun(a, MC_AUTO_TRIAL - MC_AUTO_SETTLE - 1, 28, 0.1) == MC_AUTO_NONE && a.trying);
-    CHECK(mcAutoStep(a, 28, 0.1) == MC_AUTO_KEEP && a.replay && !a.trying && a.rest == MC_AUTO_KEPT_REST && a.pause == 0);
+    CHECK(mcAutoStep(a, 28, 0.1, 0) == MC_AUTO_KEEP && a.replay && !a.trying && a.rest == MC_AUTO_KEPT_REST && a.pause == 0);
     CHECK(a.after == 28 && a.before == 30);
     CHECK(a.n == 0 && a.sum == 0);
     // rest: nothing is watched, whatever the frames are
@@ -1369,10 +1372,32 @@ static void testAutoLimits() {
     // the window's mean counts, not a frame of it: one long frame among short ones is no reason
     McAuto a = {};
     CHECK(autoRun(a, MC_AUTO_WINDOW - 1, 11, 0.1) == MC_AUTO_NONE);
-    CHECK(mcAutoStep(a, 30, 0.1) == MC_AUTO_NONE && !a.trying);
+    CHECK(mcAutoStep(a, 30, 0.1, 0) == MC_AUTO_NONE && !a.trying);
     // ... and the waits' mean: one long wait among none
     CHECK(autoRun(a, MC_AUTO_WINDOW - 1, 30, 0) == MC_AUTO_NONE);
-    CHECK(mcAutoStep(a, 30, 22.5) == MC_AUTO_TRY); // (22.5 / 45 = 0.5: under the limit)
+    CHECK(mcAutoStep(a, 30, 22.5, 0) == MC_AUTO_TRY); // (22.5 / 45 = 0.5: under the limit)
+    // The game's own way is tried only where it can win: the processor's part of a frame (20 less a wait of 5)
+    // and three quarters of the camera's pass again must stay under fifteen sixteenths of the frame (18.75).
+    struct {
+        double pass;
+        bool tries;
+    } const second[] = {{0, true}, {4.875, true}, {5, false}, {10, false}};
+    for (const auto &c : second) {
+        a = {};
+        a.replay = true;
+        CHECK(autoRun(a, MC_AUTO_WINDOW, 20, 5, c.pass) == (c.tries ? MC_AUTO_TRY : MC_AUTO_NONE));
+        CHECK(a.replay == !c.tries && a.passes == 0);
+    }
+    // ... the mean of the passes: one long pass among none (225 / 45 = 5: too much; a little less: not)
+    a = {};
+    a.replay = true;
+    CHECK(autoRun(a, MC_AUTO_WINDOW - 1, 20, 5, 0) == MC_AUTO_NONE);
+    CHECK(mcAutoStep(a, 20, 5, 225) == MC_AUTO_NONE);
+    CHECK(autoRun(a, MC_AUTO_WINDOW - 1, 20, 5, 0) == MC_AUTO_NONE);
+    CHECK(mcAutoStep(a, 20, 5, 216) == MC_AUTO_TRY);
+    // from the game's own way the pass does not count: replay saves one, whatever it is
+    a = {};
+    CHECK(autoRun(a, MC_AUTO_WINDOW, 30, 0.5, 25) == MC_AUTO_TRY && a.replay);
     // kept only when faster by a sixteenth: 32 -> 30 is just that much, and not enough; a little under is
     a = {};
     CHECK(autoRun(a, MC_AUTO_WINDOW, 32, 0.1) == MC_AUTO_TRY);

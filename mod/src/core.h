@@ -195,12 +195,17 @@ static inline void mcM4Point(const McM4 &k, float *f) {
 // The frames of a battle are watched a window at a time. When they are slower than the headset's and the limit
 // is the one the other way would ease, the other way is tried for some frames, and kept if it is faster by a
 // sixteenth; if not, it is not tried again for a while, each time twice as long.
+// A battle begins with replay: on most maps it is the faster way, and a battle's first seconds are not spent
+// finding that out. And the game's own way is tried only where it can win at all: it costs the processor a
+// second pass of the camera, about MC_AUTO_SECOND of the first - with that added to the processor's part of a
+// frame (the frame less the wait for the graphics card) it must still come out faster.
 struct McAuto {
     bool replay;    // the way in use
     bool trying;    // the other way is being tried
     unsigned n;     // frames of the window or the trial so far
     double sum;     // their lengths (ms)
     double waits;   // their waits in Present (ms)
+    double passes;  // their passes of the main camera (ms)
     double before;  // the mean length before the trial
     double after;   // the mean length in the last trial
     unsigned rest;  // frames until a trial may begin again
@@ -216,25 +221,29 @@ static const double MC_AUTO_SLOW = 11.625; // a mean frame longer than this (ms)
 static const double MC_AUTO_GPU = 2.0;     // a mean wait in Present above this: the graphics card is the limit
 static const double MC_AUTO_CPU = 0.75;    // one under this: it is not
 static const double MC_AUTO_GAIN = 0.9375; // a trial is kept when its frames are this much of the ones before
-// a battle begins: the game draws both eyes
+static const double MC_AUTO_SECOND = 0.75; // the game's pass for the second eye, against the first one's
+// a battle begins: with replay
 static inline McAuto mcAutoStart() {
     McAuto a = {};
+    a.replay = true;
     a.rest = MC_AUTO_START;
     return a;
 }
-// one frame of a battle: its length and the time the system's Present waited in it (ms). What happened:
-// nothing, a trial began (a.replay is the other way now), a trial was kept, or it was not (a.replay is back)
-static inline int mcAutoStep(McAuto &a, double frame, double wait) {
+// one frame of a battle: its length, the time the system's Present waited in it and the time the main camera's
+// pass took (ms). What happened: nothing, a trial began (a.replay is the other way now), a trial was kept, or
+// it was not (a.replay is back)
+static inline int mcAutoStep(McAuto &a, double frame, double wait, double pass) {
     if (!a.trying) {
         if (a.rest) {
             --a.rest;
             return MC_AUTO_NONE;
         }
-        a.sum += frame, a.waits += wait;
+        a.sum += frame, a.waits += wait, a.passes += pass;
         if (++a.n < MC_AUTO_WINDOW) return MC_AUTO_NONE;
-        double mean = a.sum / MC_AUTO_WINDOW, w = a.waits / MC_AUTO_WINDOW;
-        a.n = 0, a.sum = 0, a.waits = 0;
-        bool other = a.replay ? w > MC_AUTO_GPU : w < MC_AUTO_CPU;
+        double mean = a.sum / MC_AUTO_WINDOW, w = a.waits / MC_AUTO_WINDOW, p = a.passes / MC_AUTO_WINDOW;
+        a.n = 0, a.sum = 0, a.waits = 0, a.passes = 0;
+        bool other =
+            a.replay ? w > MC_AUTO_GPU && mean - w + MC_AUTO_SECOND * p < mean * MC_AUTO_GAIN : w < MC_AUTO_CPU;
         if (!(mean > MC_AUTO_SLOW && other)) return MC_AUTO_NONE;
         a.before = mean, a.replay = !a.replay, a.trying = true;
         return MC_AUTO_TRY;
