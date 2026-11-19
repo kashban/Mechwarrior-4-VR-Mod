@@ -539,7 +539,7 @@ static bool g_fadePending;
 static unsigned g_fadeCopyFrame = ~0u;  // the frame whose HUD image waits to be read
 static unsigned g_fadeKnownFrame = ~0u; // the frame the last answer came in; none lately: the HUD is not shown yet
 static float g_fadeA;                   // the sheet's alpha, 0: none
-bool g_fadeMenu;                        // the sheet is a paused battle's (blue): its menu is up
+bool g_fadeMenu;                        // the sheet is a paused battle's: its menu is up
 unsigned g_sheetCleanFrame =
     ~0u;             // the frame whose HUD image holds the sheet and the menu alone (draws.cpp: hudSheetPost)
 static int g_fadePt; // the point showing the sheet alone
@@ -581,16 +581,30 @@ static ID3D11Texture2D *vrHoldBlack(ID3D11DeviceContext *ctx, ID3D11Texture2D *l
 }
 // Esc was pressed a moment ago (asked once or more a frame). g_escOpens: no menu was up at that press - one comes
 static bool g_escOpens;
+static ULONGLONG g_escTick; // the last press, 0: none yet
 static bool vrEscLately() {
     static unsigned esc = ~0u;
     static bool down;
     bool now = (GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0;
     if (now) {
         if (!down) g_escOpens = !g_fadeMenu;
-        esc = g_frame;
+        esc = g_frame, g_escTick = GetTickCount64();
     }
     down = now;
     return esc != ~0u && g_frame - esc < 25;
+}
+// a menu's screen came while a paused battle's menu was up (or just gone: the sheet goes a moment before the
+// screen comes), and the battle's first frame after it
+static bool g_fadeKept;
+static unsigned g_fadeKeptFrame;
+static void fadeKeep() {
+    static ULONGLONG menuTick;
+    static bool wasScreen;
+    const ULONGLONG now = GetTickCount64();
+    if (g_fadeMenu) menuTick = now;
+    if (g_menuMode && !wasScreen && menuTick && now - menuTick < 1000) g_fadeKept = true;
+    if (g_menuMode) g_fadeKeptFrame = g_frame;
+    wasScreen = g_menuMode;
 }
 static void fadeProbe(ID3D11DeviceContext *ctx, ID3D11Texture2D *hud) {
     D3D11_TEXTURE2D_DESC d;
@@ -618,7 +632,15 @@ static void fadeProbe(ID3D11DeviceContext *ctx, ID3D11Texture2D *hud) {
             int kind = mcSheet(lo, px[bgr ? 2 : 0], px[1], px[bgr ? 0 : 2]);
             ORIG(MechPFN_Unmap, ctx, VT_Ctx_Unmap)(ctx, g_fadeStage, 0);
             float a = kind == MC_SHEET_FADE ? lo / 255.0f : 0;
-            bool menu = kind == MC_SHEET_MENU && g_vr.menuScale > 0;
+            // (a sheet of the map's haze colour is the menu's by the Esc that brought it; it fades in and out
+            // by the clock, at any frame rate: a second and a half covers it)
+            vrEscLately();
+            const bool escLately = g_escTick && GetTickCount64() - g_escTick < 1500;
+            // (The menu's own screens - its options - take the sheet away and bring it back without an Esc: the
+            // menu that was up when such a screen came is still up after it.)
+            const bool was = g_fadeMenu || (g_fadeKept && g_frame - g_fadeKeptFrame < 90);
+            bool menu = mcSheetIsMenu(kind, was, g_escOpens, escLately) && g_vr.menuScale > 0;
+            if (menu) g_fadeKept = false;
             { // (not off for a single frame without the sheet: the picture would jump to the HUD's parts and back)
                 static int off;
                 if (menu)
@@ -630,7 +652,7 @@ static void fadeProbe(ID3D11DeviceContext *ctx, ID3D11Texture2D *hud) {
                 logf("hud: the game's fade sheet %s (alpha %.2f, frame %u)", a > 0 ? "begins" : "is gone", a, g_frame);
             if (g_frame - g_fadeCopyFrame <= 3 && menu != g_fadeMenu)
                 logf(menu
-                         ? "hud: a paused battle's sheet (blue, alpha %.2f, frame %u) - the HUD image as one flat "
+                         ? "hud: a paused battle's sheet (alpha %.2f, frame %u) - the HUD image as one flat "
                            "screen for its menu"
                          : "hud: the paused battle's sheet is gone (alpha %.2f, frame %u) - the HUD in its parts again",
                      lo / 255.0f, g_frame);
@@ -931,6 +953,7 @@ void vrOnPresent(IDXGISwapChain *swap, int eye) {
     // (a test run, e2e.cpp, looks at the eyes' images also while the runtime wants none: a headset on nobody's head
     // loses the focus after some seconds, and the run stood still until somebody touched it)
     vrHoldStep();
+    fadeKeep();
     if ((fs.shouldRender || g_e2eOn) && SUCCEEDED(swap->GetBuffer(0, __uuidof(ID3D11Texture2D), (void **)&bb)) && bb &&
         ctx) {
         D3D11_TEXTURE2D_DESC bd;

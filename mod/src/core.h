@@ -677,17 +677,30 @@ static inline void mcSeatStep(McSeat &s, int tris, bool ahead) {
 // one with the least alpha shows the sheet alone. Blue alone: the menu's - from its first trace, while it still
 // fades in (told only once it was well there, the menu showed in the HUD's parts first and jumped). A black sheet
 // hardly there yet is none: taken for a fade, it switched the HUD off for a moment. Black: every colour below a
-// sixteenth of the alpha. Any other colour (light amplification) stays with the HUD as it is.
-enum { MC_SHEET_NONE, MC_SHEET_FADE, MC_SHEET_MENU };
+// sixteenth of the alpha.
+// The menu's sheet is blue only on some maps: it has the colour of the map's haze (grey-green in the jungle,
+// orange on New Avalon - there the menu stood in the HUD's parts, taken apart, until v11.80). Any other colour
+// is told as such, and is the menu's when Esc brought it (mcSheetIsMenu); without Esc it is something else - light
+// amplification - and stays with the HUD as it is.
+enum { MC_SHEET_NONE, MC_SHEET_FADE, MC_SHEET_MENU, MC_SHEET_COLOUR };
 enum { MC_SHEET_MIN = 2, MC_SHEET_ALPHA = 16 };
 // a: the point's alpha, r g b: its colour (all 0..255)
 static inline int mcSheet(int a, int r, int g, int b) {
     if (a < MC_SHEET_MIN) return MC_SHEET_NONE;
     if (b * 16 > a && r * 4 <= b && g * 4 <= b) return MC_SHEET_MENU;
-    if (a < MC_SHEET_ALPHA) return MC_SHEET_NONE;
     bool coloured = r * 16 > a || g * 16 > a || b * 16 > a;
-    if (!coloured) return MC_SHEET_FADE;
-    return MC_SHEET_NONE;
+    if (coloured) return MC_SHEET_COLOUR;
+    if (a < MC_SHEET_ALPHA) return MC_SHEET_NONE;
+    return MC_SHEET_FADE;
+}
+// Is the sheet a paused battle's menu's? was: it was taken for one in the frame before. escOpens: at the last
+// press of Esc no menu was up (it opens one; otherwise it closes one). escLately: that press is not long ago.
+// A blue sheet is the menu's as ever. A coloured one: after an opening Esc, and from then on for as long as it
+// lasts; after a closing Esc only while the menu's sheet fades out - what is there afterwards is not the menu's.
+static inline bool mcSheetIsMenu(int kind, bool was, bool escOpens, bool escLately) {
+    if (kind == MC_SHEET_MENU) return true;
+    if (kind != MC_SHEET_COLOUR) return false;
+    return escOpens ? was || escLately : was && escLately;
 }
 
 // ---- what a cockpit file and a cockpit's name may hold --------------------------------------------------------------

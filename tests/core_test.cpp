@@ -616,9 +616,11 @@ static void testHudScreensZoom() {
     const float want[][5] = {
         {0, 0.52f, 1.02f, 0.78f, MC_FAR}, // the middle and the columns below, left and right of the window and its
                                           // frame
-        {0, 0.12f, 0.33f, 0.52f, MC_FAR},           {0.67f, 0.12f, 1.02f, 0.52f, MC_FAR},
+        {0, 0.12f, 0.33f, 0.52f, MC_FAR},
+        {0.67f, 0.12f, 1.02f, 0.52f, MC_FAR},
         {0.243f, 0, 1.02f, 0.03f, MC_FAR}, // the top strip around it: above, left, right
-        {0.243f, 0.03f, 0.33f, 0.12f, MC_FAR},      {0.67f, 0.03f, 1.02f, 0.12f, MC_FAR},
+        {0.243f, 0.03f, 0.33f, 0.12f, MC_FAR},
+        {0.67f, 0.03f, 1.02f, 0.12f, MC_FAR},
         {0.35f, 0.05f, 0.65f, 0.50f, MC_FAR_OPAQUE}}; // the torso mark stays where it is while zooming
     CHECK(same(q, want, 7));
 }
@@ -1112,13 +1114,13 @@ static void testSheet() {
     // hardly there: no sheet, whatever its colour
     CHECK(mcSheet(0, 0, 0, 0) == MC_SHEET_NONE);
     CHECK(mcSheet(MC_SHEET_ALPHA - 1, 0, 0, 0) == MC_SHEET_NONE);
-    CHECK(mcSheet(MC_SHEET_ALPHA - 1, 7, 0, 0) == MC_SHEET_NONE);
+    CHECK(mcSheet(MC_SHEET_ALPHA - 1, 7, 0, 0) == MC_SHEET_COLOUR);
     // the menu's sheet is told while it fades in, from the least alpha a point can show
     CHECK(mcSheet(MC_SHEET_ALPHA - 1, 0, 0, 7) == MC_SHEET_MENU);
     CHECK(mcSheet(MC_SHEET_MIN, 0, 0, 1) == MC_SHEET_MENU);
     CHECK(mcSheet(MC_SHEET_MIN - 1, 0, 0, 1) == MC_SHEET_NONE);
     // blue, but not alone: no sheet of ours - and no fade, though red and green are black against the alpha
-    CHECK(mcSheet(255, 5, 0, 17) == MC_SHEET_NONE);
+    CHECK(mcSheet(255, 5, 0, 17) == MC_SHEET_COLOUR);
     CHECK(mcSheet(32, 1, 0, 2) == MC_SHEET_FADE); // (blue at a sixteenth of the alpha is still black)
     // black: a fade, from the least alpha that counts
     CHECK(mcSheet(MC_SHEET_ALPHA, 0, 0, 0) == MC_SHEET_FADE);
@@ -1129,18 +1131,36 @@ static void testSheet() {
     CHECK(mcSheet(16, 0, 0, 1) == MC_SHEET_FADE);
     CHECK(mcSheet(255, 15, 15, 15) == MC_SHEET_FADE);
     // more than that is a colour: red or green alone are no sheet of ours, blue alone is the menu's
-    CHECK(mcSheet(16, 2, 0, 0) == MC_SHEET_NONE);
-    CHECK(mcSheet(16, 0, 2, 0) == MC_SHEET_NONE);
+    CHECK(mcSheet(16, 2, 0, 0) == MC_SHEET_COLOUR);
+    CHECK(mcSheet(16, 0, 2, 0) == MC_SHEET_COLOUR);
     CHECK(mcSheet(16, 0, 0, 2) == MC_SHEET_MENU);
-    CHECK(mcSheet(128, 0, 0, 59) == MC_SHEET_MENU); // (as measured: the paused battle's sheet)
-    CHECK(mcSheet(255, 0, 60, 0) == MC_SHEET_NONE); // (light amplification)
+    CHECK(mcSheet(128, 0, 0, 59) == MC_SHEET_MENU);   // (as measured: the paused battle's sheet)
+    CHECK(mcSheet(255, 0, 60, 0) == MC_SHEET_COLOUR); // (light amplification)
     // blue alone: red and green each at most a quarter of it
     CHECK(mcSheet(255, 5, 0, 20) == MC_SHEET_MENU);
     CHECK(mcSheet(255, 0, 5, 20) == MC_SHEET_MENU);
-    CHECK(mcSheet(255, 6, 0, 20) == MC_SHEET_NONE);
-    CHECK(mcSheet(255, 0, 6, 20) == MC_SHEET_NONE);
-    CHECK(mcSheet(255, 20, 0, 20) == MC_SHEET_NONE);
-    CHECK(mcSheet(255, 0, 20, 20) == MC_SHEET_NONE);
+    CHECK(mcSheet(255, 6, 0, 20) == MC_SHEET_COLOUR);
+    CHECK(mcSheet(255, 0, 6, 20) == MC_SHEET_COLOUR);
+    CHECK(mcSheet(255, 20, 0, 20) == MC_SHEET_COLOUR);
+    CHECK(mcSheet(255, 0, 20, 20) == MC_SHEET_COLOUR);
+    // a coloured sheet hardly there is one all the same (the menu's sheet fades in from nothing)
+    CHECK(mcSheet(MC_SHEET_MIN, 1, 0, 0) == MC_SHEET_COLOUR && mcSheet(MC_SHEET_MIN, 0, 1, 0) == MC_SHEET_COLOUR);
+    CHECK(mcSheet(MC_SHEET_MIN - 1, 1, 1, 0) == MC_SHEET_NONE);
+    CHECK(mcSheet(128, 64, 73, 74) == MC_SHEET_COLOUR); // (as measured: the jungle's)
+    // whose it is: blue the menu's always; coloured the menu's after an opening Esc and for as long as it lasts,
+    // after a closing one only for a while; anything else never
+    for (int was = 0; was < 2; ++was)
+        for (int opens = 0; opens < 2; ++opens)
+            for (int lately = 0; lately < 2; ++lately) {
+                CHECK(mcSheetIsMenu(MC_SHEET_MENU, was, opens, lately));
+                CHECK(!mcSheetIsMenu(MC_SHEET_NONE, was, opens, lately));
+                CHECK(!mcSheetIsMenu(MC_SHEET_FADE, was, opens, lately));
+                bool menu = opens ? was || lately : was && lately;
+                CHECK(mcSheetIsMenu(MC_SHEET_COLOUR, was, opens, lately) == menu);
+            }
+    CHECK(mcSheetIsMenu(MC_SHEET_COLOUR, false, true, true) && !mcSheetIsMenu(MC_SHEET_COLOUR, false, true, false));
+    CHECK(mcSheetIsMenu(MC_SHEET_COLOUR, true, true, false) && mcSheetIsMenu(MC_SHEET_COLOUR, true, false, true));
+    CHECK(!mcSheetIsMenu(MC_SHEET_COLOUR, true, false, false) && !mcSheetIsMenu(MC_SHEET_COLOUR, false, false, true));
 }
 
 static void testCockpitFile() {
