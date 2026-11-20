@@ -107,7 +107,10 @@ def judge(
     for eye in ('left', 'right'):
         dark = [int(f['frame']) for f in seated if f[eye] < DARK]
         check(not dark, 'the %s eye is never black' % eye + (' - black at frames %s' % dark[:8] if dark else ''))
-        hits = flashes(seated, eye)
+        # (judged among all frames, told for those in the mech: the first frame of a cut to the outside view still
+        # counts as seated - among the seated frames alone it stood between two dark ones and looked like a flash)
+        seated_ids = {int(f['frame']) for f in seated}
+        hits = [n for n in flashes(timed, eye) if n in seated_ids]
         check(
             not hits,
             'the %s eye does not flash' % eye + (' - %d flashes, at frames %s' % (len(hits), hits[:8]) if hits else ''),

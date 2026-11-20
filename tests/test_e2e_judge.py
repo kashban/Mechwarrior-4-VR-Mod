@@ -143,6 +143,16 @@ class Judge(unittest.TestCase):
             x['left'] = x['right'] = 160.0
         self.assertEqual(judge.flashes(f, 'left'), [])
 
+    def test_a_cut_to_the_outside_view_is_no_flash(self):
+        # the view is outside (bright) one frame before the camera is told to be: no flash of the seated frames
+        f = frames()
+        for x in f[400:460]:
+            x['left'] = x['right'] = 160.0
+        for x in f[401:460]:
+            x['seated'] = 0
+        _, failed = judge.judge(f, LOG)
+        self.assertEqual(failed, [])
+
     def test_black_eye(self):
         f = frames()
         for x in f[100:110]:
