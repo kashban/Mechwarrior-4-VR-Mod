@@ -11,7 +11,8 @@ WHAT YOU NEED
 - MechWarrior 4: Mercenaries with MekTek MekPak 3.1c
 - MW4Engine DX11 (mw4hook.dll), build 20261107_ea16ef2. With another build parts of MW4VR switch
   themselves off (mw4vr.log tells, lines beginning "abi:").
-- A VR headset with a 32-bit OpenXR runtime. Tested with a Quest 3 over Virtual Desktop (VDXR) only.
+- A VR headset with a 32-bit OpenXR runtime. Tested with a Quest 3 over Virtual Desktop (VDXR) and over
+  SteamVR (the Steam Link app in the headset). Meta Quest Link's own runtime does not work: see below.
 - A fast graphics card: every frame is drawn twice.
 
 Where to get them:
@@ -162,6 +163,10 @@ IF SOMETHING IS WRONG
 ---------------------
 Nothing in the headset        Is the OpenXR runtime 32-bit capable and active? mw4vr.log tells what
                               failed. enabled=1 in mw4vr.ini?
+The window stops responding at the start, with Meta Quest Link     mw4vr.log ends with "vr: runtime
+                              ...Oculus... loaded": Meta's 32-bit runtime dies in its own code. Use
+                              SteamVR instead - the Steam Link app in the headset, and in SteamVR's
+                              settings: OpenXR, set SteamVR as the OpenXR runtime - or Virtual Desktop.
 The picture is one frame late or smeared      taa=0 in mw4hook.ini.
 Things vanish at the picture's edge           fov=130 in mw4hook.ini.
 The game dies at start-up     Is the mod's dinput.dll in the game's folder?
@@ -209,7 +214,8 @@ VORAUSSETZUNGEN
 - MechWarrior 4: Mercenaries mit MekTek MekPak 3.1c
 - MW4Engine DX11 (mw4hook.dll), Build 20261107_ea16ef2. Bei einem anderen Build schalten sich Teile
   von MW4VR selbst ab (steht in mw4vr.log, Zeilen mit "abi:").
-- VR-Headset mit 32-Bit-OpenXR-Laufzeit. Getestet nur mit Quest 3 über Virtual Desktop (VDXR).
+- VR-Headset mit 32-Bit-OpenXR-Laufzeit. Getestet mit Quest 3 über Virtual Desktop (VDXR) und über
+  SteamVR (Steam Link App im Headset). Die eigene Laufzeit von Meta Quest Link geht nicht: siehe unten.
 - Schnelle Grafikkarte: jedes Bild wird zweimal gezeichnet.
 
 Bezugsquellen:
@@ -256,7 +262,7 @@ dinput.dll             behebt Abstürze und Hänger beim Spielstart auf PCs mit 
                        (lässt "sonstige HID-Geräte" aus der Geräteliste des Spiels). Unnötig, wenn du
                        das Problem nie hattest.
 mw4vr_start.cmd/.ps1   startet das Spiel ohne Administrator-Abfrage
-mw4vr_settings.cmd     ein Fenster f�r alle Einstellungen der mw4vr.ini (auch: "Settings..." im Setup)
+mw4vr_settings.cmd     ein Fenster für alle Einstellungen der mw4vr.ini (auch: "Settings..." im Setup)
 mw4vr_cockpit_map.ini  welches MechWarrior-5-Cockpit jeder Mech bekommt (nur mit umgewandelten Cockpits)
 mw4vr_mechs.ini        schreibt der Mod: was er sich je Mech merkt
 mw4vr.log              schreibt der Mod: was er getan hat; bei Fehlermeldungen mitschicken
@@ -282,8 +288,8 @@ Teile des HUD: 1 Radar, 2 Ziel, 3 Schaden, 4 Lanzenliste, 5 Waffen, 6 Kopfleiste
       Bild auf / ab            größer / kleiner
       Einfg / Entf             weiter weg / näher
       0                        ausblenden
-  Strg+Alt+Umschalt+8          alle Teile gemeinsam (Cockpits des Spiels, Au�enansicht):
-                               dann �ndern Pfeile, Bild auf / ab, Einfg / Entf alle zugleich
+  Strg+Alt+Umschalt+8          alle Teile gemeinsam (Cockpits des Spiels, Außenansicht):
+                               dann ändern Pfeile, Bild auf / ab, Einfg / Entf alle zugleich
   Strg+Alt+7                   alle Teile zurück an ihre automatischen Plätze
   Der Teil, den die Tasten gerade ändern, hat einige Sekunden einen gelben Rahmen.
 
@@ -363,6 +369,11 @@ WENN ETWAS NICHT STIMMT
 -----------------------
 Nichts im Headset             OpenXR-Laufzeit 32-Bit-fähig und aktiv? mw4vr.log nennt den Fehler.
                               enabled=1 in mw4vr.ini?
+Fenster reagiert beim Start nicht mehr, mit Meta Quest Link       mw4vr.log endet mit "vr: runtime
+                              ...Oculus... loaded": Metas 32-Bit-Laufzeit stürzt in eigenem Code ab.
+                              Stattdessen SteamVR - Steam Link App im Headset, in den SteamVR-
+                              Einstellungen: OpenXR, SteamVR als OpenXR-Laufzeit festlegen - oder
+                              Virtual Desktop.
 Bild hängt ein Bild nach oder schmiert        taa=0 in mw4hook.ini.
 Dinge verschwinden am Bildrand                fov=130 in mw4hook.ini.
 Spiel stürzt beim Start ab    Liegt die dinput.dll des Mods im Spielordner?
