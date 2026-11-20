@@ -390,6 +390,16 @@ static void vrPollEvents() {
             } else if (sc->state == XR_SESSION_STATE_EXITING || sc->state == XR_SESSION_STATE_LOSS_PENDING) {
                 g_vr.running = false;
             }
+        } else if (ev.type == XR_TYPE_EVENT_DATA_REFERENCE_SPACE_CHANGE_PENDING) {
+            // The headset's own "recentre" (the controller's menu button held, Virtual Desktop's) moves the space the
+            // head's poses are told in. Our reference - where the pilot's head is when he sits upright - was taken
+            // in the old one: against the moved space the pilot sat somewhere else in the cockpit (far too low,
+            // in a test). So the reference is taken anew when the space changes: recentred there is recentred here.
+            auto *rc = (XrEventDataReferenceSpaceChangePending *)&ev;
+            if (rc->referenceSpaceType == XR_REFERENCE_SPACE_TYPE_LOCAL) {
+                g_vr.spaceChange = true, g_vr.spaceChangeAt = rc->changeTime;
+                logf("vr: the runtime recentres its space - our reference follows");
+            }
         }
         ev = {XR_TYPE_EVENT_DATA_BUFFER};
     }
@@ -481,6 +491,7 @@ static void vrLocate(XrTime when) {
             views[e].pose.orientation = qmul(q, views[e].pose.orientation);
         }
     }
+    if (g_vr.spaceChange && when >= g_vr.spaceChangeAt) g_vr.spaceChange = false, g_vr.recenter = true;
     if (!g_vr.haveRef || g_vr.recenter) {
         // the head between the eyes, looking where the left eye looks
         g_vr.ref.orientation = views[0].pose.orientation;

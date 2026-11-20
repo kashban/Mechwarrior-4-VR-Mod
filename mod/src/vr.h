@@ -62,6 +62,9 @@ struct VrState {
     float worldScale = 1.0f; // head and eye movement in the game, times this
     float fovScale = 1.0f;   // the rendered field of view: the headset's, its tangents times this
     bool haveRef = false, recenter = false;
+    // the runtime moves its space (the headset's own "recentre"): from this time on our reference is taken anew
+    bool spaceChange = false;
+    XrTime spaceChangeAt = 0;
     XrPosef ref = {{0, 0, 0, 1}, {0, 0, 0}}; // the head pose the game camera stands for
     XrPosef next[2], used[2];                // located for the next frame; the pose each eye's image was rendered with
     bool nextOk[2] = {}, usedOk[2] = {};
