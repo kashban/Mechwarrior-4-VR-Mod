@@ -1248,7 +1248,8 @@ void vrOnPresent(IDXGISwapChain *swap, int eye) {
         if (g_wideFrame != ~0u && g_frame - g_wideFrame <= 3) // (core.h: not with a window in its rows)
             hd.wide[0] = g_wideBand[0], hd.wide[1] = g_wideBand[1];
         static McRects hq_;
-        mcHudRects(hd, hq_);
+        // (beside the world's layer; and the cross-hair's own layer, where there is one, takes a place too)
+        mcHudRects(hd, hq_, MC_SHOWN - (g_crossShown && g_crossSc != XR_NULL_HANDLE ? 1 : 0));
         { // (told when it changes: a band found is not always a band shown)
             static int was = -1;
             const int now = !(hd.wide[1] > hd.wide[0]) ? 0 : mcWideFree(hd) ? 1 : 2;

@@ -609,8 +609,9 @@ static inline bool mcInsert(McRects &q, int at, float u0, float v0, float u1, fl
 // are. A part on the glass keeps its place in the list - what is left of it below the band comes right after it,
 // before the windows that lie over it. (Until v11.86 the parts on the glass kept the band's rows: a piece of the
 // hint stood on the lance list's pane as well.)
-static inline void mcWideOut(McRects &q, float v0, float v1, float UR) {
-    if (!(v1 > v0)) return;
+// glass false: the parts on the glass keep the band's rows (fewer parts: mcHudRects). false: no band.
+static inline bool mcWideOut(McRects &q, float v0, float v1, float UR, bool glass = true) {
+    if (!(v1 > v0)) return false;
     const float band[4] = {-HUGE_VALF, v0, HUGE_VALF, v1};
     const int n0 = q.n;
     for (int i = 0; i < n0; ++i) {
@@ -621,7 +622,7 @@ static inline void mcWideOut(McRects &q, float v0, float v1, float UR) {
         r[3] = fmaxf(v0, r[1]); // (nothing above the band: a part without height, which is not shown)
         mcAdd(q, u0, v1, u1, bottom, kind);
     }
-    for (int i = 0; i < q.n; ++i) {
+    for (int i = 0; glass && i < q.n; ++i) {
         float *r = q.rc[i];
         if (!(r[4] >= MC_GLASS && r[4] < MC_GLASS_OPAQUE && r[1] < v1)) continue;
         const float bottom = r[3];
@@ -629,6 +630,14 @@ static inline void mcWideOut(McRects &q, float v0, float v1, float UR) {
         mcInsert(q, i + 1, r[0], v1, r[2], bottom, r[4]); // (the rest begins below the band: not met again)
     }
     mcAdd(q, 0, v0, UR, v1, MC_FAR);
+    return true;
+}
+// the list's last part becomes its first (the others move on)
+static inline void mcToFront(McRects &q) {
+    float last[5];
+    memcpy(last, q.rc[q.n - 1], sizeof last);
+    memmove(q.rc[1], q.rc[0], sizeof *q.rc * (size_t)(q.n - 1));
+    memcpy(q.rc[0], last, sizeof last);
 }
 
 // The band is shown in one piece while no window lies in its rows (the zoom window has its own cuts, and a
@@ -639,15 +648,20 @@ static inline bool mcWideFree(const McHud &h) {
         if (h.cam[i][1] < h.wide[1] && h.cam[i][3] > h.wide[0]) return false;
     return true;
 }
-// (the cross-hair's own part costs up to four more: left as it is where the runtime would not show them all)
+// Where the runtime would not show all the parts, there are made fewer: first the cross-hair is left as it is
+// (its own part costs up to four more), then the parts on the glass keep the band's rows (a piece of the hint
+// stands on them as well - but nothing is missing). The band is the list's first part: what a runtime leaves out
+// is the list's end, and that must not be the hint. (v11.87 had it last: with six parts on the glass it was the
+// one left out.)
+static inline void mcHudRectsStep(const McHud &h, McRects &q, bool wide, bool shrink, bool glass) {
+    mcHudRectsWith(h, q, shrink);
+    if (wide && mcWideOut(q, h.wide[0], h.wide[1], h.UR, glass)) mcToFront(q);
+}
 static inline void mcHudRects(const McHud &h, McRects &q, int shown = MC_SHOWN) {
     const bool wide = mcWideFree(h);
-    mcHudRectsWith(h, q, true);
-    if (wide) mcWideOut(q, h.wide[0], h.wide[1], h.UR);
-    if (q.n > shown) {
-        mcHudRectsWith(h, q, false);
-        if (wide) mcWideOut(q, h.wide[0], h.wide[1], h.UR);
-    }
+    mcHudRectsStep(h, q, wide, true, true);
+    if (q.n > shown) mcHudRectsStep(h, q, wide, false, true);
+    if (q.n > shown) mcHudRectsStep(h, q, wide, false, false);
 }
 
 // ---- where a part on the glass lies (vr.cpp, mw5.cpp) ----

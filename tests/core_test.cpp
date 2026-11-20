@@ -1775,14 +1775,16 @@ static void testBand() {
     mcHudRects(h, a);
     h.wide[0] = 0.3125f, h.wide[1] = 0.375f;
     mcHudRects(h, b);
-    mcWideOut(a, 0.3125f, 0.375f, 1);
+    CHECK(mcWideOut(a, 0.3125f, 0.375f, 1));
+    mcToFront(a); // (the band is the first part)
     CHECK(a.n == b.n && a.n == 9 && memcmp(a.rc, b.rc, sizeof(float) * 5 * a.n) == 0);
+    CHECK(b.rc[0][4] == MC_FAR && b.rc[0][0] == 0 && b.rc[0][1] == 0.3125f && b.rc[0][2] == 1 && b.rc[0][3] == 0.375f);
     // ... also where the parts are too many for the cross-hair's own
     h.cross[0] = 0.4375f, h.cross[1] = 0.4375f, h.cross[2] = 0.5625f, h.cross[3] = 0.5625f;
     mcHudRects(h, b, 9);
     CHECK(b.n == a.n && memcmp(a.rc, b.rc, sizeof(float) * 5 * a.n) == 0);
     mcHudRects(h, b);
-    CHECK(b.n == 13 && b.rc[12][4] == MC_FAR && b.rc[12][0] == 0 && b.rc[12][2] == 1);
+    CHECK(b.n == 13 && b.rc[0][4] == MC_FAR && b.rc[0][0] == 0 && b.rc[0][2] == 1 && b.rc[0][1] == 0.3125f);
 
     // windows: one outside the band's rows (the target's view in its corner) leaves the band in one piece; one
     // in its rows keeps the parts as they are without a band
@@ -1797,8 +1799,9 @@ static void testBand() {
     CHECK(mcWideFree(w));
     mcHudRects(w, banded);
     mcWideOut(plain, 0.3125f, 0.375f, 1);
+    mcToFront(plain);
     CHECK(banded.n == plain.n && memcmp(banded.rc, plain.rc, sizeof(float) * 5 * plain.n) == 0);
-    CHECK(banded.rc[banded.n - 1][4] == MC_FAR && banded.rc[banded.n - 1][1] == 0.3125f);
+    CHECK(banded.rc[0][4] == MC_FAR && banded.rc[0][1] == 0.3125f);
     // (a window that ends where the band begins, or begins where it ends, is not in its rows)
     w.cam[0][1] = 0.125f, w.cam[0][3] = 0.3125f;
     CHECK(mcWideFree(w));
@@ -1826,6 +1829,56 @@ static void testBand() {
     CHECK(mcWideFree(w));
     w.nCam = 2;
     CHECK(!mcWideFree(w));
+
+    // the list's last part made its first: the others move on, one place each; a list of one stays
+    McRects tf = {};
+    mcAdd(tf, 0, 0, 0.25f, 0.25f, 10), mcAdd(tf, 0.25f, 0, 0.5f, 0.25f, 11), mcAdd(tf, 0.5f, 0.125f, 0.75f, 0.5f, 12);
+    const float beyond5[5] = {9, 9, 9, 9, 99};
+    memcpy(tf.rc[3], beyond5, sizeof beyond5);
+    mcToFront(tf);
+    CHECK(tf.n == 3 && tf.rc[0][4] == 12 && tf.rc[1][4] == 10 && tf.rc[2][4] == 11 && tf.rc[3][4] == 99);
+    CHECK(tf.rc[0][0] == 0.5f && tf.rc[0][1] == 0.125f && tf.rc[0][2] == 0.75f && tf.rc[0][3] == 0.5f);
+    CHECK(tf.rc[1][0] == 0 && tf.rc[1][2] == 0.25f && tf.rc[2][0] == 0.25f && tf.rc[2][2] == 0.5f);
+    tf.n = 1;
+    mcToFront(tf);
+    CHECK(tf.rc[0][4] == 12 && tf.rc[1][4] == 10);
+    // no band: nothing happens, and it is told
+    McRects nb = {};
+    mcAdd(nb, 0, 0, 1, 1, MC_FAR);
+    CHECK(!mcWideOut(nb, 0.5f, 0.5f, 1) && !mcWideOut(nb, 0.5f, 0.25f, 1) && nb.n == 1 && nb.rc[0][3] == 1);
+    // the parts on the glass kept as they are (asked for so): the band out of the others alone
+    McRects gk = {};
+    mcAdd(gk, 0, 0, 0.25f, 0.5f, MC_GLASS), mcAdd(gk, 0.25f, 0.125f, 0.75f, 0.75f, MC_FAR);
+    CHECK(mcWideOut(gk, 0.3125f, 0.375f, 1, false) && gk.n == 4);
+    CHECK(gk.rc[0][4] == MC_GLASS && gk.rc[0][3] == 0.5f && gk.rc[1][3] == 0.3125f && gk.rc[2][1] == 0.375f);
+    CHECK(gk.rc[3][4] == MC_FAR && gk.rc[3][1] == 0.3125f);
+    // the HUD's parts where the runtime shows fewer than there are: first without the cross-hair's own part, then
+    // with the glass's parts whole - and with as many as it shows, nothing is given up
+    McHud many = {};
+    many.T = 0.125f, many.B = 0.75f, many.L = 0.25f, many.R = 0.75f, many.UR = 1;
+    many.cross[0] = 0.4375f, many.cross[1] = 0.4375f, many.cross[2] = 0.5625f, many.cross[3] = 0.5625f;
+    many.nGlass = 1;
+    const float pane[4] = {0, 0.25f, 0.25f, 0.5f};
+    memcpy(many.glass[0], pane, sizeof pane);
+    many.wide[0] = 0.3125f, many.wide[1] = 0.375f;
+    McRects full = {}, noCross = {}, glassWhole = {}, got = {};
+    mcHudRectsWith(many, full, true);
+    mcWideOut(full, 0.3125f, 0.375f, 1), mcToFront(full);
+    mcHudRectsWith(many, noCross, false);
+    mcWideOut(noCross, 0.3125f, 0.375f, 1), mcToFront(noCross);
+    mcHudRectsWith(many, glassWhole, false);
+    mcWideOut(glassWhole, 0.3125f, 0.375f, 1, false), mcToFront(glassWhole);
+    CHECK(full.n > noCross.n && noCross.n == glassWhole.n + 1);
+    mcHudRects(many, got, full.n);
+    CHECK(got.n == full.n && memcmp(got.rc, full.rc, sizeof(float) * 5 * full.n) == 0);
+    mcHudRects(many, got, full.n - 1);
+    CHECK(got.n == noCross.n && memcmp(got.rc, noCross.rc, sizeof(float) * 5 * noCross.n) == 0);
+    mcHudRects(many, got, noCross.n);
+    CHECK(got.n == noCross.n && memcmp(got.rc, noCross.rc, sizeof(float) * 5 * noCross.n) == 0);
+    mcHudRects(many, got, noCross.n - 1);
+    CHECK(got.n == glassWhole.n && memcmp(got.rc, glassWhole.rc, sizeof(float) * 5 * glassWhole.n) == 0);
+    mcHudRects(many, got, 1); // (fewer still: the last way stands, the band first)
+    CHECK(got.n == glassWhole.n && got.rc[0][4] == MC_FAR && got.rc[0][1] == 0.3125f && got.rc[0][2] == 1);
 
     // a part put into the list at a place: what stood there moves on; slivers and a full list: not
     McRects li = {};
