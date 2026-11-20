@@ -107,6 +107,10 @@ mw5_cockpit=
 ; brightness of its lit displays; its base light (0..1); mw5_linear_output=1 if it looks washed out
 mw5_emissive=1.5
 mw5_ambient=0.45
+; the world's light on the cockpit, read from the picture: bright under a bright sky, dark at night, lighter from
+; the sky's side than from the ground's (0: the fixed lamp alone .. 1); the least light it leaves (0..1)
+mw5_light=1
+mw5_light_floor=0.3
 ; painted metal of mod cockpits: the patches, worn paint and gloss (0: plain colours .. 1); how much paint is worn off (0..1)
 mw5_paint=1
 mw5_paint_wear=0.5

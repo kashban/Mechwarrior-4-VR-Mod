@@ -4,8 +4,9 @@
 // range; our replacement shader for that path throws those vertices away while this is on, and at
 // the first such draw of each eye's pass of the main camera the mesh is drawn into the same
 // targets: fixed in the game camera's own space (the head pose undone, like the game's cockpit),
-// with the game's projection, depth and TAA jitter. Lighting: a fixed lamp in the cockpit plus the
-// emissive map. Off until Ctrl+F11 ([vr] mw5_cockpit names the file; mw5_on=1 starts with it on).
+// with the game's projection, depth and TAA jitter. Lighting: the world's own light as the eye's picture shows it
+// (mw5Light: brighter from the sky's side, darker from the ground's, dark at night), a fixed lamp in the cockpit,
+// the emissive map. Off until Ctrl+F11 ([vr] mw5_cockpit names the file; mw5_on=1 starts with it on).
 // Ctrl+Alt+arrows: the eye forward / back / up / down in the mesh (2 cm); Ctrl+Alt+PgUp / PgDn: its size.
 // A cockpit's own settings - the eye, the size, what its monitors show - are in mw4vr_cockpits\<name>.ini
 // ([cockpit], written by the converter); without that file the [vr] mw5_* values of mw4vr.ini hold.
@@ -60,6 +61,9 @@ static bool g_mw5IniRead;
 wchar_t g_mw5Name[64];
 static float g_mw5Scale = 1, g_mw5Eye[3], g_mw5Ems = 1.5f, g_mw5Amb = 0.45f;
 static int g_mw5LinearOut, g_mw5Reversed = 1;
+#define M5_CB_FLOATS 84 // the shader's constants (C), in floats
+// the world's light on the cockpit: [vr] mw5_light (0: the fixed lamp alone .. 1), mw5_light_floor (the least light)
+static float g_m5LightOn = 1, g_m5LightFloor = 0.3f;
 // painted metal (the parts the converter marks; mw4vr_cockpits\mw4vr_paint.mwd, made by it, holds the picture for it)
 static ID3D11ShaderResourceView *g_m5Detail;
 static bool g_m5DetailTried;
@@ -108,6 +112,8 @@ cbuffer C : register(b13) {
     float4 rot2;          // as rot, for the second part
     float4 eye;           // xyz: the eye in the mesh; w > 0: painted metal, as strongly
     float4 pnt;           // x: how much of the paint is worn off
+    float4 env[6];        // the world's light from the mesh's right, left, above, below, ahead, behind (rgb, as the
+                          // picture has it); [0].w: how much of it is used (0: none), [1].w: the least light
 };
 struct VSIn { float3 pos : POSITION; float3 nrm : NORMAL; float2 uv : TEXCOORD0; };
 struct VSOut { float4 pos : SV_Position; float3 nrm : NORMAL; float2 uv : TEXCOORD0; float3 mp : TEXCOORD1; };
@@ -174,7 +180,19 @@ float4 ps(VSOut i) : SV_Target {
         float3 h = normalize(normalize(eye.xyz - i.mp) + lamp.xyz);
         gloss = pow(saturate(dot(n, h)), 28) * lerp(0.18, 0.50, worn) * eye.w;
     }
-    float l = par.y + (1 - par.y) * saturate(dot(n, lamp.xyz) * 0.5 + 0.5);
+    float lam = saturate(dot(n, lamp.xyz) * 0.5 + 0.5);
+    float3 l = par.y + (1 - par.y) * lam;
+    if (env[0].w > 0) {
+        // What the world sends from the side a face looks to (0.4: a day's picture - there the cockpit is as bright
+        // as under the lamp alone). Its colour only in part: a cockpit all green over grass is no cockpit.
+        float3 w = n * n;
+        float3 k = (w.x * (n.x > 0 ? env[0].rgb : env[1].rgb) + w.y * (n.y > 0 ? env[2].rgb : env[3].rgb) +
+                    w.z * (n.z > 0 ? env[4].rgb : env[5].rgb)) / 0.4;
+        k = lerp(dot(k, 0.3333), k, 0.5);
+        k = clamp(k, env[1].w, 1.7) * (0.72 + 0.28 * lam);
+        l = lerp(l, k, env[0].w);
+        gloss *= lerp(1, saturate(dot(k, 0.3333)), env[0].w);
+    }
     float3 c = a * l + gloss + te.Sample(sm, i.uv).rgb * par.x;
     if (par.z > 0) c = pow(saturate(c), 2.2);
     return float4(c, 1);
@@ -260,6 +278,10 @@ static void mw5ReadIni() {
     g_mw5Eye[2] = mw5CockpitF(L"eye_forward_m", 0);
     g_mw5Ems = mw5GetF(L"mw5_emissive", 1.5f);
     g_mw5Amb = mw5GetF(L"mw5_ambient", 0.45f);
+    g_m5LightOn = mw5GetF(L"mw5_light", 1);
+    if (!(g_m5LightOn >= 0 && g_m5LightOn <= 1)) g_m5LightOn = 1;
+    g_m5LightFloor = mw5GetF(L"mw5_light_floor", 0.3f);
+    if (!(g_m5LightFloor >= 0 && g_m5LightFloor <= 1)) g_m5LightFloor = 0.3f;
     g_m5Paint = mw5GetF(L"mw5_paint", 1);
     if (!(g_m5Paint >= 0 && g_m5Paint <= 1)) g_m5Paint = 1;
     g_m5PaintWear = mw5GetF(L"mw5_paint_wear", 0.5f);
@@ -528,7 +550,8 @@ static bool mw5CreateStates() {
     HRESULT h3 = g_dev->CreateInputLayout(il, 3, vc->GetBufferPointer(), vc->GetBufferSize(), &g_m5IL);
     vc->Release();
     pc->Release();
-    D3D11_BUFFER_DESC bd = {240, D3D11_USAGE_DYNAMIC, D3D11_BIND_CONSTANT_BUFFER, D3D11_CPU_ACCESS_WRITE, 0, 0};
+    D3D11_BUFFER_DESC bd = {
+        M5_CB_FLOATS * 4, D3D11_USAGE_DYNAMIC, D3D11_BIND_CONSTANT_BUFFER, D3D11_CPU_ACCESS_WRITE, 0, 0};
     HRESULT h4 = ORIG(PFN_CreateBuffer, g_dev, VT_Dev_CreateBuffer)(g_dev, &bd, nullptr, &g_m5CB);
     D3D11_SAMPLER_DESC sd = {};
     sd.Filter = D3D11_FILTER_ANISOTROPIC, sd.MaxAnisotropy = 8;
@@ -643,6 +666,222 @@ float mw5LeftAltBottom(float L) {
 }
 
 // at Present, with the HUD image of this frame complete
+// The world's light on the cockpit. A cockpit lit by a fixed lamp alone looks the same at noon and at night, flat
+// before a bright sky. What light there is, the eye's picture tells: it is the world as the pilot sees it. Each
+// frame a few small patches of the left eye's picture (M5L_COLS x M5L_ROWS of them, M5L_PATCH pixels square) are
+// copied to a texture the CPU may read; two frames later - the GPU is not waited for - their colours are read and
+// sorted by the side of the cockpit they shine from: right, left, above, below, ahead, behind. Sorted in the mesh's
+// own space: turning the head moves the patches, not the light. A side no patch looks to (behind the pilot) drifts
+// to the mean of all. The six colours go to the shader (env); it lights each face with those of the sides it faces.
+// Light comes quickly (a flash) and goes slowly.
+#define M5L_COLS 8
+#define M5L_ROWS 6
+#define M5L_PATCH 4
+struct M5LShot {
+    bool used;
+    float rot[9];           // mesh -> view (a rotation times the size), as the mesh was drawn
+    float p00, p11, ox, oy; // the view: clip x = p00 x + ox z, clip y = p11 y + oy z
+};
+static ID3D11Texture2D *g_m5LTex[3];
+static DXGI_FORMAT g_m5LFmt;
+static M5LShot g_m5LShot[3];
+static unsigned g_m5LN, g_m5LFrame = ~0u;
+static float g_m5Cube[6][3];
+static bool g_m5CubeHave;
+static DWORD g_m5LTick;
+
+static float m5Half(uint16_t h) {
+    const int e = (h >> 10) & 31, m = h & 1023;
+    float v = e == 0 ? ldexpf((float)m, -24) : e == 31 ? (m ? 0.0f : 65504.0f) : ldexpf((float)(m + 1024), e - 25);
+    return (h & 0x8000) ? -v : v;
+}
+
+// a pixel of the read texture -> rgb; false: a format not known here
+static bool m5Pixel(DXGI_FORMAT f, const uint8_t *p, float *rgb) {
+    switch (f) {
+    case DXGI_FORMAT_R16G16B16A16_FLOAT: {
+        const uint16_t *h = (const uint16_t *)p;
+        rgb[0] = m5Half(h[0]), rgb[1] = m5Half(h[1]), rgb[2] = m5Half(h[2]);
+        return true;
+    }
+    case DXGI_FORMAT_R8G8B8A8_UNORM:
+    case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:
+        rgb[0] = p[0] / 255.0f, rgb[1] = p[1] / 255.0f, rgb[2] = p[2] / 255.0f;
+        return true;
+    case DXGI_FORMAT_B8G8R8A8_UNORM:
+    case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB:
+    case DXGI_FORMAT_B8G8R8X8_UNORM:
+        rgb[0] = p[2] / 255.0f, rgb[1] = p[1] / 255.0f, rgb[2] = p[0] / 255.0f;
+        return true;
+    default:
+        return false;
+    }
+}
+
+// the patches read two frames ago, into the six colours
+static void mw5LightRead(ID3D11DeviceContext *c, int slot) {
+    const M5LShot &s = g_m5LShot[slot];
+    D3D11_MAPPED_SUBRESOURCE m;
+    if (FAILED(ORIG(PFN_Map, c, VT_Ctx_Map)(c, g_m5LTex[slot], 0, D3D11_MAP_READ, D3D11_MAP_FLAG_DO_NOT_WAIT, &m)))
+        return; // (not ready: the next frame's are as good)
+    const int px = g_m5LFmt == DXGI_FORMAT_R16G16B16A16_FLOAT ? 8 : 4;
+    float sum[6][3] = {}, wsum[6] = {}, mean[3] = {};
+    bool ok = true;
+    for (int row = 0; row < M5L_ROWS && ok; ++row)
+        for (int col = 0; col < M5L_COLS && ok; ++col) {
+            float a[3] = {};
+            for (int y = 0; y < M5L_PATCH && ok; ++y)
+                for (int x = 0; x < M5L_PATCH; ++x) {
+                    float q[3];
+                    const uint8_t *p = (const uint8_t *)m.pData + (size_t)(row * M5L_PATCH + y) * m.RowPitch +
+                                       (size_t)(col * M5L_PATCH + x) * px;
+                    if (!m5Pixel(g_m5LFmt, p, q)) {
+                        ok = false;
+                        break;
+                    }
+                    for (int k = 0; k < 3; ++k) {
+                        float v = q[k] > 0 ? q[k] : 0; // (also for what is no number)
+                        if (g_mw5LinearOut) v = powf(v, 1 / 2.2f);
+                        a[k] += (v < 4 ? v : 4) / (M5L_PATCH * M5L_PATCH);
+                    }
+                }
+            // where the patch lies, seen from the mesh
+            const float nx = (col + 0.5f) / M5L_COLS * 2 - 1, ny = 1 - (row + 0.5f) / M5L_ROWS * 2;
+            const float v[3] = {(nx - s.ox) / s.p00, (ny - s.oy) / s.p11, 1};
+            float d[3], len = 0;
+            for (int j = 0; j < 3; ++j) {
+                d[j] = s.rot[j] * v[0] + s.rot[3 + j] * v[1] + s.rot[6 + j] * v[2];
+                len += d[j] * d[j];
+            }
+            len = sqrtf(len);
+            if (!(len > 0)) continue;
+            for (int j = 0; j < 3; ++j) {
+                const float u = d[j] / len, w = u * u;
+                const int side = j * 2 + (u > 0 ? 0 : 1);
+                wsum[side] += w;
+                for (int k = 0; k < 3; ++k) sum[side][k] += w * a[k];
+            }
+            for (int k = 0; k < 3; ++k) mean[k] += a[k] / (M5L_COLS * M5L_ROWS);
+        }
+    ORIG(PFN_Unmap, c, VT_Ctx_Unmap)(c, g_m5LTex[slot], 0);
+    if (!ok) return;
+    const DWORD now = GetTickCount();
+    float dt = g_m5CubeHave ? (now - g_m5LTick) / 1000.0f : 0;
+    if (dt > 0.1f) dt = 0.1f;
+    g_m5LTick = now;
+    for (int a = 0; a < 6; ++a)
+        for (int k = 0; k < 3; ++k) {
+            const bool seen = wsum[a] > 0.5f;
+            const float to = seen ? sum[a][k] / wsum[a] : mean[k];
+            if (!g_m5CubeHave) {
+                g_m5Cube[a][k] = to;
+                continue;
+            }
+            // (seconds: light comes in 0.06, goes in 0.5; a side out of sight follows the mean in 2)
+            const float tau = !seen ? 2.0f : to > g_m5Cube[a][k] ? 0.06f : 0.5f;
+            float w = 1 - expf(-dt / tau);
+            if (seen && wsum[a] < 4) w *= wsum[a] / 4; // (a few patches at the picture's edge: less sure)
+            g_m5Cube[a][k] += (to - g_m5Cube[a][k]) * w;
+        }
+    g_m5CubeHave = true;
+    static unsigned told;
+    if (told < 6 ? g_frame % 240 == 0 : g_dbg && g_frame % 1200 == 0) {
+        ++told;
+        const float(*q)[3] = g_m5Cube;
+        logf("mw5: the world's light (frame %u) - mean %.2f %.2f %.2f; right %.2f left %.2f above %.2f below %.2f "
+             "ahead %.2f behind %.2f (each rgb's mean; 0.40: a day's picture)",
+             g_frame, mean[0], mean[1], mean[2], (q[0][0] + q[0][1] + q[0][2]) / 3, (q[1][0] + q[1][1] + q[1][2]) / 3,
+             (q[2][0] + q[2][1] + q[2][2]) / 3, (q[3][0] + q[3][1] + q[3][2]) / 3, (q[4][0] + q[4][1] + q[4][2]) / 3,
+             (q[5][0] + q[5][1] + q[5][2]) / 3);
+    }
+}
+
+// Before the mesh is drawn for an eye: the six colours into the constants (cb: M5_CB_FLOATS, the mesh's matrix
+// already in it); for the left eye, once a frame, the patches of the picture bound now are taken.
+static void mw5Light(ID3D11DeviceContext *c, int e, float *cb, float p00, float p11, float ox, float oy) {
+    if (!(g_m5LightOn > 0)) return;
+    if (e == 0 && g_m5LFrame != g_frame && p00 > 0 && p11 > 0) {
+        g_m5LFrame = g_frame;
+        ID3D11RenderTargetView *rtv = nullptr;
+        c->OMGetRenderTargets(1, &rtv, nullptr);
+        ID3D11Resource *res = nullptr;
+        ID3D11Texture2D *tex = nullptr;
+        if (rtv) rtv->GetResource(&res);
+        if (res) res->QueryInterface(__uuidof(ID3D11Texture2D), (void **)&tex);
+        D3D11_VIEWPORT vp = {};
+        UINT nvp = 1;
+        c->RSGetViewports(&nvp, &vp);
+        if (tex && nvp && vp.Width >= 64 && vp.Height >= 64) {
+            D3D11_TEXTURE2D_DESC d;
+            D3D11_RENDER_TARGET_VIEW_DESC rd;
+            tex->GetDesc(&d);
+            rtv->GetDesc(&rd);
+            const DXGI_FORMAT fmt = rd.Format != DXGI_FORMAT_UNKNOWN ? rd.Format : d.Format;
+            float probe[3];
+            const uint8_t zero[8] = {};
+            UINT sub = 0;
+            bool ok = d.SampleDesc.Count == 1 && m5Pixel(fmt, zero, probe);
+            if (rd.ViewDimension == D3D11_RTV_DIMENSION_TEXTURE2D)
+                sub = D3D11CalcSubresource(rd.Texture2D.MipSlice, 0, d.MipLevels);
+            else if (rd.ViewDimension == D3D11_RTV_DIMENSION_TEXTURE2DARRAY)
+                sub = D3D11CalcSubresource(rd.Texture2DArray.MipSlice, rd.Texture2DArray.FirstArraySlice, d.MipLevels);
+            else
+                ok = false;
+            if (ok && g_m5LTex[0] && g_m5LFmt != fmt) {
+                for (ID3D11Texture2D *&t : g_m5LTex) {
+                    if (t) t->Release();
+                    t = nullptr;
+                }
+                for (M5LShot &s : g_m5LShot) s.used = false;
+            }
+            if (ok && !g_m5LTex[0]) {
+                D3D11_TEXTURE2D_DESC n = {};
+                n.Width = M5L_COLS * M5L_PATCH, n.Height = M5L_ROWS * M5L_PATCH, n.MipLevels = n.ArraySize = 1;
+                n.Format = fmt, n.SampleDesc.Count = 1, n.Usage = D3D11_USAGE_STAGING;
+                n.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+                HRESULT hr = S_OK;
+                for (int i = 0; i < 3 && SUCCEEDED(hr); ++i) hr = g_dev->CreateTexture2D(&n, nullptr, &g_m5LTex[i]);
+                g_m5LFmt = fmt;
+                logf("mw5: the world's light is read from the eye's picture (format %d, %.0f x %.0f; %d x %d patches) "
+                     "-> 0x%08lx",
+                     (int)fmt, vp.Width, vp.Height, M5L_COLS, M5L_ROWS, hr);
+                if (FAILED(hr)) {
+                    for (ID3D11Texture2D *&t : g_m5LTex) {
+                        if (t) t->Release();
+                        t = nullptr;
+                    }
+                    g_m5LightOn = 0; // (not asked again)
+                }
+            }
+            if (ok && g_m5LTex[0]) {
+                const int old = (g_m5LN + 1) % 3, cur = g_m5LN % 3;
+                if (g_m5LShot[old].used) mw5LightRead(c, old);
+                for (int row = 0; row < M5L_ROWS; ++row)
+                    for (int col = 0; col < M5L_COLS; ++col) {
+                        UINT x = (UINT)(vp.TopLeftX + (col + 0.5f) / M5L_COLS * vp.Width) - M5L_PATCH / 2;
+                        UINT y = (UINT)(vp.TopLeftY + (row + 0.5f) / M5L_ROWS * vp.Height) - M5L_PATCH / 2;
+                        if (x + M5L_PATCH > d.Width || y + M5L_PATCH > d.Height) continue;
+                        const D3D11_BOX b = {x, y, 0, x + M5L_PATCH, y + M5L_PATCH, 1};
+                        c->CopySubresourceRegion(g_m5LTex[cur], 0, col * M5L_PATCH, row * M5L_PATCH, 0, tex, sub, &b);
+                    }
+                M5LShot &s = g_m5LShot[cur];
+                s.used = true;
+                for (int i = 0; i < 3; ++i)
+                    for (int j = 0; j < 3; ++j) s.rot[i * 3 + j] = cb[i * 4 + j];
+                s.p00 = p00, s.p11 = p11, s.ox = ox, s.oy = oy;
+                ++g_m5LN;
+            }
+        }
+        IUnknown *rel[] = {tex, res, rtv};
+        for (IUnknown *u : rel)
+            if (u) u->Release();
+    }
+    if (!g_m5CubeHave) return;
+    for (int a = 0; a < 6; ++a)
+        for (int k = 0; k < 3; ++k) cb[60 + a * 4 + k] = g_m5Cube[a][k];
+    cb[63] = g_m5LightOn, cb[67] = g_m5LightFloor;
+}
+
 void mw5HudCopy(ID3D11DeviceContext *c, ID3D11Texture2D *hud) {
     if (!mw5Active() || !g_mw5ScreensWanted || !g_m5Screens || !hud || !c) return;
     D3D11_TEXTURE2D_DESC d;
@@ -859,7 +1098,7 @@ void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw, int ckTris) {
     // mesh -> this eye's view: c = S (v - eye); p = R^T (c - t - raw (cockpit scale - world scale))
     const float *R = g_vrR[e], *T = g_vrT[e], *raw = g_vrRaw[e];
     float S = g_vr.cockpitScale * g_mw5Scale;
-    float cb[60] = {};
+    float cb[M5_CB_FLOATS] = {};
     // The cockpit sways with the mech's steps, as the game's own does (sway.cpp: the game's cockpit against the
     // camera, in the camera's space): c' = D c + d. Without a sway D is the identity.
     float D[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1}, d[3] = {0, 0, 0};
@@ -900,6 +1139,7 @@ void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw, int ckTris) {
     cb[20] = 0.25f, cb[21] = 0.85f, cb[22] = 0.45f; // the lamp: above, a little ahead and to the right
     cb[23] = g_mw5DepthFront;
     cb[24] = g_mw5Ems, cb[25] = g_mw5Amb, cb[26] = (float)g_mw5LinearOut;
+    mw5Light(c, e, cb, g_P00, g_P11, 0, 0);
     auto put = [&]() {
         D3D11_MAPPED_SUBRESOURCE m;
         if (FAILED(ORIG(PFN_Map, c, VT_Ctx_Map)(c, g_m5CB, 0, D3D11_MAP_WRITE_DISCARD, 0, &m))) return false;
