@@ -63,7 +63,7 @@ static float g_mw5Scale = 1, g_mw5Eye[3], g_mw5Ems = 1.5f, g_mw5Amb = 0.45f;
 static int g_mw5LinearOut, g_mw5Reversed = 1;
 #define M5_CB_FLOATS 84 // the shader's constants (C), in floats
 // the world's light on the cockpit: [vr] mw5_light (0: the fixed lamp alone .. 1), mw5_light_floor (the least light)
-static float g_m5LightOn = 1, g_m5LightFloor = 0.3f;
+static float g_m5LightOn = 1, g_m5LightFloor = 0.3f, g_m5LightIn = 0.55f;
 // painted metal (the parts the converter marks; mw4vr_cockpits\mw4vr_paint.mwd, made by it, holds the picture for it)
 static ID3D11ShaderResourceView *g_m5Detail;
 static bool g_m5DetailTried;
@@ -183,11 +183,11 @@ float4 ps(VSOut i) : SV_Target {
     float lam = saturate(dot(n, lamp.xyz) * 0.5 + 0.5);
     float3 l = par.y + (1 - par.y) * lam;
     if (env[0].w > 0) {
-        // What the world sends from the side a face looks to (0.4: a day's picture - there the cockpit is as bright
+        // What the world sends from the side a face looks to (0.55: a day's picture - there the cockpit is as bright
         // as under the lamp alone). Its colour only in part: a cockpit all green over grass is no cockpit.
         float3 w = n * n;
         float3 k = (w.x * (n.x > 0 ? env[0].rgb : env[1].rgb) + w.y * (n.y > 0 ? env[2].rgb : env[3].rgb) +
-                    w.z * (n.z > 0 ? env[4].rgb : env[5].rgb)) / 0.4;
+                    w.z * (n.z > 0 ? env[4].rgb : env[5].rgb)) / 0.55;
         k = lerp(dot(k, 0.3333), k, 0.5);
         k = clamp(k, env[1].w, 1.7) * (0.72 + 0.28 * lam);
         l = lerp(l, k, env[0].w);
@@ -282,6 +282,8 @@ static void mw5ReadIni() {
     if (!(g_m5LightOn >= 0 && g_m5LightOn <= 1)) g_m5LightOn = 1;
     g_m5LightFloor = mw5GetF(L"mw5_light_floor", 0.3f);
     if (!(g_m5LightFloor >= 0 && g_m5LightFloor <= 1)) g_m5LightFloor = 0.3f;
+    g_m5LightIn = mw5GetF(L"mw5_light_inside", 0.55f);
+    if (!(g_m5LightIn >= 0 && g_m5LightIn <= 1)) g_m5LightIn = 0.55f;
     g_m5Paint = mw5GetF(L"mw5_paint", 1);
     if (!(g_m5Paint >= 0 && g_m5Paint <= 1)) g_m5Paint = 1;
     g_m5PaintWear = mw5GetF(L"mw5_paint_wear", 0.5f);
@@ -789,7 +791,7 @@ static void mw5LightRead(ID3D11DeviceContext *c, int slot) {
         ++told;
         const float(*q)[3] = g_m5Cube;
         logf("mw5: the world's light (frame %u) - mean %.2f %.2f %.2f; right %.2f left %.2f above %.2f below %.2f "
-             "ahead %.2f behind %.2f (each rgb's mean; 0.40: a day's picture)",
+             "ahead %.2f behind %.2f (each rgb's mean; 0.55: a day's picture)",
              g_frame, mean[0], mean[1], mean[2], (q[0][0] + q[0][1] + q[0][2]) / 3, (q[1][0] + q[1][1] + q[1][2]) / 3,
              (q[2][0] + q[2][1] + q[2][2]) / 3, (q[3][0] + q[3][1] + q[3][2]) / 3, (q[4][0] + q[4][1] + q[4][2]) / 3,
              (q[5][0] + q[5][1] + q[5][2]) / 3);
@@ -877,8 +879,12 @@ static void mw5Light(ID3D11DeviceContext *c, int e, float *cb, float p00, float 
             if (u) u->Release();
     }
     if (!g_m5CubeHave) return;
+    // A face looking ahead or up looks out of the windows: the world lights it. One looking back at the pilot or
+    // down looks into the cockpit - the panel's front, the undersides: little of the world's light gets there
+    // ([vr] mw5_light_inside). The sides lie between.
+    const float open[6] = {0.5f + 0.5f * g_m5LightIn, 0.5f + 0.5f * g_m5LightIn, 0.9f, g_m5LightIn, 1, g_m5LightIn};
     for (int a = 0; a < 6; ++a)
-        for (int k = 0; k < 3; ++k) cb[60 + a * 4 + k] = g_m5Cube[a][k];
+        for (int k = 0; k < 3; ++k) cb[60 + a * 4 + k] = g_m5Cube[a][k] * open[a];
     cb[63] = g_m5LightOn, cb[67] = g_m5LightFloor;
 }
 
@@ -1248,6 +1254,7 @@ static std::vector<std::wstring> mw5Files() {
     } while (FindNextFileW(h, &fd));
     FindClose(h);
     std::sort(v.begin(), v.end(),
+              // NOLINTNEXTLINE(clang-analyzer-cplusplus.Move): the library's own sort, read wrongly
               [](const std::wstring &a, const std::wstring &b) { return _wcsicmp(a.c_str(), b.c_str()) < 0; });
     return v;
 }

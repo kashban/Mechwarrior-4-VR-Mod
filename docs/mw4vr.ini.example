@@ -111,6 +111,8 @@ mw5_ambient=0.45
 ; the sky's side than from the ground's (0: the fixed lamp alone .. 1); the least light it leaves (0..1)
 mw5_light=1
 mw5_light_floor=0.3
+; how much of the world's light reaches faces that look into the cockpit - the panel's front, undersides (0..1)
+mw5_light_inside=0.55
 ; painted metal of mod cockpits: the patches, worn paint and gloss (0: plain colours .. 1); how much paint is worn off (0..1)
 mw5_paint=1
 mw5_paint_wear=0.5
