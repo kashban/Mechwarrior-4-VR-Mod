@@ -390,6 +390,16 @@ static void vrPollEvents() {
             } else if (sc->state == XR_SESSION_STATE_EXITING || sc->state == XR_SESSION_STATE_LOSS_PENDING) {
                 g_vr.running = false;
             }
+        } else if (ev.type == XR_TYPE_EVENT_DATA_REFERENCE_SPACE_CHANGE_PENDING) {
+            // The headset's own "recentre" (the controller's menu button held, Virtual Desktop's) moves the space the
+            // head's poses are told in. Our reference - where the pilot's head is when he sits upright - was taken
+            // in the old one: against the moved space the pilot sat somewhere else in the cockpit (far too low,
+            // in a test). So the reference is taken anew when the space changes: recentred there is recentred here.
+            auto *rc = (XrEventDataReferenceSpaceChangePending *)&ev;
+            if (rc->referenceSpaceType == XR_REFERENCE_SPACE_TYPE_LOCAL) {
+                g_vr.spaceChange = true, g_vr.spaceChangeAt = rc->changeTime;
+                logf("vr: the runtime recentres its space - our reference follows");
+            }
         }
         ev = {XR_TYPE_EVENT_DATA_BUFFER};
     }
@@ -481,6 +491,7 @@ static void vrLocate(XrTime when) {
             views[e].pose.orientation = qmul(q, views[e].pose.orientation);
         }
     }
+    if (g_vr.spaceChange && when >= g_vr.spaceChangeAt) g_vr.spaceChange = false, g_vr.recenter = true;
     if (!g_vr.haveRef || g_vr.recenter) {
         // the head between the eyes, looking where the left eye looks
         g_vr.ref.orientation = views[0].pose.orientation;
@@ -1245,10 +1256,22 @@ void vrOnPresent(IDXGISwapChain *swap, int eye) {
         }
         memcpy(hd.twist, g_vr.twist, sizeof hd.twist);
         hd.twistDv = g_vr.twistDv;
-        if (g_wideFrame != ~0u && g_frame - g_wideFrame <= 3 && !hd.nCam) // (not with a window open: its own cuts)
+        if (g_wideFrame != ~0u && g_frame - g_wideFrame <= 3) // (core.h: not with a window in its rows)
             hd.wide[0] = g_wideBand[0], hd.wide[1] = g_wideBand[1];
         static McRects hq_;
-        mcHudRects(hd, hq_);
+        // (beside the world's layer; and the cross-hair's own layer, where there is one, takes a place too)
+        mcHudRects(hd, hq_, MC_SHOWN - (g_crossShown && g_crossSc != XR_NULL_HANDLE ? 1 : 0));
+        { // (told when it changes: a band found is not always a band shown)
+            static int was = -1;
+            const int now = !(hd.wide[1] > hd.wide[0]) ? 0 : mcWideFree(hd) ? 1 : 2;
+            if (now != was && (now || was > 0))
+                logf("hud: frame %u: the band is %s (%d parts, %d windows, %d on the glass)", g_frame,
+                     now == 1 ? "shown in one piece"
+                     : now    ? "left cut up - a window lies in its rows"
+                              : "gone",
+                     hq_.n, hd.nCam, hd.nGlass);
+            was = now;
+        }
         float(*rc)[5] = hq_.rc;
         int nr = hq_.n;
         // a battle's first pictures (the answer comes a frame late, and the first frame can last long): no HUD yet
