@@ -179,7 +179,7 @@ function Install-Mod([string]$Game, [bool]$Dinput) {
     $now = Get-ModVersion (Join-Path $src 'd3d11.dll')
     Copy-Kept (Join-Path $src 'd3d11.dll') (Join-Path $Game 'd3d11.dll')
     if ($Dinput) { Copy-Kept (Join-Path $src 'dinput.dll') (Join-Path $Game 'dinput.dll') }
-    foreach ($f in 'mw4vr_cockpit_map.ini', 'mw4vr_start.cmd', 'mw4vr_start.ps1', 'mw4vr_readme.txt') {
+    foreach ($f in 'mw4vr_cockpit_map.ini', 'mw4vr_start.cmd', 'mw4vr_start.ps1', 'mw4vr_readme.txt', 'mw4vr_settings.cmd', 'mw4vr_settings.ps1') {
         Copy-Kept (Join-Path $src $f) (Join-Path $Game $f)
     }
     $state = Read-State $Game
@@ -191,6 +191,8 @@ function Install-Mod([string]$Game, [bool]$Dinput) {
     } else {
         Copy-Item (Join-Path $src 'mw4vr.ini') $ini
     }
+    # the package's settings beside the player's: what the settings window's "Defaults" goes back to
+    Copy-Item (Join-Path $src 'mw4vr.ini') "$ini.default" -Force
     $mechs = Join-Path $Game 'mw4vr_mechs.ini'
     if (-not (Test-Path $mechs)) { Copy-Item (Join-Path $src 'mw4vr_mechs.ini') $mechs }
     else {
@@ -438,7 +440,9 @@ $bGo = New-Object Windows.Forms.Button
 $bGo.Text = 'Install'; $bGo.Location = New-Object Drawing.Point(14, $script:y); $bGo.Size = New-Object Drawing.Size(120, 30)
 $bClose = New-Object Windows.Forms.Button
 $bClose.Text = 'Close'; $bClose.Location = New-Object Drawing.Point(586, $script:y); $bClose.Size = New-Object Drawing.Size(120, 30)
-$f.Controls.AddRange(@($bGo, $bClose)); $script:y += 38
+$bSet = New-Object Windows.Forms.Button
+$bSet.Text = 'Settings...'; $bSet.Location = New-Object Drawing.Point(142, $script:y); $bSet.Size = New-Object Drawing.Size(120, 30)
+$f.Controls.AddRange(@($bGo, $bSet, $bClose)); $script:y += 38
 $log = New-Object Windows.Forms.TextBox
 $log.Multiline = $true; $log.ReadOnly = $true; $log.ScrollBars = 'Vertical'
 $log.Location = New-Object Drawing.Point(14, $script:y); $log.Size = New-Object Drawing.Size(692, (770 - $script:y - 12))
@@ -451,11 +455,12 @@ $script:PyMods = $false
 $script:ModsDir = ''
 function Show-Game {
     $g = $tGame.Text.Trim()
-    if (-not (Test-Game $g)) { $lGame.Text = 'MW4Mercs.exe is not in this folder.'; $lGame.ForeColor = 'Firebrick'; return }
+    if (-not (Test-Game $g)) { $lGame.Text = 'MW4Mercs.exe is not in this folder.'; $lGame.ForeColor = 'Firebrick'; $bSet.Enabled = $false; return }
     # an update? the button and the line say so
     $was = Get-ModVersion (Join-Path $g 'd3d11.dll')
     $now = Get-ModVersion (Join-Path $script:Pkg 'game\d3d11.dll')
     $bGo.Text = if ($was) { 'Update' } else { 'Install' }
+    $bSet.Enabled = (Test-Path (Join-Path $g 'mw4vr.ini')) # (settings: once the mod's file is there)
     $ver = if (-not $was) { '' } elseif ($was -eq $now) { " MW4VR $was is installed (the same as this package)." } else { " MW4VR $was is installed - this package: $now. Your settings are kept." }
     switch (Get-HookState $g) {
         'ok' { $lGame.Text = "Found: the game and MW4Engine DX11 in the build MW4VR was made for.$ver"; $lGame.ForeColor = 'DarkGreen' }
@@ -529,6 +534,14 @@ $bUm.Add_Click({
 })
 $bGet.Add_Click({ Start-Process 'https://www.gildor.org/en/projects/umodel' })
 $bClose.Add_Click({ $f.Close() })
+# the settings window, for the game's mw4vr.ini (a window of its own: the setup stays as it is)
+$bSet.Add_Click({
+    $ps = Join-Path $script:Pkg 'game\mw4vr_settings.ps1'
+    $ini = Join-Path $tGame.Text.Trim() 'mw4vr.ini'
+    if (-not (Test-Path $ps) -or -not (Test-Path $ini)) { return }
+    Start-Process (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') -WindowStyle Hidden -ArgumentList @(
+        '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"' + $ps + '"'), '-Ini', ('"' + $ini + '"'))
+})
 # what stands in the three fields is kept when the installation starts and when the window closes
 function Save-Field {
     if ($env:MW4VR_SETUP_TEST -and -not $env:MW4VR_SETUP_TEST_SAVE) { return } # (a test leaves the player's file alone)
@@ -597,7 +610,9 @@ $bGo.Add_Click({
     }
     if (-not $cMw5.Checked) {
         Say 'Finished. Start the game with the shortcut or mw4vr_start.cmd, the headset connected.'
+        Say 'Settings: the button beside "Update", or mw4vr_settings.cmd in the game''s folder.'
         $bGo.Enabled = $true
+        Show-Game
         return
     }
     Say 'Exporting and converting the MechWarrior 5 cockpits - this takes a while ...'

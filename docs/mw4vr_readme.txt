@@ -56,6 +56,7 @@ dinput.dll             cures the game dying or hanging at start-up on PCs with c
                        (it leaves "other HID devices" out of the game's device list). Not needed if you
                        never had that trouble.
 mw4vr_start.cmd/.ps1   start the game without the administrator prompt
+mw4vr_settings.cmd     a window for all settings in mw4vr.ini (also: "Settings..." in the setup)
 mw4vr_cockpit_map.ini  which MechWarrior 5 cockpit each mech gets (only with converted cockpits)
 mw4vr_mechs.ini        written by the mod: what it remembers for each mech
 mw4vr.log              written by the mod: what it did; send it along when you report a fault
@@ -255,6 +256,7 @@ dinput.dll             behebt Abstürze und Hänger beim Spielstart auf PCs mit 
                        (lässt "sonstige HID-Geräte" aus der Geräteliste des Spiels). Unnötig, wenn du
                        das Problem nie hattest.
 mw4vr_start.cmd/.ps1   startet das Spiel ohne Administrator-Abfrage
+mw4vr_settings.cmd     ein Fenster f�r alle Einstellungen der mw4vr.ini (auch: "Settings..." im Setup)
 mw4vr_cockpit_map.ini  welches MechWarrior-5-Cockpit jeder Mech bekommt (nur mit umgewandelten Cockpits)
 mw4vr_mechs.ini        schreibt der Mod: was er sich je Mech merkt
 mw4vr.log              schreibt der Mod: was er getan hat; bei Fehlermeldungen mitschicken

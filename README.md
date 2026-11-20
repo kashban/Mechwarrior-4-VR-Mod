@@ -36,7 +36,7 @@ settings stay and only get what is new. By hand:
 1. In `mw4hook.ini` (MW4Engine DX11): `antihack=0`, `fov=130`, `vsync=0`, `taa=0`, `mode=windowed` and a square
    `resolution` (for example `1300x1300`; the mod renders at `render_height` whatever the window's size).
 2. Copy everything in the package's `game` folder into the game's folder: `d3d11.dll`, `dinput.dll`, `mw4vr.ini`,
-   `mw4vr_cockpit_map.ini`, `mw4vr_start.cmd`, `mw4vr_start.ps1`.
+   `mw4vr_cockpit_map.ini`, `mw4vr_start.cmd`, `mw4vr_start.ps1`, `mw4vr_settings.cmd`, `mw4vr_settings.ps1`.
 3. Start the game with `mw4vr_start.cmd`, the headset connected. `Ctrl+Home` recentres the view.
 
 What the files are:
@@ -45,6 +45,8 @@ What the files are:
 - `dinput.dll` - on some PCs the game often dies or hangs right at start-up: the system's old DirectInput damages
   the heap while it lists "other HID devices" (light controllers, receivers). This one lists only mice, keyboards
   and joysticks. It writes `mw4vr_dinput.log`. Leave it out if you never had that trouble.
+- `mw4vr_settings.cmd` - a window for `mw4vr.ini`: every setting with its explanation, tick boxes and fields
+  (`tools/setup/mw4vr_settings.ps1`; it is made from the file itself, so a new key needs no change there).
 - `mw4vr_start.cmd` - starts the game without the administrator prompt its manifest asks for (the game does not
   need the rights while its folder is writable).
 - `mw4vr_cockpit_map.ini` - which MechWarrior 5 cockpit each mech gets (only used with converted cockpits, below).

@@ -41,6 +41,8 @@ Copy-Item (Join-Path $root 'defaults\mw4vr_mechs.ini') (Join-Path $dir 'game')
 New-Item -ItemType Directory (Join-Path $dir 'game\mw4vr_cockpits') -Force | Out-Null
 Copy-Item (Join-Path $root 'defaults\mw4vr_cockpits\*.ini') (Join-Path $dir 'game\mw4vr_cockpits')
 Copy-Item (Join-Path $root 'tools\start\mw4vr_start.cmd'), (Join-Path $root 'tools\start\mw4vr_start.ps1') (Join-Path $dir 'game')
+# the settings window: started from the game's folder, and by the setup's button
+Copy-Item (Join-Path $root 'tools\setup\mw4vr_settings.cmd'), (Join-Path $root 'tools\setup\mw4vr_settings.ps1') (Join-Path $dir 'game')
 Copy-Item (Join-Path $root 'tools\cockpit_convert.py'), (Join-Path $root 'tools\convert_all.py'), (Join-Path $root 'tools\export_cockpits.ps1') (Join-Path $dir 'cockpit_tools')
 if ($Trees) {
     # the trees: models and pictures made from Poly Haven's plants (CC0), and their part of clutter.txt

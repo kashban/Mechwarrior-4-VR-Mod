@@ -13,9 +13,10 @@ double_draw=1
 ; 0 = the game draws the world twice, once for each eye; 1 = it draws the world for the left eye only, and
 ; each of its draws is made a second time for the right eye by the mod: much faster where the processor is
 ; the limit, a little slower where the graphics card is (docs/PERFORMANCE.md); 2 = the mod takes whichever
-; of the two is faster where the battle is. Only with double_draw=1. New in v11.73: off until you have tried
-; it. (8, 9: diagnosis - a file mw4vr_replay.txt, see mod/src/replay.cpp.) Read at the start
-replay_right=0
+; of the two is faster where the battle is - it begins with the mod's way and takes the game's only where that
+; is clearly faster. Only with double_draw=1. (8, 9: diagnosis - a file mw4vr_replay.txt, see
+; mod/src/replay.cpp.) Read at the start
+replay_right=2
 ; 1 = nothing is drawn beyond the map's fog (what lies there has the fog's colour alone; mw4hook's far_scale
 ; draws four kilometres far, most of it unseen - up to twice the pictures a second); 0 = all of it
 fog_cull=1
@@ -97,7 +98,7 @@ hud_cross_scale=0.25
 zoom_window_scale=0.45
 zoom_scale=0.9
 
-; --- a cockpit mesh of our own in place of the game's (mw4vr_cockpits\<name>.mwc - see the README) ---
+; --- MechWarrior 5 cockpits: a mesh of our own in place of the game's (mw4vr_cockpits\<name>.mwc - see the README) ---
 ; mw5_on=1: the cockpits are used where there is one (mw4vr_cockpit_map.ini names one per mech; Ctrl+Alt+F11 in a
 ; battle chooses another); without cockpit files it changes nothing. Ctrl+F11 switches in a battle.
 ; mw5_cockpit: the cockpit for mechs nothing else names one for (empty: the game's own cockpit there)
@@ -122,6 +123,7 @@ mw5_screen_gain=1.0
 ; dark red on the monitors (an enemy's weapon list) is shown up to this many times brighter; 1 = as it is
 mw5_screen_red_boost=6
 
+; --- the help page ---
 ; Ctrl+F1 in a battle shows the keys as a page in the headset. help_pause=1: the game waits while it is up;
 ; help_clock=1: the time it was up is taken off the clocks the game reads (0: the game sees one long frame)
 help_pause=1
