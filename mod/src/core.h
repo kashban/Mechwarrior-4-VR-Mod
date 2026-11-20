@@ -595,30 +595,58 @@ static inline bool mcWideBand(const unsigned char *l, const unsigned char *m, co
     *r0 = at, *r1 = at + best;
     return true;
 }
-// the band v0..v1 taken out of the near frame's and the far parts (what they have above and below it stays), and
-// added as one far part 0..UR wide. Windows, the parts on the glass and the moved ones are left as they are.
+// a part put into the list at a place (what stood there and after it moves on); false: a sliver, or no room
+static inline bool mcInsert(McRects &q, int at, float u0, float v0, float u1, float v1, float kind) {
+    if (!(q.n < MC_RECTS && u1 - u0 > 0.005f && v1 - v0 > 0.005f)) return false;
+    memmove(q.rc[at + 1], q.rc[at], sizeof *q.rc * (size_t)(q.n - at));
+    float *r = q.rc[at];
+    r[0] = u0, r[1] = v0, r[2] = u1, r[3] = v1, r[4] = kind;
+    ++q.n;
+    return true;
+}
+// the band v0..v1 taken out of the near frame's and the far parts and of the parts on the glass (what they have
+// above and below it stays), and added as one far part 0..UR wide. Windows and the moved parts are left as they
+// are. A part on the glass keeps its place in the list - what is left of it below the band comes right after it,
+// before the windows that lie over it. (Until v11.86 the parts on the glass kept the band's rows: a piece of the
+// hint stood on the lance list's pane as well.)
 static inline void mcWideOut(McRects &q, float v0, float v1, float UR) {
     if (!(v1 > v0)) return;
+    const float band[4] = {-HUGE_VALF, v0, HUGE_VALF, v1};
     const int n0 = q.n;
     for (int i = 0; i < n0; ++i) {
         float *r = q.rc[i];
         if (r[4] != MC_NEAR && r[4] != MC_FAR) continue;
         const float u0 = r[0], u1 = r[2], bottom = r[3], kind = r[4];
-        const float band[4] = {-HUGE_VALF, v0, HUGE_VALF, v1};
         if (!mcMeet(band, u0, r[1], u1, bottom)) continue;
         r[3] = fmaxf(v0, r[1]); // (nothing above the band: a part without height, which is not shown)
         mcAdd(q, u0, v1, u1, bottom, kind);
     }
+    for (int i = 0; i < q.n; ++i) {
+        float *r = q.rc[i];
+        if (!(r[4] >= MC_GLASS && r[4] < MC_GLASS_OPAQUE && r[1] < v1)) continue;
+        const float bottom = r[3];
+        r[3] = fminf(bottom, fmaxf(v0, r[1]));            // (a part that ends above the band stays as it is)
+        mcInsert(q, i + 1, r[0], v1, r[2], bottom, r[4]); // (the rest begins below the band: not met again)
+    }
     mcAdd(q, 0, v0, UR, v1, MC_FAR);
 }
 
+// The band is shown in one piece while no window lies in its rows (the zoom window has its own cuts, and a
+// window is opaque: the band would lie under or over it). A window elsewhere - the target's view in its corner -
+// does not matter. (Until v11.86 any window kept the band cut up: with a target's view open, always.)
+static inline bool mcWideFree(const McHud &h) {
+    for (int i = 0; i < h.nCam; ++i)
+        if (h.cam[i][1] < h.wide[1] && h.cam[i][3] > h.wide[0]) return false;
+    return true;
+}
 // (the cross-hair's own part costs up to four more: left as it is where the runtime would not show them all)
 static inline void mcHudRects(const McHud &h, McRects &q, int shown = MC_SHOWN) {
+    const bool wide = mcWideFree(h);
     mcHudRectsWith(h, q, true);
-    mcWideOut(q, h.wide[0], h.wide[1], h.UR);
+    if (wide) mcWideOut(q, h.wide[0], h.wide[1], h.UR);
     if (q.n > shown) {
         mcHudRectsWith(h, q, false);
-        mcWideOut(q, h.wide[0], h.wide[1], h.UR);
+        if (wide) mcWideOut(q, h.wide[0], h.wide[1], h.UR);
     }
 }
 

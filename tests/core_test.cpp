@@ -1743,20 +1743,21 @@ static void testBand() {
     mcWideOut(q, 0.375f, 0.375f, 1.25f); // (empty: nothing happens)
     CHECK(q.n == before.n && memcmp(&q, &before, sizeof q) == 0);
     mcWideOut(q, 0.3125f, 0.375f, 1.25f);
-    CHECK(q.n == 12);
-    const float want[12][5] = {{0.25f, 0.125f, 0.75f, 0.3125f, MC_FAR},
+    CHECK(q.n == 13);
+    const float want[13][5] = {{0.25f, 0.125f, 0.75f, 0.3125f, MC_FAR},
                                {0, 0.125f, 0.25f, 0.3125f, MC_NEAR},
                                {0, 0, 1, 0.125f, MC_NEAR},
                                {0.5f, 0.25f, 0.625f, 0.5f, MC_FAR_OPAQUE},
                                {0.375f, 0.25f, 0.5f, 0.5f, MC_FAR_SMALL},
-                               {0.75f, 0.25f, 1, 0.5f, (float)MC_GLASS},
+                               {0.75f, 0.25f, 1, 0.3125f, (float)MC_GLASS},
+                               {0.75f, 0.375f, 1, 0.5f, (float)MC_GLASS},
                                {0.75f, 0.3125f, 1, 0.3125f, MC_NEAR},
                                {0.75f, 0.125f, 1, 0.3125f, MC_NEAR},
                                {0.25f, 0.375f, 0.75f, 0.75f, MC_FAR},
                                {0, 0.375f, 0.25f, 0.75f, MC_NEAR},
                                {0.75f, 0.375f, 1, 0.75f, MC_NEAR},
                                {0, 0.3125f, 1.25f, 0.375f, MC_FAR}};
-    for (int i = 0; i < 12; ++i)
+    for (int i = 0; i < 13; ++i)
         for (int k = 0; k < 5; ++k) CHECK(q.rc[i][k] == want[i][k]);
     // a part that only touches the band is not met
     q = {};
@@ -1782,6 +1783,115 @@ static void testBand() {
     CHECK(b.n == a.n && memcmp(a.rc, b.rc, sizeof(float) * 5 * a.n) == 0);
     mcHudRects(h, b);
     CHECK(b.n == 13 && b.rc[12][4] == MC_FAR && b.rc[12][0] == 0 && b.rc[12][2] == 1);
+
+    // windows: one outside the band's rows (the target's view in its corner) leaves the band in one piece; one
+    // in its rows keeps the parts as they are without a band
+    McHud w = {};
+    w.T = 0.125f, w.B = 0.75f, w.L = 0.25f, w.R = 0.75f, w.UR = 1;
+    w.nCam = 1;
+    const float corner[4] = {0, 0.8125f, 0.125f, 0.9375f};
+    memcpy(w.cam[0], corner, sizeof corner);
+    McRects plain = {}, banded = {};
+    mcHudRects(w, plain);
+    w.wide[0] = 0.3125f, w.wide[1] = 0.375f;
+    CHECK(mcWideFree(w));
+    mcHudRects(w, banded);
+    mcWideOut(plain, 0.3125f, 0.375f, 1);
+    CHECK(banded.n == plain.n && memcmp(banded.rc, plain.rc, sizeof(float) * 5 * plain.n) == 0);
+    CHECK(banded.rc[banded.n - 1][4] == MC_FAR && banded.rc[banded.n - 1][1] == 0.3125f);
+    // (a window that ends where the band begins, or begins where it ends, is not in its rows)
+    w.cam[0][1] = 0.125f, w.cam[0][3] = 0.3125f;
+    CHECK(mcWideFree(w));
+    w.cam[0][1] = 0.375f, w.cam[0][3] = 0.5f;
+    CHECK(mcWideFree(w));
+    w.cam[0][1] = 0.125f, w.cam[0][3] = 0.34375f; // (its lower part in the band)
+    CHECK(!mcWideFree(w));
+    w.cam[0][1] = 0.34375f, w.cam[0][3] = 0.5f; // (its upper part)
+    CHECK(!mcWideFree(w));
+    w.wide[0] = w.wide[1] = 0;
+    mcHudRects(w, plain);
+    w.wide[0] = 0.3125f, w.wide[1] = 0.375f;
+    mcHudRects(w, banded);
+    CHECK(banded.n == plain.n && memcmp(banded.rc, plain.rc, sizeof(float) * 5 * plain.n) == 0);
+    mcHudRects(w, banded, 1); // (... also where the parts are too many)
+    McRects few = {};
+    w.wide[0] = w.wide[1] = 0;
+    mcHudRects(w, few, 1);
+    CHECK(banded.n == few.n && memcmp(banded.rc, few.rc, sizeof(float) * 5 * few.n) == 0);
+    // every window counts: the second one in the band's rows; a window that is not one (beyond nCam) does not
+    w.wide[0] = 0.3125f, w.wide[1] = 0.375f;
+    memcpy(w.cam[0], corner, sizeof corner);
+    const float mid[4] = {0.375f, 0.25f, 0.625f, 0.5f};
+    memcpy(w.cam[1], mid, sizeof mid);
+    CHECK(mcWideFree(w));
+    w.nCam = 2;
+    CHECK(!mcWideFree(w));
+
+    // a part put into the list at a place: what stood there moves on; slivers and a full list: not
+    McRects li = {};
+    mcAdd(li, 0, 0, 0.25f, 0.25f, 10), mcAdd(li, 0.25f, 0, 0.5f, 0.25f, 11), mcAdd(li, 0.5f, 0, 0.75f, 0.25f, 12);
+    CHECK(mcInsert(li, 1, 0.125f, 0.5f, 0.375f, 0.75f, 13) && li.n == 4);
+    CHECK(li.rc[0][4] == 10 && li.rc[1][4] == 13 && li.rc[2][4] == 11 && li.rc[3][4] == 12);
+    CHECK(li.rc[1][0] == 0.125f && li.rc[1][1] == 0.5f && li.rc[1][2] == 0.375f && li.rc[1][3] == 0.75f);
+    CHECK(li.rc[2][0] == 0.25f && li.rc[2][2] == 0.5f && li.rc[3][0] == 0.5f && li.rc[3][2] == 0.75f);
+    CHECK(mcInsert(li, 4, 0, 0.5f, 0.125f, 0.75f, 14) && li.n == 5 && li.rc[4][4] == 14 && li.rc[3][4] == 12);
+    CHECK(mcInsert(li, 0, 0, 0.5f, 0.125f, 0.75f, 15) && li.n == 6 && li.rc[0][4] == 15 && li.rc[5][4] == 14);
+    CHECK(!mcInsert(li, 1, 0.5f, 0.5f, 0.505f, 0.75f, 16) && !mcInsert(li, 1, 0.5f, 0.5f, 0.75f, 0.505f, 16));
+    CHECK(mcInsert(li, 1, 0.5f, 0.5f, 0.50625f, 0.75f, 16) && mcInsert(li, 1, 0.5f, 0.5f, 0.75f, 0.50625f, 17));
+    CHECK(li.n == 8 && li.rc[1][4] == 17 && li.rc[2][4] == 16 && li.rc[3][4] == 10);
+    CHECK(!mcInsert(li, 1, 0, 0.5f, 0.005f, 0.75f, 16) && !mcInsert(li, 1, 0.5f, 0, 0.75f, 0.005f, 16) && li.n == 8);
+    while (li.n < MC_RECTS - 1) mcAdd(li, 0, 0, 0.5f, 0.5f, 1);
+    CHECK(mcInsert(li, 2, 0, 0, 0.5f, 0.5f, 18) && li.n == MC_RECTS && li.rc[2][4] == 18 && li.rc[3][4] == 16);
+    CHECK(!mcInsert(li, 2, 0, 0, 0.5f, 0.5f, 19) && li.n == MC_RECTS && li.rc[2][4] == 18);
+
+    // the parts on the glass lose the band's rows as well; what is left of one below the band comes right after
+    // it, before the window that lies over it. A window, and a part that does not reach the band, stay
+    McRects g = {};
+    mcAdd(g, 0, 0, 0.25f, 0.5f, MC_GLASS);                      // (the band runs through it)
+    mcAdd(g, 0.0625f, 0.4375f, 0.1875f, 0.5f, MC_GLASS_OPAQUE); // (a window in its lower part)
+    mcAdd(g, 0.75f, 0, 1, 0.25f, MC_GLASS + 1);                 // (above the band)
+    mcAdd(g, 0.75f, 0.25f, 1, 0.34375f, MC_GLASS_OPAQUE - 1);   // (ends in the band: nothing left below it)
+    mcAdd(g, 0.25f, 0.125f, 0.75f, 0.75f, MC_FAR);
+    mcAdd(g, 0.5f, 0.25f, 0.75f, 0.5f, MC_GLASS_OPAQUE + 1); // (a window in the band's rows: left as it is)
+    mcAdd(g, 0.5f, 0.25f, 0.75f, 0.5f, MC_FAR_SMALL);        // (a moved part: as well)
+    mcWideOut(g, 0.3125f, 0.375f, 1);
+    CHECK(g.n == 10);
+    CHECK(g.rc[0][4] == MC_GLASS && g.rc[0][1] == 0 && g.rc[0][3] == 0.3125f);
+    CHECK(g.rc[1][4] == MC_GLASS && g.rc[1][0] == 0 && g.rc[1][1] == 0.375f && g.rc[1][2] == 0.25f &&
+          g.rc[1][3] == 0.5f);
+    CHECK(g.rc[2][4] == MC_GLASS_OPAQUE && g.rc[2][1] == 0.4375f && g.rc[2][3] == 0.5f);
+    CHECK(g.rc[3][4] == MC_GLASS + 1 && g.rc[3][1] == 0 && g.rc[3][3] == 0.25f);
+    CHECK(g.rc[4][4] == MC_GLASS_OPAQUE - 1 && g.rc[4][1] == 0.25f && g.rc[4][3] == 0.3125f);
+    CHECK(g.rc[5][4] == MC_FAR && g.rc[5][3] == 0.3125f);
+    CHECK(g.rc[6][4] == MC_GLASS_OPAQUE + 1 && g.rc[6][1] == 0.25f && g.rc[6][3] == 0.5f);
+    CHECK(g.rc[7][4] == MC_FAR_SMALL && g.rc[7][1] == 0.25f && g.rc[7][3] == 0.5f);
+    CHECK(g.rc[8][4] == MC_FAR && g.rc[8][1] == 0.375f && g.rc[8][3] == 0.75f);
+    CHECK(g.rc[9][4] == MC_FAR && g.rc[9][0] == 0 && g.rc[9][1] == 0.3125f && g.rc[9][2] == 1 && g.rc[9][3] == 0.375f);
+    // (two parts on the glass one after the other, both cut: the second one is found behind the first one's rest)
+    g = {};
+    mcAdd(g, 0, 0, 0.25f, 0.5f, MC_GLASS), mcAdd(g, 0.75f, 0.25f, 1, 0.75f, MC_GLASS + 1);
+    mcWideOut(g, 0.3125f, 0.375f, 1);
+    CHECK(g.n == 5 && g.rc[0][4] == MC_GLASS && g.rc[1][4] == MC_GLASS && g.rc[2][4] == MC_GLASS + 1);
+    CHECK(g.rc[3][4] == MC_GLASS + 1 && g.rc[2][3] == 0.3125f && g.rc[3][1] == 0.375f && g.rc[3][3] == 0.75f);
+    CHECK(g.rc[1][3] == 0.5f && g.rc[4][4] == MC_FAR);
+    // (the first window's kind is no part on the glass; and what lies behind the list's end is no part at all)
+    g = {};
+    mcAdd(g, 0, 0.25f, 0.25f, 0.5f, MC_GLASS_OPAQUE);
+    const float staleGlass[5] = {0.5f, 0.25f, 0.75f, 0.5f, MC_GLASS};
+    memcpy(g.rc[1], staleGlass, sizeof staleGlass);
+    mcWideOut(g, 0.3125f, 0.375f, 1);
+    CHECK(g.n == 2 && g.rc[0][4] == MC_GLASS_OPAQUE && g.rc[0][1] == 0.25f && g.rc[0][3] == 0.5f);
+    CHECK(g.rc[1][4] == MC_FAR && g.rc[1][1] == 0.3125f && g.rc[1][3] == 0.375f);
+    // (a part on the glass that only touches the band - ends where it begins, begins where it ends - is not met)
+    g = {};
+    mcAdd(g, 0, 0.125f, 0.25f, 0.3125f, MC_GLASS), mcAdd(g, 0, 0.375f, 0.25f, 0.5f, MC_GLASS);
+    mcWideOut(g, 0.3125f, 0.375f, 1);
+    CHECK(g.n == 3 && g.rc[0][3] == 0.3125f && g.rc[1][1] == 0.375f && g.rc[1][4] == MC_GLASS && g.rc[2][4] == MC_FAR);
+    // (a part on the glass that begins in the band: nothing of it above, the rest below)
+    g = {};
+    mcAdd(g, 0, 0.34375f, 0.25f, 0.5f, MC_GLASS);
+    mcWideOut(g, 0.3125f, 0.375f, 1);
+    CHECK(g.n == 3 && g.rc[0][1] == 0.34375f && g.rc[0][3] == 0.34375f && g.rc[1][1] == 0.375f && g.rc[1][3] == 0.5f);
 }
 static void testFogCut() {
     // to a sixteenth beyond the fog's end

@@ -1245,10 +1245,21 @@ void vrOnPresent(IDXGISwapChain *swap, int eye) {
         }
         memcpy(hd.twist, g_vr.twist, sizeof hd.twist);
         hd.twistDv = g_vr.twistDv;
-        if (g_wideFrame != ~0u && g_frame - g_wideFrame <= 3 && !hd.nCam) // (not with a window open: its own cuts)
+        if (g_wideFrame != ~0u && g_frame - g_wideFrame <= 3) // (core.h: not with a window in its rows)
             hd.wide[0] = g_wideBand[0], hd.wide[1] = g_wideBand[1];
         static McRects hq_;
         mcHudRects(hd, hq_);
+        { // (told when it changes: a band found is not always a band shown)
+            static int was = -1;
+            const int now = !(hd.wide[1] > hd.wide[0]) ? 0 : mcWideFree(hd) ? 1 : 2;
+            if (now != was && (now || was > 0))
+                logf("hud: frame %u: the band is %s (%d parts, %d windows, %d on the glass)", g_frame,
+                     now == 1 ? "shown in one piece"
+                     : now    ? "left cut up - a window lies in its rows"
+                              : "gone",
+                     hq_.n, hd.nCam, hd.nGlass);
+            was = now;
+        }
         float(*rc)[5] = hq_.rc;
         int nr = hq_.n;
         // a battle's first pictures (the answer comes a frame late, and the first frame can last long): no HUD yet
