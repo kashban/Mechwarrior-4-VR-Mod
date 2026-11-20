@@ -797,7 +797,10 @@ static inline bool mcGridFit(const McGrid &g, float w, float h, float wantR, flo
 // mean outside, one frame with the game's cockpit means inside again.
 // A frame with a little of the cockpit (the pilot leans far forward, the seat is set near the window: most of the
 // game's cockpit lies behind the eye) says nothing either way - counted as "none", it made ours flicker.
-enum { MC_COCKPIT_TRIS = 30, MC_NO_COCKPIT_TRIS = 6, MC_OUTSIDE_FRAMES = 5 };
+// Two frames in a row, no more: for as long ours is not drawn anyway where the game's cockpit is missed (mw5Draw
+// waits for it for two frames). With five, ours came back for three frames over the picture seen from outside
+// before it went for good - the switch to the outside view flickered.
+enum { MC_COCKPIT_TRIS = 30, MC_NO_COCKPIT_TRIS = 6, MC_OUTSIDE_FRAMES = 2 };
 struct McSeat {
     int misses;   // frames in a row, looking ahead, without the game's cockpit
     bool outside; // the camera is not in the mech
