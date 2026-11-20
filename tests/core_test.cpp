@@ -1511,6 +1511,65 @@ static void testAuto() {
     CHECK(autoRun(a, MC_AUTO_TRIAL, 10, 5) == MC_AUTO_KEEP && !a.replay && a.pause == 0);
 }
 // no trial where the other way cannot help; the limits themselves
+// the way a battle begins with: by its mission
+static void testAutoMission() {
+    CHECK(mcAutoStart().replay && mcAutoStart(true).replay && !mcAutoStart(false).replay);
+    CHECK(mcAutoStart(false).rest == MC_AUTO_START && !mcAutoStart(false).trying);
+    // the list: every one of its missions, and none beside them
+    static const char *const game[] = {
+        "avalon01_spaceport",   "colsm02_medium",       "colsm04_assault",       "concourse pro",
+        "exford01_junglerecon", "exford02_stormpatrol", "exford03_beachfight",   "exford04_backstab",
+        "fact01_light",         "fact03_heavy",         "fact05_championship",   "hallor02_checkpoint",
+        "hesp03_assault",       "hesp04_stealth",       "jungle01_light",        "jungle02_medium",
+        "jungle03_heavy",       "jungle04_assault",     "jungle05_championship", "styk01_reinforce",
+        "styk02_peace_talks",   "styk04_assassination", "talon04_countrylife"};
+    CHECK(sizeof MC_GAME_DRAWS / sizeof *MC_GAME_DRAWS == 23 && sizeof game / sizeof *game == 23);
+    for (const char *m : game) CHECK(mcGameDraws(m));
+    CHECK(!mcGameDraws("eaton03_bandithideaway") && !mcGameDraws("thark01_overlord") && !mcGameDraws(""));
+    CHECK(!mcGameDraws("jungle01") && !mcGameDraws("jungle01_light2") && !mcGameDraws("Jungle01_light"));
+
+    // the mission in a text: after the mark, up to the next backslash, in small letters
+    const char *mark = "|missions\\";
+    char out[16], big[32];
+    const char *one = "x: resource\\missions\\hallor04.mw4|missions\\Hallor04_IndustryR\\a.lights\n";
+    memset(big, 'x', sizeof big), big[31] = 0;
+    CHECK(mcMissionOf(one, strlen(one), mark, big, sizeof big) && strcmp(big, "hallor04_industryr") == 0);
+    strcpy(out, "kept"); // (18 letters: too long for out)
+    CHECK(!mcMissionOf(one, strlen(one), mark, out, sizeof out) && strcmp(out, "kept") == 0);
+    // (a name as long as out has room for but for the end: not taken; one shorter: taken)
+    const char *n15 = "|missions\\abcdefghijklmno\\", *n16 = "|missions\\abcdefghijklmnop\\";
+    CHECK(mcMissionOf(n15, strlen(n15), mark, out, sizeof out) && strcmp(out, "abcdefghijklmno") == 0);
+    strcpy(out, "kept");
+    CHECK(!mcMissionOf(n16, strlen(n16), mark, out, sizeof out) && strcmp(out, "kept") == 0);
+    // only letters A..Z are made small
+    const char *edge = "|missions\\@AZ[`az{ 9\\";
+    CHECK(mcMissionOf(edge, strlen(edge), mark, out, sizeof out) && strcmp(out, "@az[`az{ 9") == 0);
+    // the last mark decides: a whole name after it, or none - not ended, a line's end first, no name at all,
+    // nothing behind the mark
+    const char *two = "|missions\\first\\x\n|missions\\second\\y\n";
+    CHECK(mcMissionOf(two, strlen(two), mark, out, sizeof out) && strcmp(out, "second") == 0);
+    const char *cut = "|missions\\first\\x\n|missions\\secon";
+    CHECK(!mcMissionOf(cut, strlen(cut), mark, out, sizeof out));
+    const char *line = "|missions\\first\\x\n|missions\\second\nthird\\";
+    CHECK(!mcMissionOf(line, strlen(line), mark, out, sizeof out));
+    const char *none = "|missions\\first\\x\n|missions\\\\y";
+    CHECK(!mcMissionOf(none, strlen(none), mark, out, sizeof out));
+    const char *end = "|missions\\a\\|missions\\";
+    CHECK(!mcMissionOf(end, strlen(end), mark, out, sizeof out));
+    CHECK(mcMissionOf(end, strlen(end) - 1, mark, out, sizeof out) && strcmp(out, "a") == 0);
+    // the text ends where it is said to: the backslash behind it does not end the name
+    const char *beyond = "|missions\\abc\\";
+    strcpy(out, "kept");
+    CHECK(!mcMissionOf(beyond, strlen(beyond) - 1, mark, out, sizeof out) && strcmp(out, "kept") == 0);
+    CHECK(mcMissionOf(beyond, strlen(beyond), mark, out, sizeof out) && strcmp(out, "abc") == 0);
+    const char *later = "xx|missions\\abc\\"; // (the same with the mark not at the text's beginning)
+    CHECK(!mcMissionOf(later, strlen(later) - 1, mark, out, sizeof out));
+    CHECK(mcMissionOf(later, strlen(later), mark, out, sizeof out) && strcmp(out, "abc") == 0);
+    // a text shorter than the mark, no text, no mark
+    strcpy(out, "kept");
+    CHECK(!mcMissionOf(mark, 3, mark, out, sizeof out) && !mcMissionOf("", 0, mark, out, sizeof out));
+    CHECK(!mcMissionOf("missions\\a\\", 11, mark, out, sizeof out) && strcmp(out, "kept") == 0);
+}
 static void testAutoChange() {
     // a trial that brought nothing: the way stays for 900 frames - unless the frames get much longer than they
     // were at that trial (another scene)
@@ -1836,7 +1895,7 @@ static void testShape() {
 
 int main() {
     testM4(), testM4Inv(), testProj(), testEyeStep(), testStereo(), testAuto(), testAutoLimits(), testAutoChange(),
-        testShape(), testHold(), testBand(), testFogCut();
+        testAutoMission(), testShape(), testHold(), testBand(), testFogCut();
     testHolds(), testTurnNorm(), testTurnFit(), testEyeInMesh(), testHudCross(), testHudGlass(), testGlassPose(),
         testGlassScale(), testGlassAim();
     testGridMark(), testGridPlace(), testGridTri(), testGridCells(), testGridFree(), testGridRim(), testGridFit();

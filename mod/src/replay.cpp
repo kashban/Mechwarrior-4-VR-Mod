@@ -34,7 +34,12 @@ static bool g_rpBroken;   // something this unit cannot do was met: the game dra
 static int g_rpSkip = -1; // the label depth a part made once a frame began at; -1: not in one
 static int g_rpEye = -1;  // the pass that is running
 
-void rpReadIni() { g_rpMode = GetPrivateProfileIntW(L"vr", L"replay_right", 0, (g_dir + L"mw4vr.ini").c_str()); }
+static LONGLONG rpLogSize();
+static LONGLONG g_rpLogFrom; // mw4hook's log was this long when the last battle ended, or the mod began
+void rpReadIni() {
+    g_rpMode = GetPrivateProfileIntW(L"vr", L"replay_right", 0, (g_dir + L"mw4vr.ini").c_str());
+    g_rpLogFrom = rpLogSize();
+}
 
 enum { RP_SRVS = 128, RP_UAVS = 8, RP_RTS = 8 };
 
@@ -1143,9 +1148,65 @@ void rpLabel(const wchar_t *name, int depth, bool open) {
 
 // can this frame's right eye be made from the left eye's draws?
 static McAuto g_rpAuto = mcAutoStart(); // replay_right=2: which way, and the watching (core.h)
+static bool g_rpAutoNew = true;         // a battle begins: which way it begins with is not looked up yet
 static double g_rpPassMs;               // the last pass of the main camera for the left eye
 static LONGLONG g_rpPassT0;
 bool rpWanted() { return (g_rpMode == RP_ON || (g_rpMode == RP_AUTO && g_rpAuto.replay)) && !g_rpBroken && g_rpP.ok; }
+// The battle's mission, as mw4hook's log names it (mw4hook_abi.h). The line comes a second into the battle's
+// first frames, so the log is asked a few times as the battle goes; and only what was written since the last
+// battle ended counts (before that it is the last battle's mission that is named). Until the line is there, the
+// mission known last stands: a battle taken up again after the menu is the same one.
+enum { RP_ASK_EVERY = 45, RP_ASK_FRAMES = 30 * RP_ASK_EVERY }; // (frames; about 15 seconds in all)
+static char g_rpMissionName[64];                               // the mission known last ("": none)
+static unsigned g_rpAsk;                                       // frames of this battle in which the log is still asked
+static LONGLONG rpLogSize() {
+    WIN32_FILE_ATTRIBUTE_DATA d;
+    if (!GetFileAttributesExW((g_dir + HK_LOG_FILE).c_str(), GetFileExInfoStandard, &d)) return 0;
+    return ((LONGLONG)d.nFileSizeHigh << 32) | d.nFileSizeLow;
+}
+// the mission the log has named since g_rpLogFrom; false: none
+static bool rpMission(char *out, size_t cap) {
+    HANDLE h = CreateFileW((g_dir + HK_LOG_FILE).c_str(), GENERIC_READ,
+                           FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, 0, nullptr);
+    if (h == INVALID_HANDLE_VALUE) return false;
+    bool ok = false;
+    LARGE_INTEGER size, from;
+    if (GetFileSizeEx(h, &size)) {
+        from.QuadPart = g_rpLogFrom <= size.QuadPart ? g_rpLogFrom : 0; // (shorter than it was: a new log)
+        if (size.QuadPart - from.QuadPart > HK_LOG_TAIL) from.QuadPart = size.QuadPart - HK_LOG_TAIL;
+        std::vector<char> text((size_t)(size.QuadPart - from.QuadPart));
+        DWORD got = 0;
+        if (!text.empty() && SetFilePointerEx(h, from, nullptr, FILE_BEGIN) &&
+            ReadFile(h, text.data(), (DWORD)text.size(), &got, nullptr))
+            ok = mcMissionOf(text.data(), got, HK_LOG_MISSION, out, cap);
+    }
+    CloseHandle(h);
+    return ok;
+}
+// the way the battle begins with (replay_right=2), by the mission known
+static void rpAutoBegin() {
+    bool game = mcGameDraws(g_rpMissionName);
+    g_rpAuto = mcAutoStart(!game);
+    logf("replay: frame %u: the mission is %s%s%s - the battle begins with %s", g_frame,
+         g_rpMissionName[0] ? "'" : "not told by mw4hook's log (yet)", g_rpMissionName, g_rpMissionName[0] ? "'" : "",
+         game ? "the game drawing both eyes" : "the left eye's draws repeated");
+}
+// a frame of a battle: its first begins the watching; in the frames after it the log is asked for the mission
+static void rpAutoMission() {
+    if (g_rpAutoNew) {
+        g_rpAutoNew = false, g_rpAsk = RP_ASK_FRAMES;
+        rpAutoBegin();
+    }
+    if (!g_rpAsk) return;
+    --g_rpAsk;
+    if (g_rpAsk % RP_ASK_EVERY) return;
+    char mission[sizeof g_rpMissionName];
+    if (!rpMission(mission, sizeof mission)) return;
+    g_rpAsk = 0;
+    if (strcmp(mission, g_rpMissionName) == 0) return;
+    strcpy_s(g_rpMissionName, mission);
+    rpAutoBegin();
+}
 // main.cpp, after every Present. A battle's frames (both eyes drawn) are what is watched.
 void rpFrameDone(double presentMs) {
     static LONGLONG last;
@@ -1154,6 +1215,7 @@ void rpFrameDone(double presentMs) {
     last = now;
     g_rpOwn = 0;
     if (g_rpMode != RP_AUTO || g_rpBroken || g_camBothFrame + 1 != g_frame || frame <= 0 || frame > 250) return;
+    rpAutoMission();
     int r = mcAutoStep(g_rpAuto, frame, presentMs, g_rpPassMs);
     static unsigned told;
     if (r == MC_AUTO_NONE || told++ > 60) return;
@@ -1209,7 +1271,8 @@ bool rpEnd() {
 }
 // a battle is over (a menu is up): the twins go, the next battle's targets and buffers are others
 void rpIdle() {
-    g_rpAuto = mcAutoStart(); // (the next battle is another place)
+    if (!g_rpAutoNew) g_rpLogFrom = rpLogSize();  // (what mw4hook's log tells from here on is the next battle's)
+    g_rpAuto = mcAutoStart(), g_rpAutoNew = true; // (the next battle is another place)
     if (g_rpTwin.empty() && g_rpCb.empty() && g_rpRing.empty() && g_rpView.empty()) return;
     if (!g_rpTwin.empty()) logf("replay: %u twins of textures released", (unsigned)g_rpTwin.size());
     rpPurge();
