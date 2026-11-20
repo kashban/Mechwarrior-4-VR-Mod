@@ -13,9 +13,9 @@ double_draw=1
 ; 0 = the game draws the world twice, once for each eye; 1 = it draws the world for the left eye only, and
 ; each of its draws is made a second time for the right eye by the mod: much faster where the processor is
 ; the limit, a little slower where the graphics card is (docs/PERFORMANCE.md); 2 = the mod takes whichever
-; of the two is faster where the battle is - it begins with the mod's way and takes the game's only where that
-; is clearly faster. Only with double_draw=1. (8, 9: diagnosis - a file mw4vr_replay.txt, see
-; mod/src/replay.cpp.) Read at the start
+; of the two is faster where the battle is - it begins with the mod's way (on missions measured to be faster
+; the game's way: with that) and changes when the other is clearly faster. Only with double_draw=1.
+; (8, 9: diagnosis - a file mw4vr_replay.txt, see mod/src/replay.cpp.) Read at the start
 replay_right=2
 ; 1 = nothing is drawn beyond the map's fog (what lies there has the fog's colour alone; mw4hook's far_scale
 ; draws four kilometres far, most of it unseen - up to twice the pictures a second); 0 = all of it

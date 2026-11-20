@@ -229,12 +229,46 @@ static const double MC_AUTO_CPU = 0.75;    // one under this: it is not
 static const double MC_AUTO_GAIN = 0.9375; // a trial is kept when its frames are this much of the ones before
 static const double MC_AUTO_SECOND = 0.75; // the game's pass for the second eye, against the first one's
 static const double MC_AUTO_CHANGE = 1.5;  // frames this much longer than at the last trial: another scene
-// a battle begins: with replay
-static inline McAuto mcAutoStart() {
+// a battle begins: with replay, or (a mission of MC_GAME_DRAWS) with the game drawing both eyes
+static inline McAuto mcAutoStart(bool replay = true) {
     McAuto a = {};
-    a.replay = true;
+    a.replay = replay;
     a.rest = MC_AUTO_START;
     return a;
+}
+// The missions a battle begins without replay on: measured on 2026-11-20 on all 54 instant-action missions
+// (docs/PERFORMANCE.md), these were faster by more than a thirtieth with the game drawing both eyes - the
+// graphics card is their limit, and replay costs it a change of the render targets for every draw. What a
+// battle begins with is not what it stays with: mcAutoStep goes on watching.
+static const char *const MC_GAME_DRAWS[] = {
+    "avalon01_spaceport",   "colsm02_medium",       "colsm04_assault",       "concourse pro",
+    "exford01_junglerecon", "exford02_stormpatrol", "exford03_beachfight",   "exford04_backstab",
+    "fact01_light",         "fact03_heavy",         "fact05_championship",   "hallor02_checkpoint",
+    "hesp03_assault",       "hesp04_stealth",       "jungle01_light",        "jungle02_medium",
+    "jungle03_heavy",       "jungle04_assault",     "jungle05_championship", "styk01_reinforce",
+    "styk02_peace_talks",   "styk04_assassination", "talon04_countrylife",
+};
+static inline bool mcGameDraws(const char *mission) {
+    for (const char *m : MC_GAME_DRAWS)
+        if (strcmp(m, mission) == 0) return true;
+    return false;
+}
+// The mission a text of n bytes names last, as "<mark><name>\\" (mw4hook's log: "...|missions\\<name>\\..."), in
+// small letters. The last mark in the text decides. false: there is none, or what follows it is no name - not
+// ended yet (the line is being written), not on one line, or too long for out (cap bytes); out is not to be used
+static inline bool mcMissionOf(const char *text, size_t n, const char *mark, char *out, size_t cap) {
+    size_t ml = strlen(mark);
+    bool found = false;
+    for (size_t at = 0; at + ml <= n; ++at) {
+        if (memcmp(text + at, mark, ml) != 0) continue;
+        const char *s = text + at + ml, *q = (const char *)memchr(s, '\\', n - at - ml);
+        size_t len = q ? (size_t)(q - s) : 0;
+        found = len > 0 && len < cap && !memchr(s, '\n', len);
+        if (!found) continue;
+        out[len] = 0;
+        for (size_t i = 0; i < len; ++i) out[i] = s[i] >= 'A' && s[i] <= 'Z' ? (char)(s[i] + 32) : s[i];
+    }
+    return found;
 }
 // one frame of a battle: its length, the time the system's Present waited in it and the time the main camera's
 // pass took (ms). What happened: nothing, a trial began (a.replay is the other way now), a trial was kept, or

@@ -83,6 +83,11 @@ static const uint64_t HK_PS_BACKDROP = 0x3c49bfee1754587bull; // a small camera'
 // tiles, bare - "terrain: N tiles drawn by our pass")
 #define HK_LABEL_WORLD L"terrain: one RTIN draw"
 #define HK_RP_ONCE_LABELS L"RTIN tree of sun shadow", L"sun shadows:", L"terrain VT:"
+// --- mw4hook.dll: its log (in the game's folder) ---
+// When a mission loads, a line names its files: "...: resource\missions\<archive>.mw4|missions\<name>\<name>.lights"
+#define HK_LOG_FILE L"mw4hook.log"
+#define HK_LOG_MISSION "|missions\\"
+#define HK_LOG_TAIL (256 * 1024) // so much of its end is read for the mission that was loaded last
 // --- MW4Mercs.exe ---
 static const uintptr_t GM_CAMERA_DRAW = 0x4b6ec0; // CameraElement::Draw (mw4hook puts a jmp there)
 static const uintptr_t GM_HWND = 0x1241050;       // HWND of the game's window

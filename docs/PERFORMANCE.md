@@ -119,7 +119,22 @@ and their constants are the mod's work now, about 1.5 ms.
 left, right, each pair with a change of all render targets between them, instead of one eye after the other. On
 a map that already filled the card's time (Jungle - Heavy: dense plants, drawn over each other many times) that
 order costs it about 2.5 ms a frame. Changing the targets alone, with nothing drawn for the right eye, costs
-nothing; what exactly the card loses was not found.
+nothing.
+
+What the card loses is the change of targets itself, once something is drawn between two of them (found on
+2026-11-20 with mw4hook's graphics-card clock, `[d3d11] gpu_profile=1`, on Jungle - Championship):
+
+| | The graphics card's time for a frame | Pictures a second |
+|---|---|---|
+| the game draws both eyes | 11.9 ms | 82 |
+| `replay_right=1` | 17.1 ms | 57 |
+| `replay_right=1`, the right eye's draws made into the left eye's targets (a wrong picture, to measure) | 9.4 ms | 89.5 |
+
+The 144 draws of the opaque models take the card 0.05 ms for an eye when the game draws the eyes one after the
+other, and 1.5 ms for both with replay: about 5 microseconds for each change of the targets. The water's
+mirrored view goes from 0.7 to 2.8 ms. To be rid of it, the right eye's draws would have to be collected and
+made in one go for each set of targets (a deferred context), with a copy of every buffer the game writes anew
+between two draws. That is not done: `replay_right=2` and the list below choose the way instead.
 
 **Nothing is drawn beyond the fog** (v11.84; `[vr] fog_cull=1`, `mcFogCut` in `mod/src/core.h`). mw4hook draws
 four kilometres far (`far_scale=4.0`); a map's fog is whole at about one. What lies beyond has the fog's colour
@@ -146,7 +161,24 @@ texture that Direct3D had unbound by itself, the mod went on with the dead point
 crash); the plants were drawn for the right eye where the left eye sees them (their matrix lies in a buffer of
 its own); and a draw of the mod's own cockpit could set off a second "right eye's draw" inside the first.
 
-The switch is off by default until it has been seen in a headset.
+`replay_right=2` is the default since v11.85.
+
+**The way a battle begins with, by its mission** (v11.86; `MC_GAME_DRAWS` in `mod/src/core.h`). All 54
+instant-action missions were measured both ways on 2026-11-20 (v11.85 with the fog cull, a Mad Cat walking
+16 seconds from the start, 2600 x 2600 an eye, one run each): on 28 both ways reach the headset's 90 pictures
+a second, on 3 replay is faster by far (Eaton - Bandit Hideaway 66 against 49, Halloran V - Escort 87 against
+66, Tharkad - Overlord 60 against 44), on 23 the game drawing both eyes is faster by more than a thirtieth -
+the jungle arenas, the factory and coliseum fights, New Exford, most of Styk (Jungle - Championship 83 against
+57, Factory - Championship 89 against 61). On every one of them replay needs less of the processor (a quarter
+to a third); where it loses, the graphics card is the limit.
+
+A battle on one of those 23 missions begins with the game drawing both eyes, every other one with replay as
+before; from there on the mod watches the frames and changes the way as described above. The mission's name
+is read from mw4hook's log (`mw4hook.log` in the game's folder: the line that names the mission's files,
+`...|missions\<name>\...`). That line is written about a second into the battle's first frames - while the
+picture is still dark (`load_hold`) -, so the log is asked every 45 frames until it is there; when it does not
+come, the battle stays with replay. `mw4vr.log` tells which mission was found and how the battle began. The numbers hold for the machine they were measured
+on; another graphics card or picture size moves the line, and the watching evens that out.
 
 What was checked: the right eye's constants against what mw4hook itself writes for that eye (`replay_right=2`
 writes the comparison - the matrices agree to 2e-4, the camera's place exactly); pictures of both ways on a
