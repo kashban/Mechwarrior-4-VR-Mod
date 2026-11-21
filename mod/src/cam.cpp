@@ -18,7 +18,8 @@ static float g_camLast[12];                       // the main camera's matrix as
 static unsigned g_camLastFrame = ~0u;
 static void *g_camMain;                       // the main camera's object
 static float g_camWritten[12], g_camBase[12]; // what we wrote last time, and the game's matrix under it
-volatile int g_camEye = -1;                   // the eye the main camera was moved for, this frame
+static float g_camSeat[12]; // the game's matrix as the eyes are moved from: its own, a glance's turn taken out
+volatile int g_camEye = -1; // the eye the main camera was moved for, this frame
 unsigned g_camEyeFrame = ~0u;
 static volatile LONG g_statCamMoves, g_statCamCalls;
 float g_camEyeBase[2][12]; // the game's matrix under each eye's latest image
@@ -420,8 +421,13 @@ static void camPreEye(uint8_t *cam, int eyeOv) {
         camLocalBase(cam, base);
     } __except (EXCEPTION_EXECUTE_HANDLER) {}
     g_camMain = cam;
-    camGlance(base);
-    memcpy(g_camLast, base, sizeof base);
+    // (base stays the game's own matrix - it is what is put back after the Draw, and what the game's frustum
+    // planes were made from; seat is what the eyes see from)
+    float seat[12];
+    memcpy(seat, base, sizeof seat);
+    camGlance(seat);
+    memcpy(g_camSeat, seat, sizeof seat);
+    memcpy(g_camLast, seat, sizeof seat);
     g_camLastFrame = g_frame;
     __try { // the scene graph above the camera: parent at +0x10, matrix at +0x80
         int n = 0;
@@ -445,7 +451,7 @@ static void camPreEye(uint8_t *cam, int eyeOv) {
     }
     const float *A = g_camA, *t = g_vrT[eye];
     float out[12], Rc[9], tc[3];
-    camEyeMatrix(base, eye, out, Rc, tc);
+    camEyeMatrix(seat, eye, out, Rc, tc);
     if (g_camLocal > 0 && eyeOv <= 0) { // once per frame: the middle between the eyes, for the game's next update
         float tm[3], tcm[3];
         bool two = g_vrPoseOk[0] && g_vrPoseOk[1];
@@ -461,7 +467,7 @@ static void camPreEye(uint8_t *cam, int eyeOv) {
     memcpy(g_camBase, base, sizeof base);
     g_camEye = eye;
     g_camEyeFrame = g_frame;
-    memcpy(g_camEyeBase[eye], base, sizeof base);
+    memcpy(g_camEyeBase[eye], seat, sizeof seat);
     g_camEyeBaseOk[eye] = true;
     InterlockedIncrement(&g_statCamMoves);
 }
@@ -550,7 +556,7 @@ static int __cdecl camDraw(uint8_t *cam, void *edxv, void *arg) {
         LONG before = g_tonemapCount;
         if (e == 1 && replay) {
             // not drawn by the game: its picture is in the twin of the frame's texture
-            memcpy(g_camEyeBase[1], g_camBase, sizeof g_camBase);
+            memcpy(g_camEyeBase[1], g_camSeat, sizeof g_camSeat);
             g_camEyeBaseOk[1] = true;
             g_camEye = 1;
             PerfScope perf(PF_GRAB);
@@ -566,7 +572,7 @@ static int __cdecl camDraw(uint8_t *cam, void *edxv, void *arg) {
             g_camPassEye = e;
             if (e == 0 && (rpWanted() || g_rpMode == RP_COMPARE)) {
                 float c1[12], Rc[9], tc[3], k1[16];
-                camEyeMatrix(g_camBase, 1, c1, Rc, tc);
+                camEyeMatrix(g_camSeat, 1, c1, Rc, tc);
                 g_kEyeOverride = 1;
                 buildK();
                 memcpy(k1, g_K, sizeof k1);
