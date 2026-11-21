@@ -30,15 +30,33 @@ float4 at(float2 uv) {
     t.GetDimensions(w, h);
     return t.Load(int3(uv * float2(w, h), 0));
 }
-// A target's mark is a red (or blue) box, half transparent, and may lie over the green cross-hair: such a pixel is
-// a mix. So a pixel is not given to one side: its green goes to the cross-hair, its red and blue stay, each as
-// bright as it was (a layer shows colour times alpha). Whole pixels go to the cross-hair where they are yellow
-// in the part's upper band (the range's text; a mix of red and green is yellow too, but lower down) or dark and
-// opaque (the digits in the green boxes).
+// A target's mark is a red (or blue) box, half transparent, and may lie over the green cross-hair. A pixel that is
+// clearly of one side goes there whole: a mark's edge has a little green in it, and that green, given to the
+// cross-hair, showed there as a pale green mark that wandered over it. Only a true mix (neither colour twice the
+// other) is split: its green to the cross-hair, its red and blue stay, each as bright as it was (a layer shows
+// colour times alpha). Whole pixels go to the cross-hair too where they are yellow in the part's upper band (the
+// range's text; a mix of red and green is yellow too, but lower down) or dark and opaque inside a green box (the
+// digits of the weapon groups).
+// a mark's pixel: red or blue, clearly; the cross-hair's: green, clearly
+bool ofMark(float4 c) { return max(c.r, c.b) > 0.03 && max(c.r, c.b) > 2 * c.g; }
+bool ofCross(float4 c) { return c.g > 0.03 && c.g > 2 * max(c.r, c.b); }
+// in a green box: green to the left and to the right, at most 48 pixels away. (The dark inside of a mark is dark
+// and opaque too: taken for a digit, it showed in the cross-hair's image as a dark ring that went with the mark.)
+bool inGreen(float2 uv) {
+    uint w, h;
+    t.GetDimensions(w, h);
+    int2 p = int2(uv * float2(w, h));
+    bool l = false, r = false;
+    for (int k = 2; k <= 48; k += 2) {
+        l = l || ofCross(t.Load(int3(p.x - k, p.y, 0)));
+        r = r || ofCross(t.Load(int3(p.x + k, p.y, 0)));
+    }
+    return l && r;
+}
 bool whole(float4 c, float2 uv) {
     bool yellow = uv.y < 0.28 && c.r > 0.35 && c.g > 0.35 && c.b < 0.5 * min(c.r, c.g);
     bool dark = max(c.r, max(c.g, c.b)) < 0.12 && c.a > 0.5;
-    return yellow || dark;
+    return yellow || (dark && inGreen(uv));
 }
 // white and grey (a menu of the game's over the middle, its texts): neither the cross-hair nor a mark - it stays
 // where it is, whole. Split, it fell apart into green and purple.
@@ -54,13 +72,34 @@ float4 ps_cross(V i) : SV_Target {
     float4 c = at(i.uv);
     if (grey(c)) return float4(0, 0, 0, 0);
     if (whole(c, i.uv)) return out4(c, i.lin);
+    if (ofMark(c)) return float4(0, 0, 0, 0);
     float m = max(c.r, max(c.g, c.b));
     return m > 0.001 ? out4(float4(0, m, 0, c.a * c.g / m), i.lin) : float4(0, 0, 0, 0);
+}
+// Where the cross-hair lies over a mark the picture has the cross-hair's green and nothing of the mark: taken
+// out, it left the mark with gaps of the cross-hair's shape. Such a pixel gets the mark's colour from both sides
+// of it - the nearest pair of mark pixels left and right, or above and below, at most 24 pixels away.
+float4 across(float2 uv) {
+    uint w, h;
+    t.GetDimensions(w, h);
+    int2 p = int2(uv * float2(w, h));
+    static const int2 dir[2] = {int2(1, 0), int2(0, 1)};
+    for (int k = 1; k <= 24; ++k) {
+        for (int d = 0; d < 2; ++d) {
+            float4 a = t.Load(int3(p + k * dir[d], 0)), b = t.Load(int3(p - k * dir[d], 0));
+            if (ofMark(a) && ofMark(b)) return 0.5 * (a + b);
+        }
+    }
+    return float4(0, 0, 0, 0);
 }
 float4 ps_rest(V i) : SV_Target {
     float4 c = at(i.uv);
     if (grey(c)) return out4(c, i.lin);
-    if (whole(c, i.uv)) return float4(0, 0, 0, 0);
+    if (ofMark(c)) return out4(c, i.lin);
+    if (whole(c, i.uv) || ofCross(c)) {
+        float4 f = across(i.uv);
+        return f.a > 0.001 ? out4(f, i.lin) : float4(0, 0, 0, 0);
+    }
     float m = max(c.r, max(c.g, c.b)), rb = max(c.r, c.b);
     return rb > 0.001 ? out4(float4(c.r * m / rb, 0, c.b * m / rb, c.a * rb / m), i.lin) : float4(0, 0, 0, 0);
 }
