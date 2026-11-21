@@ -340,6 +340,59 @@ static void camEyeMatrix(const float *base, int eye, float *out, float *Rc, floa
     }
 }
 
+// (A trial, [vr] arms_glance=1.) While the pilot glances to a side (the game's own look-left / look-right keys)
+// the game draws the player's mech - the arms too, moving as they do - and turns its camera, smoothly, up to a
+// quarter. That turn is taken out again here: the view stays the seat's, and the mech's parts stay in the picture.
+// The turn is the camera's against the game's own cockpit (sway.cpp has that shape's matrix): the cockpit's place
+// in the camera's space, against where it was when the pilot first sat. From the frame before - the cockpit's
+// matrix comes with the frame's draws, after the camera's.
+static void camGlance(float *base) {
+    static int want = -1;
+    if (want < 0) want = GetPrivateProfileIntW(L"vr", L"arms_glance", 0, (g_dir + L"mw4vr.ini").c_str());
+    if (!want) return;
+    if (want == 2) { // (diagnosis: the camera's and the cockpit's headings, nothing changed)
+        static unsigned at;
+        if (g_frame != at && g_frame % 6 == 0) {
+            at = g_frame;
+            const float *w = g_swayShapeW;
+            logf("cam: DIAG2 frame %u cam yaw %.1f pos %.2f %.2f %.2f | cockpit (frame %d) yaw %.1f pos %.2f %.2f %.2f",
+                 g_frame, atan2f(base[8], base[0]) * 57.2958f, base[3], base[7], base[11], (int)g_swayShapeWFrame,
+                 atan2f(w[8], w[0]) * 57.2958f, w[3], w[7], w[11]);
+        }
+        return;
+    }
+    static float real[12], ref[12], fix[12];
+    static unsigned realFrame = ~0u, refFrame = ~0u;
+    static bool haveRef, on;
+    if (realFrame != g_frame) {
+        const bool was = on;
+        on = false;
+        if (realFrame == g_frame - 1 && g_swayShapeWFrame == realFrame) {
+            float inv[12], rel[12], invRef[12], d[12];
+            mcInv34(real, inv);
+            mcMul34(inv, g_swayShapeW, rel);
+            if (haveRef && g_frame - refFrame > 90) haveRef = false; // (no cockpit for a while: another view between)
+            if (!haveRef) memcpy(ref, rel, sizeof ref), haveRef = true;
+            refFrame = g_frame;
+            mcInv34(ref, invRef);
+            mcMul34(rel, invRef, d);
+            on = d[0] + d[5] + d[10] < 2.997f; // more than 3 degrees
+            if (on) memcpy(fix, d, sizeof fix);
+        }
+        if (on != was)
+            logf("cam: frame %u - %s", g_frame,
+                 on ? "the pilot glances to a side: the turn is taken out, the mech's parts stay in the picture"
+                    : "the glance is over");
+        memcpy(real, base, sizeof real);
+        realFrame = g_frame;
+    }
+    if (on) {
+        float s[12];
+        mcMul34(base, fix, s);
+        memcpy(base, s, sizeof s);
+    }
+}
+
 static void camPreEye(uint8_t *cam, int eyeOv) {
     InterlockedIncrement(&g_statCamCalls);
     {
@@ -367,6 +420,7 @@ static void camPreEye(uint8_t *cam, int eyeOv) {
         camLocalBase(cam, base);
     } __except (EXCEPTION_EXECUTE_HANDLER) {}
     g_camMain = cam;
+    camGlance(base);
     memcpy(g_camLast, base, sizeof base);
     g_camLastFrame = g_frame;
     __try { // the scene graph above the camera: parent at +0x10, matrix at +0x80
