@@ -14,6 +14,8 @@ int g_armN;
 volatile bool g_armsOn, g_armsWant;
 static float g_armsSide = 1.2f;   // a part is drawn when its middle lies this far (m) to the side of the eye
 static float g_armsLow = -2.5f;   // and not lower than this (m): the legs move, and that is not known here
+static float g_armsAbove = 0.8f;  // or its middle lies this far (m) above the eye: a weapon on the mech's back
+static float g_armsNear = 1.3f;   // not a part nearer to the eye than this (m): it would stand inside the cockpit
 static bool g_armsAll;            // (diagnosis) every part that does not hold the eye
 static float g_armsSwing = 0.25f; // an arm's way forth and back with the steps (m, each way; 0: the arms stay)
 static float g_armsLong = 2.5f;   // a part this long (m) from back to front is an arm
@@ -441,14 +443,21 @@ void armsOnDraw(ID3D11DeviceContext *c, UINT count, UINT start, INT baseV) {
 // the sway is small and the arms come to rest.
 float armsSwing() {
     static unsigned at = ~0u;
-    static float peak, out;
+    static float mean, sq, out;
     if (at == g_frame) return out;
     at = g_frame;
     const float sx = g_swayValid && g_swayOn ? g_swayT[0] : 0;
-    peak = max(peak * 0.997f, fabsf(sx));
-    const float walk = min(1.0f, max(0.0f, (peak - 0.01f) / 0.02f)); // (1 cm: standing; 3 cm and more: walking)
-    const float want = peak > 1e-4f ? g_armsSwing * walk * max(-1.0f, min(1.0f, sx / peak)) : 0;
-    out += (want - out) * 0.35f; // (the measure has a little noise in it)
+    // the sway about its own middle (it leans to one side on some mechs), against its usual size: both taken over
+    // the last seconds
+    mean += (sx - mean) * 0.01f;
+    const float x = sx - mean;
+    sq += (x * x - sq) * 0.01f;
+    const float size = 1.5f * sqrtf(max(sq, 0.0f));                  // (a sine's peak is 1.41 of its root mean square)
+    const float walk = min(1.0f, max(0.0f, (size - 0.01f) / 0.02f)); // (1 cm: standing; 3 cm and more: walking)
+    // -1 .. 1, and eased at both ends: an arm slows down before it turns, it does not stop at a wall
+    const float u = size > 1e-4f ? max(-1.0f, min(1.0f, x / size)) : 0;
+    const float want = g_armsSwing * walk * sinf(1.5707963f * u);
+    out += (want - out) * 0.25f; // (the measure has a little noise in it)
     return out;
 }
 
@@ -561,8 +570,14 @@ static bool armsLoad() {
             const float m = 0.3f; // a part that holds the eye is the hull the pilot sits in
             const bool holds =
                 lo[0] - m < 0 && hi[0] + m > 0 && lo[1] - m < 0 && hi[1] + m > 0 && lo[2] - m < 0 && hi[2] + m > 0;
-            const bool take =
-                !holds && g_armN < ARMS_MAX && (g_armsAll || (fabsf(cx) >= g_armsSide && cy >= g_armsLow));
+            float near2 = 0; // the part's nearest place to the eye
+            for (int k = 0; k < 3; ++k) {
+                const float dk = lo[k] > 0 ? lo[k] : hi[k] < 0 ? -hi[k] : 0;
+                near2 += dk * dk;
+            }
+            const bool beside = fabsf(cx) >= g_armsSide && cy >= g_armsLow, above = cy >= g_armsAbove;
+            const bool take = !holds && g_armN < ARMS_MAX && h[0] >= 8 &&
+                              (g_armsAll || ((beside || above) && near2 >= g_armsNear * g_armsNear));
             logf("arms:   part %2u - %6u vertices, %6u triangles, middle %6.2f right %6.2f up %6.2f ahead, %.1f x "
                  "%.1f x %.1f m%s%s",
                  i, h[0], h[1] / 3, cx, cy, cz, hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2],
@@ -576,7 +591,7 @@ static bool armsLoad() {
             const HRESULT h1 = ORIG(PFN_CreateBuffer, g_dev, VT_Dev_CreateBuffer)(g_dev, &vd, &vs, &a.vb);
             const HRESULT h2 = ORIG(PFN_CreateBuffer, g_dev, VT_Dev_CreateBuffer)(g_dev, &id, &is, &a.ib);
             a.nIdx = h[1];
-            a.swing = hi[2] - lo[2] >= g_armsLong ? (cx > 0 ? 1 : -1) : 0;
+            a.swing = beside && hi[2] - lo[2] >= g_armsLong ? (cx > 0 ? 1 : -1) : 0;
             a.clr = h[2] < tex.size() && tex[h[2]] ? tex[h[2]] : plain;
             if (a.clr) a.clr->AddRef();
             plainUsed = plainUsed || a.clr == plain;
@@ -629,6 +644,8 @@ void armsOnPresent() {
         if (GetPrivateProfileStringW(L"vr", L"arms_side", L"", b, 32, ini.c_str())) g_armsSide = (float)_wtof(b);
         if (GetPrivateProfileStringW(L"vr", L"arms_low", L"", b, 32, ini.c_str())) g_armsLow = (float)_wtof(b);
         if (GetPrivateProfileStringW(L"vr", L"arms_swing", L"", b, 32, ini.c_str())) g_armsSwing = (float)_wtof(b);
+        if (GetPrivateProfileStringW(L"vr", L"arms_above", L"", b, 32, ini.c_str())) g_armsAbove = (float)_wtof(b);
+        if (GetPrivateProfileStringW(L"vr", L"arms_near", L"", b, 32, ini.c_str())) g_armsNear = (float)_wtof(b);
         if (g_armsOn)
             logf("arms: the mech's own parts beside the cockpit are on (a part's middle at least %.1f m to the side, "
                  "not lower than %.1f m%s)",
