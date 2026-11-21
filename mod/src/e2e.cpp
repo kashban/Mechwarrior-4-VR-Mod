@@ -10,8 +10,8 @@
 // The plan, an .ini:   [e2e]  yaw=2:0 6:45 10:45 14:0     seconds:degrees to the right, straight lines between
 //                             shots=5 12                  seconds
 //                             keys=13:LMB:0.3 18:W:5      seconds:key:seconds held - a letter or digit, ESC, SPACE,
-//                                                         ENTER, TAB, F1..F12, CTRL, ALT, SHIFT, LMB / RMB (the
-//                                                         mouse's buttons)
+//                                                         ENTER, TAB, F1..F12, LEFT, RIGHT, UP, DOWN, CTRL, ALT, SHIFT,
+//                                                         LMB / RMB (the mouse's buttons)
 //                                  43:MOVE:0.5,0.47       the mouse's pointer to this place of the picture (parts of
 //                                                         its width and height), for a click in a menu
 // Seconds count from the frame the camera first sits in the mech. Without MW4VR_E2E none of this does anything.
@@ -46,6 +46,10 @@ static int e2eVk(const wchar_t *s, size_t n) {
     if (n == 4 && !_wcsnicmp(s, L"CTRL", 4)) return VK_CONTROL; // (held over another key's time: Ctrl+F11)
     if (n == 3 && !_wcsnicmp(s, L"ALT", 3)) return VK_MENU;
     if (n == 5 && !_wcsnicmp(s, L"SHIFT", 5)) return VK_SHIFT;
+    if (n == 4 && !_wcsnicmp(s, L"LEFT", 4)) return VK_LEFT;
+    if (n == 5 && !_wcsnicmp(s, L"RIGHT", 5)) return VK_RIGHT;
+    if (n == 2 && !_wcsnicmp(s, L"UP", 2)) return VK_UP;
+    if (n == 4 && !_wcsnicmp(s, L"DOWN", 4)) return VK_DOWN;
     if (n == 3 && !_wcsnicmp(s, L"LMB", 3)) return -1;
     if (n == 3 && !_wcsnicmp(s, L"RMB", 3)) return -2;
     if (n == 4 && !_wcsnicmp(s, L"MOVE", 4)) return -3;
@@ -84,6 +88,8 @@ static void e2eSend(const E2eKey &k, bool down) {
         in.type = INPUT_KEYBOARD;
         in.ki.wScan = (WORD)MapVirtualKeyW((UINT)k.vk, MAPVK_VK_TO_VSC);
         in.ki.dwFlags = KEYEVENTF_SCANCODE | (down ? 0 : KEYEVENTF_KEYUP);
+        // (the arrow keys share their scan codes with the number pad's: the extended flag tells them apart)
+        if (k.vk >= VK_LEFT && k.vk <= VK_DOWN) in.ki.dwFlags |= KEYEVENTF_EXTENDEDKEY;
     }
     UINT sent = SendInput(1, &in, sizeof in);
     logf("e2e: %s %s at %.2f s%s", k.name, down ? "down" : "up",

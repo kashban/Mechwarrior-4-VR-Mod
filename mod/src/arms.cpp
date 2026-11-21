@@ -411,7 +411,11 @@ void armsOnDraw(ID3D11DeviceContext *c, UINT count, UINT start, INT baseV) {
     if (!g_armsWant || (void *)c != (void *)g_imm) return;
     if (!g_camInMain) return;
     if (g_camPassEye != 0 || !g_camCal) return;
-    if (g_armsOutFrames < 3 || g_armsBaseFrame == ~0u || !g_armsMech[0]) return;
+    // Reading costs: every draw's constants come back from the graphics card. So it is tried in single frames only -
+    // the 5th from outside, and twice more a second apart - not in every frame until parts are found (a camera far
+    // from the mech finds none: the game then ran at 2 pictures a second).
+    if (g_armsBaseFrame == ~0u || !g_armsMech[0]) return;
+    if (g_armsOutFrames != 5 && g_armsOutFrames != 95 && g_armsOutFrames != 185) return;
     if (g_capFrame != ~0u && g_capFrame != g_frame) return; // one frame's picture, no more
     ID3D11Buffer *cb = nullptr;
     c->VSGetConstantBuffers(4, 1, &cb);
