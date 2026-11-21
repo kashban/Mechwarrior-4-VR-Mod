@@ -310,6 +310,7 @@ int hookContext(ID3D11DeviceContext *ctx, bool deferred, bool repair) {
 static void hookDevice(ID3D11Device *dev) {
     patch(dev, VT_Dev_CreateBuffer, (void *)H_CreateBuffer);
     patch(dev, VT_Dev_CreateVertexShader, (void *)H_CreateVertexShader);
+    patch(dev, VT_Dev_CreateInputLayout, (void *)H_CreateInputLayout);
     patch(dev, VT_Dev_CreatePixelShader, (void *)H_CreatePixelShader);
     patch(dev, VT_Dev_CreateComputeShader, (void *)H_CreateComputeShader);
     patch(dev, VT_Dev_CreateGeometryShader, (void *)H_CreateGeometryShader);

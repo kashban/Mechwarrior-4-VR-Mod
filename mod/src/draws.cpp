@@ -369,6 +369,7 @@ template <int V> static void STDMETHODCALLTYPE HP_DrawIndexed(ID3D11DeviceContex
     if ((void *)c == (void *)g_imm) rpWork("DrawIndexed");
     rpRingFeed(c, 1);
     ++g_m5AllDraws;
+    if (g_armsWant) armsOnDraw(c, a, b, d);
     if (eyeHidden(c)) return;
     bool sw = eyeTlPre(c);
     int ck = sw && mechMeasuring() ? mechDraw(c, true, a, b, d, g_camPassEye == 0) : 0;
