@@ -1369,7 +1369,17 @@ void vrOnPresent(IDXGISwapChain *swap, int eye) {
             XrVector3f local = {0.5f * W * ((u0 + u1) - 1), 0.5f * H * (1 - (v0 + v1)), -D};
             XrQuaternionf qo = g_vr.ref.orientation;
             if (!isFar) local.x += g_vr.panelX, local.y += g_vr.panelY;
-            if (rc[i][4] == 4) local.y -= g_vr.twistDv * H;
+            // The torso mark belongs to the cross-hair. While that is shown smaller in a layer of its own, the mark
+            // is as much smaller and as much nearer to it - one sight, not a large mark under a small cross-hair.
+            // Otherwise it is shown higher, clear of the dashboard.
+            const bool twistSmall = rc[i][4] == 4 && crossNow && g_vr.crossScale < 0.995f && g_vr.w && g_vr.h;
+            if (twistSmall) {
+                const float cu = (g_crossX + 0.5f * g_crossW) / g_vr.w, cv = (g_crossY + 0.5f * g_crossH) / g_vr.h;
+                const float cx = 0.5f * W * (2 * cu - 1), cy = 0.5f * H * (1 - 2 * cv);
+                local.x = cx + (local.x - cx) * g_vr.crossScale, local.y = cy + (local.y - cy) * g_vr.crossScale;
+            } else if (rc[i][4] == 4) {
+                local.y -= g_vr.twistDv * H;
+            }
             if (!isFar && g_swayValid) { // the near frame moves with the cockpit
                 XrVector3f l2 = qrot(swq, local);
                 local = {l2.x + swt.x, l2.y + swt.y, l2.z + swt.z};
@@ -1380,7 +1390,7 @@ void vrOnPresent(IDXGISwapChain *swap, int eye) {
             q.pose.position = {g_vr.ref.position.x + wpos.x, g_vr.ref.position.y + wpos.y,
                                g_vr.ref.position.z + wpos.z};
             // the zoom window smaller, about its centre
-            float ws = rc[i][4] == 3 ? g_vr.zoomWinScale : 1.0f;
+            float ws = rc[i][4] == 3 ? g_vr.zoomWinScale : twistSmall ? g_vr.crossScale : 1.0f;
             q.size = {W * (u1 - u0) * ws, H * (v1 - v0) * ws};
             if (rc[i][4] ==
                 6) { // straight ahead of the mech, as far as the near panels: nothing of the cockpit before it
