@@ -342,14 +342,42 @@ static void camEyeMatrix(const float *base, int eye, float *out, float *Rc, floa
 }
 
 // (A trial, [vr] arms_glance=1.) While the pilot glances to a side (the game's own look-left / look-right keys)
-// the game draws the player's mech - the arms too, moving as they do - and turns its camera, smoothly, up to a
-// quarter. That turn is taken out again here: the view stays the seat's, and the mech's parts stay in the picture.
-// The turn is the camera's against the game's own cockpit (sway.cpp has that shape's matrix): the cockpit's place
-// in the camera's space, against where it was when the pilot first sat. From the frame before - the cockpit's
-// matrix comes with the frame's draws, after the camera's.
+// the game draws the player's mech - the arms too, moving as they do - and turns its camera about its upright
+// axis, smoothly, up to a quarter. That turn is taken out again here: the view stays the seat's, and the mech's
+// parts stay in the picture.
+// How far the camera is turned is read from the game's own cockpit (sway.cpp has that shape's matrix): its
+// heading in the camera's space against what it was when the pilot first sat - from the frame before, the
+// cockpit's matrix comes with the frame's draws, after the camera's. Only that one angle is taken, and it is the
+// full quarter exactly once it is near it: the cockpit also sways with the mech's steps, and a view tied to it
+// frame by frame trembled.
+// [vr] arms_glance_hold=1 (default): the mod holds the glance key itself while the pilot sits in the mech, so the
+// parts are always there; arms_glance_key=LEFT or RIGHT.
+static bool g_glanceKeyDown;
+static int g_glanceVk = VK_LEFT;
+static void camGlanceKey(bool want) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(GetForegroundWindow(), &pid);
+    const bool front = pid == GetCurrentProcessId();
+    if (want == g_glanceKeyDown || !front) {
+        if (!front) g_glanceKeyDown = false; // (with another window in front the game let the key go itself)
+        return;
+    }
+    INPUT in = {};
+    in.type = INPUT_KEYBOARD;
+    in.ki.wScan = (WORD)MapVirtualKeyW((UINT)g_glanceVk, MAPVK_VK_TO_VSC);
+    in.ki.dwFlags = KEYEVENTF_SCANCODE | KEYEVENTF_EXTENDEDKEY | (want ? 0 : KEYEVENTF_KEYUP);
+    if (SendInput(1, &in, sizeof in)) g_glanceKeyDown = want;
+}
 static void camGlance(float *base) {
-    static int want = -1;
-    if (want < 0) want = GetPrivateProfileIntW(L"vr", L"arms_glance", 0, (g_dir + L"mw4vr.ini").c_str());
+    static int want = -1, hold = 1;
+    if (want < 0) {
+        const std::wstring ini = g_dir + L"mw4vr.ini";
+        want = GetPrivateProfileIntW(L"vr", L"arms_glance", 0, ini.c_str());
+        hold = GetPrivateProfileIntW(L"vr", L"arms_glance_hold", 1, ini.c_str());
+        wchar_t k[16];
+        GetPrivateProfileStringW(L"vr", L"arms_glance_key", L"LEFT", k, 16, ini.c_str());
+        g_glanceVk = !_wcsicmp(k, L"RIGHT") ? VK_RIGHT : VK_LEFT;
+    }
     if (!want) return;
     if (want == 2) { // (diagnosis: the camera's and the cockpit's headings, nothing changed)
         static unsigned at;
@@ -362,35 +390,59 @@ static void camGlance(float *base) {
         }
         return;
     }
-    static float real[12], ref[12], fix[12];
-    static unsigned realFrame = ~0u, refFrame = ~0u;
-    static bool haveRef, on;
+    static float real[12], ref[12], angle; // angle: the glance's turn (radians) that is taken out now
+    static unsigned realFrame = ~0u, seenFrame = ~0u;
+    static bool haveRef;
+    static int seen; // frames in a row with the cockpit's matrix
+    const float *A = g_camA;
     if (realFrame != g_frame) {
-        const bool was = on;
-        on = false;
-        if (realFrame == g_frame - 1 && g_swayShapeWFrame == realFrame) {
+        const float was = angle;
+        if (realFrame == g_frame - 1 && g_swayShapeWFrame == realFrame && g_camCal) {
             float inv[12], rel[12], invRef[12], d[12];
             mcInv34(real, inv);
             mcMul34(inv, g_swayShapeW, rel);
-            if (haveRef && g_frame - refFrame > 90) haveRef = false; // (no cockpit for a while: another view between)
             if (!haveRef) memcpy(ref, rel, sizeof ref), haveRef = true;
-            refFrame = g_frame;
+            seenFrame = g_frame;
+            ++seen;
             mcInv34(ref, invRef);
             mcMul34(rel, invRef, d);
-            on = d[0] + d[5] + d[10] < 2.997f; // more than 3 degrees
-            if (on) memcpy(fix, d, sizeof fix);
+            // d turns the view's forward axis (the camera's own coordinates) towards its right axis by the angle
+            float fr = 0, ff = 0;
+            for (int i = 0; i < 3; ++i)
+                for (int j = 0; j < 3; ++j)
+                    fr += A[i * 3 + 0] * d[i * 4 + j] * A[j * 3 + 2], ff += A[i * 3 + 2] * d[i * 4 + j] * A[j * 3 + 2];
+            float a = atan2f(fr, ff);
+            const float q = 1.5707963f, snap = 0.05f; // (3 degrees)
+            if (fabsf(a) < snap) a = 0;
+            if (fabsf(fabsf(a) - q) < snap) a = a > 0 ? q : -q;
+            // (once at the quarter it stays there while the measure is within 20 degrees of it: the cockpit's
+            // sway is in the measure)
+            if (fabsf(was) == q && was * a > 0 && fabsf(fabsf(a) - q) < 0.35f) a = was;
+            angle = a;
+        } else if (seenFrame == ~0u || g_frame - seenFrame > 45) { // no cockpit for a while: another view
+            angle = 0, haveRef = false, seen = 0;
         }
-        if (on != was)
+        if ((angle != 0) != (was != 0))
             logf("cam: frame %u - %s", g_frame,
-                 on ? "the pilot glances to a side: the turn is taken out, the mech's parts stay in the picture"
-                    : "the glance is over");
+                 angle != 0 ? "a glance to a side: its turn is taken out, the mech's parts stay in the picture"
+                            : "the glance is over");
         memcpy(real, base, sizeof real);
         realFrame = g_frame;
+        if (hold)
+            camGlanceKey(haveRef && seen > 45 && g_frame - seenFrame < 10 && g_mechSeated && !g_mechSeat.outside &&
+                         !g_menuMode);
     }
-    if (on) {
-        float s[12];
-        mcMul34(base, fix, s);
-        memcpy(base, s, sizeof s);
+    if (angle != 0) { // base * Y: Y turns about the view's upright axis, in the camera's own coordinates
+        const float c = cosf(angle), s = sinf(angle);
+        float Y[12] = {}, o[12];
+        for (int i = 0; i < 3; ++i)
+            for (int j = 0; j < 3; ++j) {
+                const float r_i = A[i * 3 + 0], u_i = A[i * 3 + 1], f_i = A[i * 3 + 2];
+                const float r_j = A[j * 3 + 0], u_j = A[j * 3 + 1], f_j = A[j * 3 + 2];
+                Y[i * 4 + j] = c * (r_i * r_j + f_i * f_j) + u_i * u_j + s * (r_i * f_j - f_i * r_j);
+            }
+        mcMul34(base, Y, o);
+        memcpy(base, o, sizeof o);
     }
 }
 
