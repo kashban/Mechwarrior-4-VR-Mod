@@ -346,9 +346,8 @@ static void camEyeMatrix(const float *base, int eye, float *out, float *Rc, floa
 // axis, smoothly, up to a quarter. That turn is taken out again here: the view stays the seat's, and the mech's
 // parts stay in the picture.
 // How far the camera is turned is read from the game's own cockpit (sway.cpp has that shape's matrix): its
-// heading in the camera's space against what it was when the pilot first sat - from the frame before, the
-// cockpit's matrix comes with the frame's draws, after the camera's. Only that one angle is taken, and it is the
-// full quarter exactly once it is near it: the cockpit also sways with the mech's steps, and a view tied to it
+// heading in the camera's space against what it was when the pilot first sat. Only that one angle is taken, and it is
+// the full quarter exactly once it is near it: the cockpit also sways with the mech's steps, and a view tied to it
 // frame by frame trembled.
 // [vr] arms_glance_hold=1 (default): the mod holds the glance key itself while the pilot sits in the mech, so the
 // parts are always there; arms_glance_key=LEFT or RIGHT.
@@ -358,10 +357,13 @@ static void camGlanceKey(bool want) {
     DWORD pid = 0;
     GetWindowThreadProcessId(GetForegroundWindow(), &pid);
     const bool front = pid == GetCurrentProcessId();
-    if (want == g_glanceKeyDown || !front) {
-        if (!front) g_glanceKeyDown = false; // (with another window in front the game let the key go itself)
+    if (!front) {
+        g_glanceKeyDown = false; // (with another window in front the game let the key go itself)
         return;
     }
+    // Held, it is pressed again a few times a second: the pilot's own press and release of the same key ends the
+    // game's glance, and nothing tells the mod (a key held down repeats by itself anyway).
+    if (want == g_glanceKeyDown && !(want && g_frame % 8 == 0)) return;
     INPUT in = {};
     in.type = INPUT_KEYBOARD;
     in.ki.wScan = (WORD)MapVirtualKeyW((UINT)g_glanceVk, MAPVK_VK_TO_VSC);
@@ -390,16 +392,20 @@ static void camGlance(float *base) {
         }
         return;
     }
-    static float real[12], ref[12], angle; // angle: the glance's turn (radians) that is taken out now
+    static float ref[12], angle; // angle: the glance's turn (radians) that is taken out now
     static unsigned realFrame = ~0u, seenFrame = ~0u;
     static bool haveRef;
     static int seen; // frames in a row with the cockpit's matrix
     const float *A = g_camA;
     if (realFrame != g_frame) {
         const float was = angle;
-        if (realFrame == g_frame - 1 && g_swayShapeWFrame == realFrame && g_camCal) {
+        // This frame's camera against the cockpit's matrix of the frame before (this frame's comes later, with its
+        // draws): the mech turns little in a frame, the glance's camera much - and at times it jumps, when the key
+        // is pressed again while the camera swings back. With the camera of the frame before as well, the view
+        // was a frame behind the swing and shook with it.
+        if (g_swayShapeWFrame == g_frame - 1 && g_camCal) {
             float inv[12], rel[12], invRef[12], d[12];
-            mcInv34(real, inv);
+            mcInv34(base, inv);
             mcMul34(inv, g_swayShapeW, rel);
             if (!haveRef) memcpy(ref, rel, sizeof ref), haveRef = true;
             seenFrame = g_frame;
@@ -414,10 +420,7 @@ static void camGlance(float *base) {
             float a = atan2f(fr, ff);
             const float q = 1.5707963f, snap = 0.05f; // (3 degrees)
             if (fabsf(a) < snap) a = 0;
-            if (fabsf(fabsf(a) - q) < snap) a = a > 0 ? q : -q;
-            // (once at the quarter it stays there while the measure is within 20 degrees of it: the cockpit's
-            // sway is in the measure)
-            if (fabsf(was) == q && was * a > 0 && fabsf(fabsf(a) - q) < 0.35f) a = was;
+            if (fabsf(a) > q || fabsf(fabsf(a) - q) < snap) a = a > 0 ? q : -q;
             angle = a;
         } else if (seenFrame == ~0u || g_frame - seenFrame > 45) { // no cockpit for a while: another view
             angle = 0, haveRef = false, seen = 0;
@@ -426,7 +429,6 @@ static void camGlance(float *base) {
             logf("cam: frame %u - %s", g_frame,
                  angle != 0 ? "a glance to a side: its turn is taken out, the mech's parts stay in the picture"
                             : "the glance is over");
-        memcpy(real, base, sizeof real);
         realFrame = g_frame;
         if (hold)
             camGlanceKey(haveRef && seen > 45 && g_frame - seenFrame < 10 && g_mechSeated && !g_mechSeat.outside &&
