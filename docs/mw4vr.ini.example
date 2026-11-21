@@ -113,6 +113,15 @@ mw5_light=1
 mw5_light_floor=0.3
 ; how much of the world's light reaches faces that look into the cockpit - the panel's front, undersides (0..1)
 mw5_light_inside=0.55
+; shade in corners and gaps, reckoned when a cockpit is loaded (0: none .. 1)
+mw5_shade=1
+; the brightest place of the picture - the sun, a fire, a shot - lights the faces turned to it (0: not .. 1)
+mw5_sun=1
+; the monitors' and lamps' light on what is about them, at night (0: none; 0.5)
+mw5_glow=0.5
+; gloss on every part (0..1); the sky mirrored on faces seen at a flat angle (0: not)
+mw5_gloss=0.1
+mw5_reflect=0.5
 ; painted metal of mod cockpits: the patches, worn paint and gloss (0: plain colours .. 1); how much paint is worn off (0..1)
 mw5_paint=1
 mw5_paint_wear=0.5

@@ -14,6 +14,8 @@
 // in (mw4vr_mechs.ini: mw5_cockpit in the mech's section), or as [vr] mw5_cockpit while no mech is known.
 
 #include "mod.h"
+#include <system_error>
+#include <thread>
 
 struct Mw5Group {
     ID3D11Buffer *vb, *ib;
@@ -61,7 +63,11 @@ static bool g_mw5IniRead;
 wchar_t g_mw5Name[64];
 static float g_mw5Scale = 1, g_mw5Eye[3], g_mw5Ems = 1.5f, g_mw5Amb = 0.45f;
 static int g_mw5LinearOut, g_mw5Reversed = 1;
-#define M5_CB_FLOATS 84 // the shader's constants (C), in floats
+#define M5_CB_FLOATS 128 // the shader's constants (C), in floats
+// [vr] mw5_shade: the shade in corners and gaps (0: none .. 1); mw5_sun: light of the brightest place in the picture
+// from its side (0: none .. 1); mw5_glow: the monitors' and lamps' light on what is about them; mw5_gloss: gloss on
+// every part; mw5_reflect: the sky on faces seen at a flat angle
+static float g_m5Shade = 1, g_m5Sun = 1, g_m5Glow = 0.5f, g_m5Gloss = 0.1f, g_m5Reflect = 0.5f;
 // the world's light on the cockpit: [vr] mw5_light (0: the fixed lamp alone .. 1), mw5_light_floor (the least light)
 static float g_m5LightOn = 1, g_m5LightFloor = 0.3f, g_m5LightIn = 0.55f;
 // painted metal (the parts the converter marks; mw4vr_cockpits\mw4vr_paint.mwd, made by it, holds the picture for it)
@@ -114,6 +120,10 @@ cbuffer C : register(b13) {
     float4 pnt;           // x: how much of the paint is worn off
     float4 env[6];        // the world's light from the mesh's right, left, above, below, ahead, behind (rgb, as the
                           // picture has it); [0].w: how much of it is used (0: none), [1].w: the least light
+    float4 key;           // xyz: towards the brightest place of the picture (mesh space); w: how much it stands out
+    float4 keyc;          // rgb: its colour (1: a day's picture); w: how much of the corners' shade is used
+    float4 glow[8];       // the monitors: xyz the middle, w how brightly it lights what is about it (0: not)
+    float4 misc;          // x: gloss on every part; y: the sky on faces seen flat; z: the lamps' halo
 };
 struct VSIn { float3 pos : POSITION; float3 nrm : NORMAL; float2 uv : TEXCOORD0; };
 struct VSOut { float4 pos : SV_Position; float3 nrm : NORMAL; float2 uv : TEXCOORD0; float3 mp : TEXCOORD1; };
@@ -139,6 +149,12 @@ SamplerState sm : register(s0);
 float4 flatOn(float3 p, float3 w, float s) {
     return td.Sample(sm, p.zy * s) * w.x + td.Sample(sm, p.xz * s) * w.y + td.Sample(sm, p.xy * s) * w.z;
 }
+// the world's light from the side d looks to
+float3 envOf(float3 d) {
+    float3 w = d * d;
+    return (w.x * (d.x > 0 ? env[0].rgb : env[1].rgb) + w.y * (d.y > 0 ? env[2].rgb : env[3].rgb) +
+            w.z * (d.z > 0 ? env[4].rgb : env[5].rgb)) / 0.55;
+}
 float4 ps(VSOut i) : SV_Target {
     if (par.w > 0) { // a monitor: its part of the HUD image, whole, on black
         float4 r = scr;
@@ -163,8 +179,14 @@ float4 ps(VSOut i) : SV_Target {
         if (par.z > 0) h = pow(saturate(h), 2.2);
         return float4(h, 1);
     }
-    float3 n = normalize(i.nrm);
+    // (the normal's length is the corner's shade, written at loading: 1 open, less in corners and gaps)
+    float nl = length(i.nrm);
+    float3 n = nl > 0.001 ? i.nrm / nl : float3(0, 1, 0);
+    float ao = lerp(1, pow(saturate(nl > 0.001 ? nl : 1), 0.75), keyc.w);
     float3 a = tc.Sample(sm, i.uv).rgb;
+    float3 v = normalize(eye.xyz - i.mp);
+    // the lamp: the cockpit's own, or the brightest place of the picture where one stands out
+    float3 ld = normalize(lerp(lamp.xyz, key.xyz, key.w));
     float gloss = 0;
     if (eye.w > 0) {
         // MW5's painted metal has no picture: a colour, large patches of lighter and darker over it, the paint worn
@@ -177,23 +199,43 @@ float4 ps(VSOut i) : SV_Target {
         a *= lerp(1, saturate(0.55 + 0.6 * patch), eye.w);
         a = lerp(a, float3(0.42, 0.42, 0.44), worn * eye.w);
         n = normalize(n + float3(0, g.y, g.x) * w.x + float3(g.x, 0, g.y) * w.y + float3(g.x, g.y, 0) * w.z);
-        float3 h = normalize(normalize(eye.xyz - i.mp) + lamp.xyz);
+        float3 h = normalize(v + ld);
         gloss = pow(saturate(dot(n, h)), 28) * lerp(0.18, 0.50, worn) * eye.w;
+    } else {
+        gloss = pow(saturate(dot(n, normalize(v + ld))), 40) * misc.x; // (every part: a little)
     }
-    float lam = saturate(dot(n, lamp.xyz) * 0.5 + 0.5);
+    float lam = saturate(dot(n, ld) * 0.5 + 0.5);
     float3 l = par.y + (1 - par.y) * lam;
+    float3 sky = 0;
     if (env[0].w > 0) {
         // What the world sends from the side a face looks to (0.55: a day's picture - there the cockpit is as bright
         // as under the lamp alone). Its colour only in part: a cockpit all green over grass is no cockpit.
-        float3 w = n * n;
-        float3 k = (w.x * (n.x > 0 ? env[0].rgb : env[1].rgb) + w.y * (n.y > 0 ? env[2].rgb : env[3].rgb) +
-                    w.z * (n.z > 0 ? env[4].rgb : env[5].rgb)) / 0.55;
+        float3 k = envOf(n);
         k = lerp(dot(k, 0.3333), k, 0.5);
         k = clamp(k, env[1].w, 1.7) * (0.72 + 0.28 * lam);
+        // the brightest place - the sun, a fire, a shot: its light falls straight on the faces turned to it
+        k += keyc.rgb * (key.w * 0.6 * saturate(dot(n, key.xyz)));
         l = lerp(l, k, env[0].w);
         gloss *= lerp(1, saturate(dot(k, 0.3333)), env[0].w);
+        // seen at a flat angle a face mirrors what lies beyond it
+        float f = 1 - saturate(dot(n, v));
+        f *= f;
+        sky = envOf(reflect(-v, n)) * (0.03 + 0.5 * f * f) * misc.y * env[0].w;
     }
-    float3 c = a * l + gloss + te.Sample(sm, i.uv).rgb * par.x;
+    // the monitors light what lies before them (they look at the pilot)
+    float3 gl = 0;
+    for (int j = 0; j < 8; ++j) {
+        if (glow[j].w <= 0) continue;
+        float3 d = glow[j].xyz - i.mp;
+        float dd = dot(d, d);
+        float3 dn = d * rsqrt(dd + 1e-6);
+        float before = saturate(dot(-dn, normalize(eye.xyz - glow[j].xyz)) + 0.2);
+        gl += glow[j].w * saturate(dot(n, dn)) * before / (1 + dd * 60); // (half at 13 cm)
+    }
+    float3 em = te.Sample(sm, i.uv).rgb * par.x;
+    // (a lamp's light on the picture about it: the lit picture's small copy, where the texture has one)
+    em += te.SampleLevel(sm, i.uv, 5).rgb * (par.x * misc.z);
+    float3 c = (a * (l + gl * float3(0.45, 1.0, 0.6)) + gloss + sky) * ao + em;
     if (par.z > 0) c = pow(saturate(c), 2.2);
     return float4(c, 1);
 }
@@ -282,6 +324,18 @@ static void mw5ReadIni() {
     if (!(g_m5LightOn >= 0 && g_m5LightOn <= 1)) g_m5LightOn = 1;
     g_m5LightFloor = mw5GetF(L"mw5_light_floor", 0.3f);
     if (!(g_m5LightFloor >= 0 && g_m5LightFloor <= 1)) g_m5LightFloor = 0.3f;
+    struct {
+        const wchar_t *key;
+        float *v, def, most;
+    } more[] = {{L"mw5_shade", &g_m5Shade, 1, 1},
+                {L"mw5_sun", &g_m5Sun, 1, 1},
+                {L"mw5_glow", &g_m5Glow, 0.5f, 4},
+                {L"mw5_gloss", &g_m5Gloss, 0.1f, 1},
+                {L"mw5_reflect", &g_m5Reflect, 0.5f, 2}};
+    for (auto &m : more) {
+        *m.v = mw5GetF(m.key, m.def);
+        if (!(*m.v >= 0 && *m.v <= m.most)) *m.v = m.def;
+    }
     g_m5LightIn = mw5GetF(L"mw5_light_inside", 0.55f);
     if (!(g_m5LightIn >= 0 && g_m5LightIn <= 1)) g_m5LightIn = 0.55f;
     g_m5Paint = mw5GetF(L"mw5_paint", 1);
@@ -427,6 +481,193 @@ static void mw5Free() {
     g_m5Pos.clear(), g_m5Tri.clear();
 }
 
+// The shade in corners and gaps. A face deep in a corner - the foot well, the gap between two consoles, the
+// underside of a ledge - gets less light than one that lies open, whatever the light: without that the cockpit is a
+// drawing. For every vertex some rays go out into the half of space before it; each that meets the mesh within reach
+// shades it, the nearer the more. Reckoned once at loading (on several threads), written into the normal's length -
+// the shader takes it from there, and a file without it (length 1) is lit as before.
+#define M5S_RAYS 16
+static const float M5S_REACH = 0.35f; // metres of the mesh
+struct M5Grid {
+    float lo[3], cell;
+    int n[3];
+    std::vector<uint32_t> start, list; // a cell's triangles: list[start[c] .. start[c + 1])
+};
+static inline int m5Cell(const M5Grid &g, const float *p, int *c) {
+    for (int a = 0; a < 3; ++a) {
+        const float f = (p[a] - g.lo[a]) / g.cell;
+        if (!(f >= 0) || f >= (float)g.n[a]) return -1;
+        c[a] = (int)f;
+    }
+    return (c[2] * g.n[1] + c[1]) * g.n[0] + c[0];
+}
+static bool m5GridBuild(M5Grid &g) {
+    const size_t nv = g_m5Pos.size() / 3, nt = g_m5Tri.size() / 3;
+    if (!nv || !nt) return false;
+    float hi[3];
+    for (int a = 0; a < 3; ++a) g.lo[a] = hi[a] = g_m5Pos[a];
+    for (size_t i = 0; i < nv; ++i)
+        for (int a = 0; a < 3; ++a) {
+            const float v = g_m5Pos[i * 3 + a];
+            if (!(v > -1e4f && v < 1e4f)) return false; // (no number, or no cockpit's size)
+            if (v < g.lo[a]) g.lo[a] = v;
+            if (v > hi[a]) hi[a] = v;
+        }
+    g.cell = 0.06f;
+    for (int a = 0; a < 3; ++a) {
+        g.lo[a] -= 0.01f;
+        const float ext = hi[a] - g.lo[a] + 0.01f;
+        if (ext / 64 > g.cell) g.cell = ext / 64;
+    }
+    for (int a = 0; a < 3; ++a) g.n[a] = (int)((hi[a] - g.lo[a] + 0.01f) / g.cell) + 1;
+    const size_t cells = (size_t)g.n[0] * g.n[1] * g.n[2];
+    g.start.assign(cells + 1, 0);
+    // twice over the triangles: counted, then filed
+    for (int pass = 0; pass < 2; ++pass) {
+        size_t all = 0;
+        for (size_t t = 0; t < nt; ++t) {
+            int c0[3], c1[3];
+            float lo[3], up[3];
+            bool ok = true;
+            for (int k = 0; k < 3 && ok; ++k) {
+                const size_t i = g_m5Tri[t * 3 + k];
+                if (i >= nv) {
+                    ok = false;
+                    break;
+                }
+                for (int a = 0; a < 3; ++a) {
+                    const float v = g_m5Pos[i * 3 + a];
+                    if (!k || v < lo[a]) lo[a] = v;
+                    if (!k || v > up[a]) up[a] = v;
+                }
+            }
+            if (!ok || m5Cell(g, lo, c0) < 0 || m5Cell(g, up, c1) < 0) continue;
+            for (int z = c0[2]; z <= c1[2]; ++z)
+                for (int y = c0[1]; y <= c1[1]; ++y)
+                    for (int x = c0[0]; x <= c1[0]; ++x) {
+                        const size_t c = ((size_t)z * g.n[1] + y) * g.n[0] + x;
+                        if (pass == 0)
+                            ++g.start[c + 1];
+                        else
+                            g.list[g.start[c]++] = (uint32_t)t;
+                        ++all;
+                    }
+        }
+        if (pass == 0) {
+            if (all > 24u << 20) return false; // (96 MB of list: not in this process)
+            for (size_t c = 0; c < cells; ++c) g.start[c + 1] += g.start[c];
+            g.list.resize(all);
+        } else { // (filing moved every cell's start to its end: back)
+            for (size_t c = cells; c > 0; --c) g.start[c] = g.start[c - 1];
+            g.start[0] = 0;
+        }
+    }
+    return true;
+}
+// how far along the ray (o + t d, d of length 1) the mesh is met, at most reach; reach: not met
+static float m5Ray(const M5Grid &g, const float *o, const float *d, float reach) {
+    float best = reach;
+    int last = -1;
+    const float step = g.cell * 0.5f;
+    const int steps = (int)(reach / step) + 2;
+    for (int st = 0; st < steps; ++st) {
+        const float s = step * ((float)st + 0.5f);
+        if (best < s - step) break; // (met before this place)
+        const float p[3] = {o[0] + d[0] * s, o[1] + d[1] * s, o[2] + d[2] * s};
+        int ci[3];
+        const int c = m5Cell(g, p, ci);
+        if (c < 0 || c == last) continue;
+        last = c;
+        for (uint32_t k = g.start[c]; k < g.start[c + 1]; ++k) {
+            const uint32_t *tr = &g_m5Tri[(size_t)g.list[k] * 3];
+            const float *A = &g_m5Pos[(size_t)tr[0] * 3], *B = &g_m5Pos[(size_t)tr[1] * 3],
+                        *C = &g_m5Pos[(size_t)tr[2] * 3];
+            const float e1[3] = {B[0] - A[0], B[1] - A[1], B[2] - A[2]},
+                        e2[3] = {C[0] - A[0], C[1] - A[1], C[2] - A[2]};
+            const float h[3] = {d[1] * e2[2] - d[2] * e2[1], d[2] * e2[0] - d[0] * e2[2], d[0] * e2[1] - d[1] * e2[0]};
+            const float det = e1[0] * h[0] + e1[1] * h[1] + e1[2] * h[2];
+            if (det > -1e-12f && det < 1e-12f) continue;
+            const float inv = 1 / det, sv[3] = {o[0] - A[0], o[1] - A[1], o[2] - A[2]};
+            const float u = inv * (sv[0] * h[0] + sv[1] * h[1] + sv[2] * h[2]);
+            if (u < 0 || u > 1) continue;
+            const float q[3] = {sv[1] * e1[2] - sv[2] * e1[1], sv[2] * e1[0] - sv[0] * e1[2],
+                                sv[0] * e1[1] - sv[1] * e1[0]};
+            const float w = inv * (d[0] * q[0] + d[1] * q[1] + d[2] * q[2]);
+            if (w < 0 || u + w > 1) continue;
+            const float tt = inv * (e2[0] * q[0] + e2[1] * q[1] + e2[2] * q[2]);
+            if (tt > 1e-4f && tt < best) best = tt;
+        }
+    }
+    return best;
+}
+// verts: every part's vertices as read (32 bytes each: place, normal, uv), in g_m5Pos's order
+static void mw5Shade(std::vector<std::vector<uint8_t>> &verts) {
+    if (!(g_m5Shade > 0)) return;
+    const DWORD t0 = GetTickCount();
+    M5Grid g;
+    bool built = false;
+    try {
+        built = m5GridBuild(g);
+    } catch (const std::bad_alloc &) {
+        built = false; // (no memory for the grid: told below)
+    }
+    if (!built) {
+        logf("mw5: the corners' shade is not reckoned for this cockpit (its shape is too large for it)");
+        return;
+    }
+    std::vector<float *> at; // every vertex's place in its part
+    for (auto &v : verts)
+        for (size_t k = 0; k + 32 <= v.size(); k += 32) at.push_back((float *)(v.data() + k));
+    if (at.size() != g_m5Pos.size() / 3) return;
+    // the rays about the normal: more of them near it (as the light falls)
+    float ray[M5S_RAYS][3];
+    for (int i = 0; i < M5S_RAYS; ++i) {
+        unsigned b = (unsigned)i, r = 0;
+        for (int k = 0; k < 8; ++k) r = (r << 1) | (b & 1), b >>= 1;
+        const float u = (i + 0.5f) / M5S_RAYS, phi = 6.2831853f * (float)r / 256.0f, rad = sqrtf(u);
+        ray[i][0] = rad * cosf(phi), ray[i][1] = rad * sinf(phi), ray[i][2] = sqrtf(1 - u);
+    }
+    auto work = [&](size_t from, size_t to) {
+        for (size_t i = from; i < to; ++i) {
+            float *v = at[i], *n = v + 3;
+            const float nl = sqrtf(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+            if (!(nl > 0.5f && nl < 1.5f)) continue;
+            const float N[3] = {n[0] / nl, n[1] / nl, n[2] / nl};
+            // two directions across the normal
+            float T[3] = {0, 0, 0};
+            T[fabsf(N[0]) < 0.6f ? 0 : 1] = 1;
+            float B[3] = {N[1] * T[2] - N[2] * T[1], N[2] * T[0] - N[0] * T[2], N[0] * T[1] - N[1] * T[0]};
+            const float bl = sqrtf(B[0] * B[0] + B[1] * B[1] + B[2] * B[2]);
+            for (float &x : B) x /= bl;
+            T[0] = B[1] * N[2] - B[2] * N[1], T[1] = B[2] * N[0] - B[0] * N[2], T[2] = B[0] * N[1] - B[1] * N[0];
+            const float o[3] = {v[0] + N[0] * 0.004f, v[1] + N[1] * 0.004f, v[2] + N[2] * 0.004f};
+            float shade = 0;
+            for (const float *r : ray) {
+                const float d[3] = {T[0] * r[0] + B[0] * r[1] + N[0] * r[2], T[1] * r[0] + B[1] * r[1] + N[1] * r[2],
+                                    T[2] * r[0] + B[2] * r[1] + N[2] * r[2]};
+                shade += 1 - m5Ray(g, o, d, M5S_REACH) / M5S_REACH;
+            }
+            float open = 1 - shade / M5S_RAYS;
+            if (open < 0.2f) open = 0.2f;
+            for (int a = 0; a < 3; ++a) n[a] = N[a] * open;
+        }
+    };
+    unsigned nt = std::thread::hardware_concurrency();
+    nt = nt > 9 ? 8 : nt > 1 ? nt - 1 : 1;
+    const size_t all = at.size(), part = (all + nt - 1) / nt;
+    std::vector<std::thread> th;
+    size_t done = 0;
+    try {
+        for (unsigned k = 1; k < nt; ++k, done += part) th.emplace_back(work, done, min(done + part, all));
+    } catch (const std::system_error &) {
+        logf("mw5: no more threads than %u for the corners' shade - the rest is done here", (unsigned)th.size());
+    }
+    work(min(done, all), all);
+    for (auto &x : th) x.join();
+    logf("mw5: the corners' shade reckoned - %u vertices, %u triangles, %u threads, %lu ms", (unsigned)all,
+         (unsigned)(g_m5Tri.size() / 3), (unsigned)th.size() + 1, GetTickCount() - t0);
+}
+
 // The file is not trusted (core.h: mcGroupBytes, mcScreen): every part's sizes are checked, and all parts together
 // may take MW5_FILE_BYTES at most - a 32-bit process has little room, and a file asking for gigabytes left the
 // game short of memory long after the cockpit had failed to load.
@@ -436,6 +677,7 @@ static bool mw5ReadFile(FILE *f, const std::wstring &path) {
     char magic[4];
     uint32_t n = 0;
     unsigned total = 0;
+    std::vector<std::vector<uint8_t>> verts; // every part's vertices: their buffers are made when all are read
     if (fread(magic, 1, 4, f) == 4 && !memcmp(magic, "MWC1", 4) && fread(&n, 4, 1, f) == 1 && n >= 1 &&
         n <= MW5_GROUPS) {
         ok = true;
@@ -460,11 +702,8 @@ static bool mw5ReadFile(FILE *f, const std::wstring &path) {
             if (!ok) break;
             Mw5Group &g = g_m5[g_m5N];
             g = {};
-            D3D11_BUFFER_DESC bd = {(UINT)v.size(), D3D11_USAGE_IMMUTABLE, D3D11_BIND_VERTEX_BUFFER, 0, 0, 0};
-            D3D11_SUBRESOURCE_DATA sd = {v.data(), 0, 0};
-            HRESULT h1 = ORIG(PFN_CreateBuffer, g_dev, VT_Dev_CreateBuffer)(g_dev, &bd, &sd, &g.vb);
-            bd.ByteWidth = (UINT)ix.size(), bd.BindFlags = D3D11_BIND_INDEX_BUFFER;
-            sd.pSysMem = ix.data();
+            D3D11_BUFFER_DESC bd = {(UINT)ix.size(), D3D11_USAGE_IMMUTABLE, D3D11_BIND_INDEX_BUFFER, 0, 0, 0};
+            D3D11_SUBRESOURCE_DATA sd = {ix.data(), 0, 0};
             HRESULT h2 = ORIG(PFN_CreateBuffer, g_dev, VT_Dev_CreateBuffer)(g_dev, &bd, &sd, &g.ib);
             g.nIdx = h.ni;
             uint32_t base = (uint32_t)(g_m5Pos.size() / 3); // a copy of the shape for mw5GlassFit
@@ -488,11 +727,22 @@ static bool mw5ReadFile(FILE *f, const std::wstring &path) {
             }
             g.clr = mw5Texture(f, h.cs);
             if (h.es) g.ems = mw5Texture(f, h.es);
-            ok = SUCCEEDED(h1) && SUCCEEDED(h2) && g.vb && g.ib && g.clr && (!h.es || g.ems);
+            ok = SUCCEEDED(h2) && g.ib && g.clr && (!h.es || g.ems);
             h.name[47] = 0;
             logf("mw5:   %s - %u vertices, %u triangles, textures %u / %u%s", h.name, h.nv, h.ni / 3, h.cs, h.es,
                  ok ? "" : " - FAILED");
-            if (ok) ++g_m5N;
+            if (ok) ++g_m5N, verts.push_back(std::move(v));
+        }
+        if (ok) {
+            mw5Shade(verts);
+            for (int i = 0; i < g_m5N && ok; ++i) {
+                D3D11_BUFFER_DESC bd = {
+                    (UINT)verts[i].size(), D3D11_USAGE_IMMUTABLE, D3D11_BIND_VERTEX_BUFFER, 0, 0, 0};
+                D3D11_SUBRESOURCE_DATA sd = {verts[i].data(), 0, 0};
+                ok = SUCCEEDED(ORIG(PFN_CreateBuffer, g_dev, VT_Dev_CreateBuffer)(g_dev, &bd, &sd, &g_m5[i].vb)) &&
+                     g_m5[i].vb;
+            }
+            if (!ok) logf("mw5:   the parts' vertex buffers - FAILED");
         }
     } else {
         logf("mw5: %ls is not a cockpit file", path.c_str());
@@ -676,8 +926,8 @@ float mw5LeftAltBottom(float L) {
 // own space: turning the head moves the patches, not the light. A side no patch looks to (behind the pilot) drifts
 // to the mean of all. The six colours go to the shader (env); it lights each face with those of the sides it faces.
 // Light comes quickly (a flash) and goes slowly.
-#define M5L_COLS 8
-#define M5L_ROWS 6
+#define M5L_COLS 12
+#define M5L_ROWS 9
 #define M5L_PATCH 4
 struct M5LShot {
     bool used;
@@ -690,6 +940,12 @@ static M5LShot g_m5LShot[3];
 static unsigned g_m5LN, g_m5LFrame = ~0u;
 static float g_m5Cube[6][3];
 static bool g_m5CubeHave;
+// The brightest place of the picture, where one stands out from the rest (the sun, a fire, a shot's flash): the side
+// it lies on (mesh space, not of length 1), how much it stands out (0..1), its colour. It lights the faces turned to
+// it and moves the gloss - with a sun low on the left the left of every knob is lit. Under a grey sky nothing
+// stands out, and the cockpit's own lamp stays.
+static float g_m5Key[3] = {0.25f, 0.85f, 0.45f}, g_m5KeyOn, g_m5KeyRgb[3] = {1, 1, 1};
+static float g_m5Day = 1; // how bright the picture is as a whole (1: a day's)
 static DWORD g_m5LTick;
 
 static float m5Half(uint16_t h) {
@@ -728,6 +984,8 @@ static void mw5LightRead(ID3D11DeviceContext *c, int slot) {
         return; // (not ready: the next frame's are as good)
     const int px = g_m5LFmt == DXGI_FORMAT_R16G16B16A16_FLOAT ? 8 : 4;
     float sum[6][3] = {}, wsum[6] = {}, mean[3] = {};
+    static float pd[M5L_COLS * M5L_ROWS][3], pc[M5L_COLS * M5L_ROWS][3]; // each patch: where, its colour
+    int np = 0;
     bool ok = true;
     for (int row = 0; row < M5L_ROWS && ok; ++row)
         for (int col = 0; col < M5L_COLS && ok; ++col) {
@@ -763,7 +1021,11 @@ static void mw5LightRead(ID3D11DeviceContext *c, int slot) {
                 wsum[side] += w;
                 for (int k = 0; k < 3; ++k) sum[side][k] += w * a[k];
             }
-            for (int k = 0; k < 3; ++k) mean[k] += a[k] / (M5L_COLS * M5L_ROWS);
+            for (int k = 0; k < 3; ++k) {
+                mean[k] += a[k] / (M5L_COLS * M5L_ROWS);
+                pd[np][k] = d[k] / len, pc[np][k] = a[k];
+            }
+            ++np;
         }
     ORIG(PFN_Unmap, c, VT_Ctx_Unmap)(c, g_m5LTex[slot], 0);
     if (!ok) return;
@@ -785,16 +1047,45 @@ static void mw5LightRead(ID3D11DeviceContext *c, int slot) {
             if (seen && wsum[a] < 4) w *= wsum[a] / 4; // (a few patches at the picture's edge: less sure)
             g_m5Cube[a][k] += (to - g_m5Cube[a][k]) * w;
         }
+    { // the brightest place: the patches well above the mean, each by how far above
+        const float m = (mean[0] + mean[1] + mean[2]) / 3;
+        float dir[3] = {}, rgb[3] = {}, W = 0, top = 0;
+        for (int i = 0; i < np; ++i) {
+            const float lum = (pc[i][0] + pc[i][1] + pc[i][2]) / 3;
+            if (lum > top) top = lum;
+            float w = lum - 1.2f * m;
+            if (w <= 0) continue;
+            w *= w;
+            W += w;
+            for (int k = 0; k < 3; ++k) dir[k] += w * pd[i][k], rgb[k] += w * pc[i][k];
+        }
+        // (stands out: its brightest patch is more than 1.35 times the mean; fully at 2.2 times)
+        float on = m > 0.01f && W > 0 ? (top / m - 1.35f) / 0.85f : 0;
+        on = on < 0 ? 0 : on > 1 ? 1 : on;
+        const float len = sqrtf(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]);
+        const float up = 1 - expf(-dt / 0.08f), down = 1 - expf(-dt / 1.5f);
+        if (on > 0 && len > 0) {
+            for (int k = 0; k < 3; ++k) {
+                g_m5Key[k] += (dir[k] / len - g_m5Key[k]) * up;
+                float c = rgb[k] / W / 0.55f;
+                g_m5KeyRgb[k] += ((c < 2.5f ? c : 2.5f) - g_m5KeyRgb[k]) * up;
+            }
+        }
+        g_m5KeyOn += (on - g_m5KeyOn) * (on > g_m5KeyOn ? up : down);
+        const float day = m / 0.55f;
+        g_m5Day += ((day < 2 ? day : 2) - g_m5Day) * (g_m5CubeHave ? 1 - expf(-dt / 0.5f) : 1);
+    }
     g_m5CubeHave = true;
     static unsigned told;
     if (told < 6 ? g_frame % 240 == 0 : g_dbg && g_frame % 1200 == 0) {
         ++told;
         const float(*q)[3] = g_m5Cube;
         logf("mw5: the world's light (frame %u) - mean %.2f %.2f %.2f; right %.2f left %.2f above %.2f below %.2f "
-             "ahead %.2f behind %.2f (each rgb's mean; 0.55: a day's picture)",
+             "ahead %.2f behind %.2f (each rgb's mean; 0.55: a day's picture); the brightest place stands out %.2f, "
+             "lies %.2f right %.2f up %.2f ahead",
              g_frame, mean[0], mean[1], mean[2], (q[0][0] + q[0][1] + q[0][2]) / 3, (q[1][0] + q[1][1] + q[1][2]) / 3,
              (q[2][0] + q[2][1] + q[2][2]) / 3, (q[3][0] + q[3][1] + q[3][2]) / 3, (q[4][0] + q[4][1] + q[4][2]) / 3,
-             (q[5][0] + q[5][1] + q[5][2]) / 3);
+             (q[5][0] + q[5][1] + q[5][2]) / 3, g_m5KeyOn, g_m5Key[0], g_m5Key[1], g_m5Key[2]);
     }
 }
 
@@ -886,6 +1177,29 @@ static void mw5Light(ID3D11DeviceContext *c, int e, float *cb, float p00, float 
     for (int a = 0; a < 6; ++a)
         for (int k = 0; k < 3; ++k) cb[60 + a * 4 + k] = g_m5Cube[a][k] * open[a];
     cb[63] = g_m5LightOn, cb[67] = g_m5LightFloor;
+    const float kl = sqrtf(g_m5Key[0] * g_m5Key[0] + g_m5Key[1] * g_m5Key[1] + g_m5Key[2] * g_m5Key[2]);
+    if (kl > 0.05f && g_m5Sun > 0) {
+        for (int k = 0; k < 3; ++k) cb[84 + k] = g_m5Key[k] / kl, cb[88 + k] = g_m5KeyRgb[k];
+        cb[87] = g_m5KeyOn * g_m5Sun * (kl < 1 ? kl : 1);
+    }
+    cb[125] = g_m5Reflect;
+}
+
+// What does not hang on the picture: the corners' shade, the monitors' light, gloss. night: 1 in the dark .. a
+// little by day - a monitor lights its surroundings at night, by day one sees nothing of it.
+static void mw5LightOwn(float *cb) {
+    cb[91] = g_m5Shade;
+    const float night = g_m5LightOn > 0 && g_m5CubeHave ? (g_m5Day > 0.95f ? 0.15f : 1.1f - g_m5Day) : 0.4f;
+    int n = 0;
+    for (int i = 0; i < g_m5N && n < 8; ++i) {
+        if (!g_m5[i].screen || !g_mw5ScreensWanted) continue;
+        const float *r = g_m5Rect[g_m5[i].screen - 1];
+        if (!(r[2] > r[0])) continue; // (a dark monitor)
+        for (int k = 0; k < 3; ++k) cb[92 + n * 4 + k] = g_m5[i].centre[k];
+        cb[92 + n * 4 + 3] = g_m5Glow * night;
+        ++n;
+    }
+    cb[124] = g_m5Gloss, cb[126] = 0.35f * g_m5Glow * night;
 }
 
 void mw5HudCopy(ID3D11DeviceContext *c, ID3D11Texture2D *hud) {
@@ -1146,6 +1460,7 @@ void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw, int ckTris) {
     cb[23] = g_mw5DepthFront;
     cb[24] = g_mw5Ems, cb[25] = g_mw5Amb, cb[26] = (float)g_mw5LinearOut;
     mw5Light(c, e, cb, g_P00, g_P11, 0, 0);
+    mw5LightOwn(cb);
     auto put = [&]() {
         D3D11_MAPPED_SUBRESOURCE m;
         if (FAILED(ORIG(PFN_Map, c, VT_Ctx_Map)(c, g_m5CB, 0, D3D11_MAP_WRITE_DISCARD, 0, &m))) return false;
