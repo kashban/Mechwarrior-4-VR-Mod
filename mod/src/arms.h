@@ -8,6 +8,7 @@ struct ArmPart {
     ID3D11Buffer *vb, *ib;
     UINT nIdx;
     ID3D11ShaderResourceView *clr;
+    int swing; // an arm: it goes forth and back with the mech's steps (+1: the right arm, -1: the left; 0: not)
 };
 enum { ARMS_MAX = 48 };
 extern ArmPart g_arm[ARMS_MAX];
@@ -24,5 +25,8 @@ void armsSeatFrame();
 void armsOnDraw(ID3D11DeviceContext *c, UINT count, UINT start, INT baseV);
 // once a frame
 void armsOnPresent();
+// How far (m) the right arm is ahead of its place in this frame, with the mech's steps; the left arm is as far
+// behind. 0 while the mech stands.
+float armsSwing();
 
 #endif // MW4VR_ARMS_H

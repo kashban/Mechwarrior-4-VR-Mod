@@ -1534,9 +1534,18 @@ void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw, int ckTris) {
             mcEyeInMesh(cb, 1, cb + 52);
             cb[18] = g_near, cb[23] = 0, cb[27] = 0, cb[55] = 0;
             for (int i = 0; i < 8; ++i) cb[92 + i * 4 + 3] = 0;
+            const float m3[3] = {cb[3], cb[7], cb[11]};
+            const float sw = armsSwing();
             if (put()) {
+                int shifted = 0;
                 for (int i = 0; i < g_armN; ++i) {
                     const ArmPart &a = g_arm[i];
+                    if (a.swing != shifted) { // (an arm ahead of or behind its place: along the mesh's forward axis)
+                        shifted = a.swing;
+                        for (int r = 0; r < 3; ++r) cb[r * 4 + 3] = m3[r] + cb[r * 4 + 2] * sw * (float)shifted;
+                        mcEyeInMesh(cb, 1, cb + 52);
+                        if (!put()) continue;
+                    }
                     UINT stride = 32, off = 0;
                     c->IASetVertexBuffers(0, 1, &a.vb, &stride, &off);
                     c->IASetIndexBuffer(a.ib, DXGI_FORMAT_R32_UINT, 0);

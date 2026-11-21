@@ -12,10 +12,12 @@
 ArmPart g_arm[ARMS_MAX];
 int g_armN;
 volatile bool g_armsOn, g_armsWant;
-static float g_armsSide = 1.2f; // a part is drawn when its middle lies this far (m) to the side of the eye
-static float g_armsLow = -2.5f; // and not lower than this (m): the legs move, and that is not known here
-static bool g_armsAll;          // (diagnosis) every part that does not hold the eye
-static float g_armsBase[12];    // the game's camera -> world while the camera sat in the mech
+static float g_armsSide = 1.2f;   // a part is drawn when its middle lies this far (m) to the side of the eye
+static float g_armsLow = -2.5f;   // and not lower than this (m): the legs move, and that is not known here
+static bool g_armsAll;            // (diagnosis) every part that does not hold the eye
+static float g_armsSwing = 0.25f; // an arm's way forth and back with the steps (m, each way; 0: the arms stay)
+static float g_armsLong = 2.5f;   // a part this long (m) from back to front is an arm
+static float g_armsBase[12];      // the game's camera -> world while the camera sat in the mech
 static unsigned g_armsBaseFrame = ~0u;
 static wchar_t g_armsMech[32]; // the mech the parts are of
 static int g_armsOutFrames;    // frames in a row seen from outside
@@ -432,6 +434,24 @@ void armsOnDraw(ID3D11DeviceContext *c, UINT count, UINT start, INT baseV) {
     cb->Release();
 }
 
+// ---- the arms' way with the steps ----
+// From the seat the game tells nothing of its mech's limbs. What it does tell is the cockpit's sway (sway.cpp): to
+// the left and right once for every two steps - the weight on one leg, then on the other. The arms go with that:
+// one ahead while the other is behind, as far as the sway is of its own largest in the last seconds. Standing,
+// the sway is small and the arms come to rest.
+float armsSwing() {
+    static unsigned at = ~0u;
+    static float peak, out;
+    if (at == g_frame) return out;
+    at = g_frame;
+    const float sx = g_swayValid && g_swayOn ? g_swayT[0] : 0;
+    peak = max(peak * 0.997f, fabsf(sx));
+    const float walk = min(1.0f, max(0.0f, (peak - 0.01f) / 0.02f)); // (1 cm: standing; 3 cm and more: walking)
+    const float want = peak > 1e-4f ? g_armsSwing * walk * max(-1.0f, min(1.0f, sx / peak)) : 0;
+    out += (want - out) * 0.35f; // (the measure has a little noise in it)
+    return out;
+}
+
 // ---- the file ----
 static std::wstring armsFile() { return g_dir + L"mw4vr_arms\\" + g_armsMech + L".mwa"; }
 
@@ -556,6 +576,7 @@ static bool armsLoad() {
             const HRESULT h1 = ORIG(PFN_CreateBuffer, g_dev, VT_Dev_CreateBuffer)(g_dev, &vd, &vs, &a.vb);
             const HRESULT h2 = ORIG(PFN_CreateBuffer, g_dev, VT_Dev_CreateBuffer)(g_dev, &id, &is, &a.ib);
             a.nIdx = h[1];
+            a.swing = hi[2] - lo[2] >= g_armsLong ? (cx > 0 ? 1 : -1) : 0;
             a.clr = h[2] < tex.size() && tex[h[2]] ? tex[h[2]] : plain;
             if (a.clr) a.clr->AddRef();
             plainUsed = plainUsed || a.clr == plain;
@@ -607,6 +628,7 @@ void armsOnPresent() {
         g_armsAll = GetPrivateProfileIntW(L"vr", L"arms_all", 0, ini.c_str()) != 0;
         if (GetPrivateProfileStringW(L"vr", L"arms_side", L"", b, 32, ini.c_str())) g_armsSide = (float)_wtof(b);
         if (GetPrivateProfileStringW(L"vr", L"arms_low", L"", b, 32, ini.c_str())) g_armsLow = (float)_wtof(b);
+        if (GetPrivateProfileStringW(L"vr", L"arms_swing", L"", b, 32, ini.c_str())) g_armsSwing = (float)_wtof(b);
         if (g_armsOn)
             logf("arms: the mech's own parts beside the cockpit are on (a part's middle at least %.1f m to the side, "
                  "not lower than %.1f m%s)",
