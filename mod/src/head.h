@@ -2,7 +2,7 @@
 #ifndef MW4VR_HEAD_H
 #define MW4VR_HEAD_H
 
-extern float g_near;            // n of the projection, from g_vWorldToClip (row 2, column 3)
+extern float g_near;            // n of the projection, from g_vWorldToClip (view.cpp)
 extern float g_up[3], g_fwd[3]; // the game camera's up and forward axes (world)
 extern float g_K[16];           // this frame's clip-space transform for the CPU path (the cockpit)
 extern volatile bool g_kOn;     // this frame's transform is in use
