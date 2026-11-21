@@ -7,7 +7,7 @@
 
 #include "mod.h"
 
-float g_near;            // n of the projection, from g_vWorldToClip (row 2, column 3)
+float g_near;            // n of the projection, from g_vWorldToClip (view.cpp)
 float g_up[3], g_fwd[3]; // the game camera's up and forward axes (world)
 float g_K[16];           // this frame's clip-space transform for the CPU path (the cockpit)
 volatile bool g_kOn;     // this frame's transform is in use

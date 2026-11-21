@@ -27,7 +27,10 @@ static void eyeLearnLayout(const float *m) {
         }
         g_P11 = len3(m[4], m[5], m[6]);
         if (g_P11 > 0) {
-            g_near = m[11];
+            // n: a view-space point's clip z is a z + n, a = row 2 . forward. Row 2's last term alone is
+            // n + a (row 3's last term) - it changes with where the camera stands and looks, and falls below 0 in
+            // places: our own cockpit was not drawn there and the game's showed (looking right on Eaton).
+            g_near = (float)(m[11] - mcDot3d(m + 8, m + 12) * m[15]);
             for (int i = 0; i < 3; ++i) {
                 g_up[i] = m[4 + i] / g_P11;
                 g_fwd[i] = m[12 + i];
