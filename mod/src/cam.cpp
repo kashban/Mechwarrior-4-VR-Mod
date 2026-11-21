@@ -448,6 +448,193 @@ static void camGlance(float *base) {
     }
 }
 
+// (Diagnosis, [debug] level=1: a file mw4vr_memdump.txt in the game's folder has the player's vehicle, the camera
+// and what they point to - two steps deep - written to mw4vr_mem_<n>.bin: records of address, size, depth, bytes.
+// For finding, by comparing such pictures, what the game changes when it begins to draw the player's own mech.)
+static void camMemDump(uint8_t *cam) {
+    static unsigned at = ~0u;
+    static int n;
+    if (!g_dbg || g_frame == at || g_frame % 20) return;
+    at = g_frame;
+    const std::wstring trig = g_dir + L"mw4vr_memdump.txt";
+    if (GetFileAttributesW(trig.c_str()) == INVALID_FILE_ATTRIBUTES) return;
+    DeleteFileW(trig.c_str());
+    uintptr_t veh = 0;
+    {
+        uint32_t refp = 0, ref = 0, key = 0, hold = 0, v = 0;
+        if (camRead((const void *)GM_PLAYER_REF, &refp, 4) && refp && camRead((const void *)(uintptr_t)refp, &ref, 4) &&
+            camRead((const void *)GM_PLAYER_KEY, &key, 4) && (key ^ ref) &&
+            camRead((const void *)(uintptr_t)((key ^ ref) + PL_HOLDER), &hold, 4) &&
+            (hold ^ GM_PLAYER_XOR) >= 0x10000 &&
+            camRead((const void *)(uintptr_t)((hold ^ GM_PLAYER_XOR) + PL_VEHICLE), &v, 4))
+            veh = v;
+    }
+    wchar_t name[64];
+    swprintf(name, 64, L"mw4vr_mem_%03d.bin", n++);
+    FILE *f = fileOpen((g_dir + name).c_str(), L"wb");
+    if (!f) return;
+    struct Item {
+        uintptr_t p;
+        uint32_t size, depth;
+    };
+    std::vector<Item> q;
+    std::unordered_set<uintptr_t> seen;
+    if (veh >= 0x10000) q.push_back({veh, 0x4000, 0}), seen.insert(veh);
+    q.push_back({(uintptr_t)cam, 0x400, 0}), seen.insert((uintptr_t)cam);
+    std::vector<uint8_t> buf;
+    size_t written = 0;
+    const uintptr_t img = (uintptr_t)GetModuleHandleW(nullptr);
+    for (size_t i = 0; i < q.size() && written < 60000; ++i) {
+        const Item it = q[i];
+        buf.assign(it.size, 0);
+        if (!camRead((const void *)it.p, buf.data(), it.size)) {
+            if (it.size <= 0x100 || !camRead((const void *)it.p, buf.data(), 0x100)) continue;
+            buf.resize(0x100);
+        }
+        const uint32_t head[3] = {(uint32_t)it.p, (uint32_t)buf.size(), it.depth};
+        fwrite(head, 4, 3, f);
+        fwrite(buf.data(), 1, buf.size(), f);
+        ++written;
+        uint32_t vt0;
+        memcpy(&vt0, buf.data(), 4);
+        const bool cls = vt0 >= img && vt0 < img + GM_KNOWN.image; // an object of one of the game's classes
+        if (it.depth >= 4 || (it.depth >= 2 && !cls)) continue;
+        for (size_t o = 0; o + 4 <= buf.size(); o += 4) {
+            uint32_t v;
+            memcpy(&v, buf.data() + o, 4);
+            if (v < 0x10000 || v >= 0x7fff0000 || (v & 3) || !seen.insert(v).second) continue;
+            q.push_back({v, 0x400, it.depth + 1});
+        }
+    }
+    fclose(f);
+    logf("cam: DUMP %ls at frame %u - vehicle %p, camera %p, %u records", name, g_frame, (void *)veh, cam,
+         (unsigned)written);
+}
+
+// (A trial, [vr] arms_own=1.) Every object of the player's mech - the vehicle and what hangs on it, some seventy
+// objects of the game's own classes - has a word at +0x158 that is 2 while the pilot looks ahead from the seat and
+// 0x20 while they glance to a side; and the game draws the mech only then (found by comparing the memory of both
+// states). Here the word is set to 0x20 before the camera is drawn, in every frame the pilot sits in the mech: the
+// mech's own parts are drawn without a glance - the arms where they are, moving as the game moves them.
+enum { OWN_STATE = 0x158, OWN_SEAT = 2, OWN_SEEN = 0x20, OWN_MAX = 1200 };
+// Beside them: small objects of one class (0x78c638), one for a part each, with the same word at +0x30 and the part
+// they belong to at +0x34. They lie elsewhere in the heap and nothing found here points to them - so the heap is
+// searched for them, once when the pilot sits down.
+enum : uint32_t { OWN_LINK_CLASS = 0x78c638, OWN_LINK_STATE = 0x30, OWN_LINK_OWNER = 0x34, OWN_LINK_MAX = 8192 };
+static uintptr_t g_ownLink[OWN_LINK_MAX];
+static int g_ownLinkN;
+// every place in a block of memory where such an object begins
+static void camOwnScan(const uint8_t *base, size_t size) {
+    __try {
+        for (size_t o = 0; o + 0x44 <= size && g_ownLinkN < OWN_LINK_MAX; o += 4)
+            if (*(const uint32_t *)(base + o) == OWN_LINK_CLASS) g_ownLink[g_ownLinkN++] = (uintptr_t)(base + o);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {}
+}
+static uintptr_t g_ownList[OWN_MAX];
+static int g_ownN;
+static uintptr_t camPlayerVehicle() {
+    uint32_t refp = 0, ref = 0, key = 0, hold = 0, v = 0;
+    if (camRead((const void *)GM_PLAYER_REF, &refp, 4) && refp && camRead((const void *)(uintptr_t)refp, &ref, 4) &&
+        camRead((const void *)GM_PLAYER_KEY, &key, 4) && (key ^ ref) &&
+        camRead((const void *)(uintptr_t)((key ^ ref) + PL_HOLDER), &hold, 4) && (hold ^ GM_PLAYER_XOR) >= 0x10000 &&
+        camRead((const void *)(uintptr_t)((hold ^ GM_PLAYER_XOR) + PL_VEHICLE), &v, 4))
+        return v;
+    return 0;
+}
+// an object of one of the game's classes (its first word points into the game's image) with the state word
+static bool camOwnIs(uintptr_t p, uint32_t *state) {
+    uint32_t vt = 0;
+    const uintptr_t img = (uintptr_t)GetModuleHandleW(nullptr);
+    return camRead((const void *)p, &vt, 4) && vt >= img && vt < img + GM_KNOWN.image &&
+           camRead((const void *)(p + OWN_STATE), state, 4) && (*state == OWN_SEAT || *state == OWN_SEEN);
+}
+static void camOwnCollect() {
+    g_ownN = 0;
+    const uintptr_t veh = camPlayerVehicle();
+    uint32_t st = 0;
+    if (veh < 0x10000 || !camOwnIs(veh, &st)) return;
+    std::unordered_set<uintptr_t> seen{veh}, parts;
+    std::vector<std::pair<uintptr_t, int>> q{{veh, 0}};
+    std::vector<uint8_t> buf;
+    for (size_t i = 0; i < q.size() && q.size() < 150000; ++i) {
+        const uintptr_t p = q[i].first;
+        const int depth = q[i].second;
+        const bool own = camOwnIs(p, &st);
+        if (own && g_ownN < OWN_MAX) g_ownList[g_ownN++] = p + OWN_STATE, parts.insert(p);
+        if (depth >= 3 || (depth == 2 && !own))
+            continue; // (the mech's parts hang two steps below the vehicle, in lists of other objects)
+        buf.assign(depth ? 0x400 : 0x1000, 0);
+        if (!camRead((const void *)p, buf.data(), buf.size())) continue;
+        for (size_t o = 0; o + 4 <= buf.size(); o += 4) {
+            uint32_t v;
+            memcpy(&v, buf.data() + o, 4);
+            if (v < 0x10000 || v >= 0x7fff0000 || (v & 3) || !seen.insert(v).second) continue;
+            q.push_back({v, depth + 1});
+        }
+    }
+    const int ownParts = g_ownN;
+    g_ownLinkN = 0;
+    MEMORY_BASIC_INFORMATION mi;
+    for (uintptr_t a = 0x10000; a < 0x7fff0000 && VirtualQuery((const void *)a, &mi, sizeof mi) == sizeof mi;
+         a = (uintptr_t)mi.BaseAddress + mi.RegionSize) {
+        if (mi.State == MEM_COMMIT && mi.Type == MEM_PRIVATE && mi.Protect == PAGE_READWRITE &&
+            mi.RegionSize <= (256u << 20))
+            camOwnScan((const uint8_t *)mi.BaseAddress, mi.RegionSize);
+    }
+    for (int i = 0; i < g_ownLinkN && g_ownN < OWN_MAX; ++i) {
+        uint32_t owner = 0, stw = 0;
+        if (camRead((const void *)(g_ownLink[i] + OWN_LINK_OWNER), &owner, 4) && parts.count(owner) &&
+            camRead((const void *)(g_ownLink[i] + OWN_LINK_STATE), &stw, 4) && (stw == OWN_SEAT || stw == OWN_SEEN))
+            g_ownList[g_ownN++] = g_ownLink[i] + OWN_LINK_STATE;
+    }
+    logf("cam: the player's mech - %d parts, %d of %d link objects are theirs", ownParts, g_ownN - ownParts,
+         g_ownLinkN);
+}
+// (two more words change with a glance: +0x1e4 of the one object of class 0x7a339c, and +0x2e8 of the object the
+// vehicle points to at +0x3b8 - tried one by one, bits 2 and 4 of arms_own)
+static int camOwnSet(int want) {
+    int n = 0;
+    if (want & 4) {
+        __try {
+            const uintptr_t veh = g_ownN ? g_ownList[0] - OWN_STATE : 0;
+            uint32_t *o = veh ? *(uint32_t **)(veh + 0x3b8) : nullptr;
+            if (o && o[0x2e8 / 4] == 0) o[0x2e8 / 4] = 1;
+        } __except (EXCEPTION_EXECUTE_HANDLER) {}
+    }
+    for (int i = 0; i < g_ownN; ++i) {
+        __try {
+            uint32_t *s = (uint32_t *)g_ownList[i];
+            if (*s == OWN_SEAT) *s = OWN_SEEN, ++n;
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+            g_ownList[i] = g_ownList[--g_ownN];
+            --i;
+        }
+    }
+    return n;
+}
+static void camOwn() {
+    static int want = -1;
+    if (want < 0) want = GetPrivateProfileIntW(L"vr", L"arms_own", 0, (g_dir + L"mw4vr.ini").c_str());
+    static unsigned at = ~0u, listAt = ~0u;
+    if (!want || at == g_frame) return;
+    at = g_frame;
+    if (!g_mechSeated || g_mechSeat.outside || g_menuMode) {
+        g_ownN = 0, listAt = ~0u;
+        return;
+    }
+    if (listAt == ~0u || g_frame - listAt >= 1800) {
+        const int was = g_ownN;
+        camOwnCollect();
+        if (listAt == ~0u || was != g_ownN)
+            logf("cam: frame %u - %d objects of the player's mech are told to be drawn from the seat", g_frame, g_ownN);
+        listAt = g_frame;
+    }
+    const int n = camOwnSet(want);
+    static int told;
+    if (told < 6 && n)
+        ++told, logf("cam: frame %u - %d of them were set back by the game since the frame before", g_frame, n);
+}
+
 static void camPreEye(uint8_t *cam, int eyeOv) {
     InterlockedIncrement(&g_statCamCalls);
     {
@@ -465,6 +652,8 @@ static void camPreEye(uint8_t *cam, int eyeOv) {
     }
     if (!cam || !camIsMain(cam)) return;
     if (eyeOv <= 0) camDump(cam);
+    if (eyeOv <= 0) camMemDump(cam);
+    if (eyeOv <= 0) camOwn();
     float *m = (float *)(cam + EL_WORLD);
     // the game's own matrix: what is there, unless it is still what we wrote last time
     float base[12];
