@@ -586,7 +586,7 @@ void recLight(ID3D11DeviceContext *ctx, ID3D11Texture2D *tex, UINT w, UINT h) {
 // a picture's texture is free again when the encoder has let go of its sample
 struct RecFreed : IMFAsyncCallback {
     int slot = 0;
-    STDMETHODIMP QueryInterface(REFIID id, void **out) override {
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID id, void **out) override {
         if (!out) return E_POINTER;
         if (id == __uuidof(IUnknown) || id == __uuidof(IMFAsyncCallback)) {
             *out = static_cast<IMFAsyncCallback *>(this);
@@ -595,10 +595,10 @@ struct RecFreed : IMFAsyncCallback {
         *out = nullptr;
         return E_NOINTERFACE;
     }
-    STDMETHODIMP_(ULONG) AddRef() override { return 2; } // (one for each texture, for as long as the mod is loaded)
-    STDMETHODIMP_(ULONG) Release() override { return 1; }
-    STDMETHODIMP GetParameters(DWORD *, DWORD *) override { return E_NOTIMPL; }
-    STDMETHODIMP Invoke(IMFAsyncResult *) override {
+    ULONG STDMETHODCALLTYPE AddRef() override { return 2; } // (one for each texture, for as long as the mod is loaded)
+    ULONG STDMETHODCALLTYPE Release() override { return 1; }
+    HRESULT STDMETHODCALLTYPE GetParameters(DWORD *, DWORD *) override { return E_NOTIMPL; }
+    HRESULT STDMETHODCALLTYPE Invoke(IMFAsyncResult *) override {
         g_recPool[slot].busy = 0;
         return S_OK;
     }
@@ -612,7 +612,7 @@ struct RecActivated : IActivateAudioInterfaceCompletionHandler, IAgileObject {
     virtual ~RecActivated() {
         if (done) CloseHandle(done);
     }
-    STDMETHODIMP QueryInterface(REFIID id, void **out) override {
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID id, void **out) override {
         if (!out) return E_POINTER;
         *out = nullptr;
         if (id == __uuidof(IUnknown) || id == __uuidof(IActivateAudioInterfaceCompletionHandler))
@@ -624,13 +624,13 @@ struct RecActivated : IActivateAudioInterfaceCompletionHandler, IAgileObject {
         AddRef();
         return S_OK;
     }
-    STDMETHODIMP_(ULONG) AddRef() override { return ++refs; }
-    STDMETHODIMP_(ULONG) Release() override {
+    ULONG STDMETHODCALLTYPE AddRef() override { return ++refs; }
+    ULONG STDMETHODCALLTYPE Release() override {
         const ULONG n = --refs;
         if (!n) delete this;
         return n;
     }
-    STDMETHODIMP ActivateCompleted(IActivateAudioInterfaceAsyncOperation *) override {
+    HRESULT STDMETHODCALLTYPE ActivateCompleted(IActivateAudioInterfaceAsyncOperation *) override {
         SetEvent(done);
         return S_OK;
     }
