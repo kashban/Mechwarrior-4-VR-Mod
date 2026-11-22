@@ -24,7 +24,10 @@ static float g_armsLong = 2.5f;   // a part this long (m) from back to front is 
 static float g_armsBase[12];      // the game's camera -> world while the camera sat in the mech
 static unsigned g_armsBaseFrame = ~0u;
 static wchar_t g_armsMech[32]; // the mech the parts are of
-static int g_armsOutFrames;    // frames in a row seen from outside
+// mechs whose arms have no joints to swing in - guns and pods fixed to the body ([vr] arms_rigid, names with commas)
+static std::wstring g_armsRigid = L"urbanmech,urbanmech_iic,rifleman,catapult,catapultk2,jenner2c,locust2c,raven,"
+                                  L"stalker";
+static int g_armsOutFrames; // frames in a row seen from outside
 
 enum { MLR_CB_BYTES = 496, MLR_UV_AT = 80, MLR_TO_WORLD_AT = 368, MLR_TEX_SLOT = 77 }; // mw4hook's 'Mlr' buffer
 enum { ARM_TEX_MAX = 2048, ARM_REACH = 14 };
@@ -552,6 +555,14 @@ static float armsFeet(FILE *f, uint32_t n) {
     return feet;
 }
 
+// the mech's name stands in the list of those whose arms stay put
+static bool armsRigid() {
+    const std::wstring list = L"," + g_armsRigid + L",", name = std::wstring(L",") + g_armsMech + L",";
+    for (size_t i = 0; i + name.size() <= list.size(); ++i)
+        if (!_wcsnicmp(list.c_str() + i, name.c_str(), name.size())) return true;
+    return false;
+}
+
 // false: no file for this mech (or one that cannot be read)
 static bool armsLoad() {
     armsFree();
@@ -575,6 +586,7 @@ static bool armsLoad() {
             tex.push_back(ok ? armsTexture(px.data(), size) : nullptr);
         }
         bool plainUsed = false;
+        const bool rigid = armsRigid();
         const float feet = ok ? armsFeet(f, head[0]) : 0;
         for (uint32_t i = 0; i < head[0] && ok; ++i) {
             uint32_t h[3] = {};
@@ -617,7 +629,7 @@ static bool armsLoad() {
             const HRESULT h1 = ORIG(PFN_CreateBuffer, g_dev, VT_Dev_CreateBuffer)(g_dev, &vd, &vs, &a.vb);
             const HRESULT h2 = ORIG(PFN_CreateBuffer, g_dev, VT_Dev_CreateBuffer)(g_dev, &id, &is, &a.ib);
             a.nIdx = h[1];
-            a.swing = beside && hi[2] - lo[2] >= g_armsLong ? (cx > 0 ? 1 : -1) : 0;
+            a.swing = !rigid && beside && hi[2] - lo[2] >= g_armsLong ? (cx > 0 ? 1 : -1) : 0;
             a.clr = h[2] < tex.size() && tex[h[2]] ? tex[h[2]] : plain;
             if (a.clr) a.clr->AddRef();
             plainUsed = plainUsed || a.clr == plain;
@@ -649,8 +661,8 @@ static bool armsLoad() {
         logf("arms: %ls cannot be read", armsFile().c_str());
         return false;
     }
-    logf("arms: '%ls' - %d parts of the mech are drawn beside the cockpit (%ls)", g_armsMech, g_armN,
-         armsFile().c_str());
+    logf("arms: '%ls' - %d parts of the mech are drawn beside the cockpit%s (%ls)", g_armsMech, g_armN,
+         armsRigid() ? ", its arms stay put (arms_rigid)" : "", armsFile().c_str());
     return true;
 }
 
@@ -672,6 +684,8 @@ void armsOnPresent() {
         if (GetPrivateProfileStringW(L"vr", L"arms_deep", L"", b, 32, ini.c_str())) g_armsDeep = (float)_wtof(b);
         if (GetPrivateProfileStringW(L"vr", L"arms_wide", L"", b, 32, ini.c_str())) g_armsWide = (float)_wtof(b);
         if (GetPrivateProfileStringW(L"vr", L"arms_swing", L"", b, 32, ini.c_str())) g_armsSwing = (float)_wtof(b);
+        wchar_t names[1024];
+        if (GetPrivateProfileStringW(L"vr", L"arms_rigid", L"", names, 1024, ini.c_str())) g_armsRigid = names;
         if (GetPrivateProfileStringW(L"vr", L"arms_above", L"", b, 32, ini.c_str())) g_armsAbove = (float)_wtof(b);
         if (GetPrivateProfileStringW(L"vr", L"arms_near", L"", b, 32, ini.c_str())) g_armsNear = (float)_wtof(b);
         if (g_armsOn)

@@ -117,6 +117,8 @@ beside a cockpit with side windows the arms' weapons fire out of thin air. The m
 parts once, the first time you look at it from outside (`V`; stand still, torso ahead), keeps them in
 `mw4vr_arms\<mech>.mwa` in the game's folder and draws from then on what lies beside or above the cockpit: arms,
 weapon pods, a gun on the roof. The arms go forth and back with the mech's steps (`arms_swing`, metres; 0: not).
+Mechs whose arms have no joints - guns fixed to the body, as the Rifleman's or the Urban Mech's - are named in
+`arms_rigid`; theirs stay put.
 They do not follow the game's glance keys, and they do not recoil. The file is the game's own geometry: keep it
 to yourself. Which parts are taken: `arms_side`, `arms_low`, `arms_deep`, `arms_wide`, `arms_above`, `arms_near`
 (see `mw4vr.ini.example`); `arms_all=1` draws every part, to see what there is.

@@ -1242,9 +1242,14 @@ struct M5Seq {
     int vpW, ours; // ours: 1 - our cockpit was drawn at this draw
 };
 void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw, int ckTris) {
-    const bool gameCockpit = ckTris >= 10;
     int e = g_camPassEye;
     if (e < 0 || e > 1 || !g_camInMain || !g_kTlOnly || mw5Waiting()) return;
+    // Ten triangles of the game's cockpit make a draw one of its cockpit's. While it was seen in the frames before, a
+    // few do: a small cockpit (the Marauder II's has some thirty) is cut down to less by the picture's edge as the
+    // head moves, and ours went with it.
+    static unsigned ckFrame[2] = {~0u, ~0u}; // the frame the game's cockpit was last drawn in for this eye
+    const bool expected = ckFrame[e] != ~0u && g_frame - ckFrame[e] <= 2;
+    const bool gameCockpit = ckTris >= (expected ? (int)MC_FEW_COCKPIT_TRIS : 10);
     if (gameCockpit && e == 0) armsSeatFrame();
     // A pass that went by without our cockpit (one eye bright for a frame): told with what its draws were.
     static unsigned trFrame[2] = {~0u, ~0u};
@@ -1305,11 +1310,10 @@ void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw, int ckTris) {
     // CPU-path draw as a rule - the log of a test.) The first CPU-path draw only while no cockpit of the game's
     // was seen in the frames before.
     {
-        static unsigned ckFrame[2] = {~0u, ~0u}, ordFrame[2] = {~0u, ~0u};
+        static unsigned ordFrame[2] = {~0u, ~0u};
         static int ord[2];
         if (ordFrame[e] != g_frame) ordFrame[e] = g_frame, ord[e] = 0;
         ++ord[e];
-        bool expected = ckFrame[e] != ~0u && g_frame - ckFrame[e] <= 2;
         if (gameCockpit) {
             static int told;
             if (ckFrame[e] != g_frame && told < 6) {

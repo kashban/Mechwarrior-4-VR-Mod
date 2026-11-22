@@ -800,7 +800,9 @@ static inline bool mcGridFit(const McGrid &g, float w, float h, float wantR, flo
 // Two frames in a row, no more: for as long ours is not drawn anyway where the game's cockpit is missed (mw5Draw
 // waits for it for two frames). With five, ours came back for three frames over the picture seen from outside
 // before it went for good - the switch to the outside view flickered.
-enum { MC_COCKPIT_TRIS = 30, MC_NO_COCKPIT_TRIS = 6, MC_OUTSIDE_FRAMES = 2 };
+// (Three triangles count as a little, not six as until v11.93: of the Marauder II's small cockpit five were left
+// in some frames, and it was taken for the view from outside. Seen from outside there are none.)
+enum { MC_COCKPIT_TRIS = 30, MC_NO_COCKPIT_TRIS = 3, MC_FEW_COCKPIT_TRIS = 3, MC_OUTSIDE_FRAMES = 2 };
 struct McSeat {
     int misses;   // frames in a row, looking ahead, without the game's cockpit
     bool outside; // the camera is not in the mech
