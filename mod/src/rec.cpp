@@ -437,7 +437,10 @@ void recFrame(ID3D11DeviceContext *c, const XrCompositionLayerBaseHeader *const 
                     const XrVector3f o = qrot(q.pose.orientation, {(k & 1 ? 0.5f : -0.5f) * q.size.width,
                                                                    (k & 2 ? -0.5f : 0.5f) * q.size.height, 0});
                     const float p[3] = {q.pose.position.x + o.x, q.pose.position.y + o.y, q.pose.position.z + o.z};
-                    mcEyeClip(p, &view[e].position.x, &view[e].orientation.x, tn, corner[k]);
+                    const XrPosef &ev = view[e];
+                    const float at[3] = {ev.position.x, ev.position.y, ev.position.z};
+                    const float turn[4] = {ev.orientation.x, ev.orientation.y, ev.orientation.z, ev.orientation.w};
+                    mcEyeClip(p, at, turn, tn, corner[k]);
                     ahead = ahead || corner[k][2] > 0;
                 }
                 if (!ahead) continue;
