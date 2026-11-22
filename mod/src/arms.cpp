@@ -27,7 +27,7 @@ static wchar_t g_armsMech[32];       // the mech the parts are of
 static const float ARM_TOUCH = 0.3f; // parts no further apart than this (m) hang together
 // mechs whose arms have no joints to swing in - guns and pods fixed to the body ([vr] arms_rigid, names with commas)
 static std::wstring g_armsRigid = L"urbanmech,urbanmech_iic,rifleman,catapult,catapultk2,jenner2c,locust2c,raven,"
-                                  L"stalker";
+                                  L"stalker,madcat_mkii";
 static int g_armsOutFrames; // frames in a row seen from outside
 
 enum { MLR_CB_BYTES = 496, MLR_UV_AT = 80, MLR_TO_WORLD_AT = 368, MLR_TEX_SLOT = 77 }; // mw4hook's 'Mlr' buffer

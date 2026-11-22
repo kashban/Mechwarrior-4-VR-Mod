@@ -131,7 +131,7 @@ arms=1
 ; how far (m) the arms go forth and back with the mech's steps (0: not)
 arms_swing=0.25
 ; mechs whose arms have no joints and stay put (their names as in mw4vr_arms, with commas)
-arms_rigid=urbanmech,urbanmech_iic,rifleman,catapult,catapultk2,jenner2c,locust2c,raven,stalker
+arms_rigid=urbanmech,urbanmech_iic,rifleman,catapult,catapultk2,jenner2c,locust2c,raven,stalker,madcat_mkii
 ; which parts are drawn: a part's middle at least arms_side m to the side and not lower than arms_low m, or at
 ; least arms_above m over the eye; lower down, to arms_deep of the way to the feet, only a part arms_wide m out
 ; or long and slim; nothing nearer to the eye than arms_near m. arms_all=1: every part
