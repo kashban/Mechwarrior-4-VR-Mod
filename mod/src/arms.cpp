@@ -71,7 +71,7 @@ static UINT armFmtBytes(DXGI_FORMAT f) {
 HRESULT STDMETHODCALLTYPE H_CreateInputLayout(ID3D11Device *d, const D3D11_INPUT_ELEMENT_DESC *el, UINT n,
                                               const void *code, SIZE_T len, ID3D11InputLayout **out) {
     HRESULT hr = ORIG(PFN_CreateIL, d, VT_Dev_CreateInputLayout)(d, el, n, code, len, out);
-    if (d == g_foreignDev || FAILED(hr) || !out || !*out || !el) return hr;
+    if (d == g_foreignDev || d == g_recDev || FAILED(hr) || !out || !*out || !el) return hr;
     ArmLayout L;
     UINT at = 0;
     bool known = true; // the place after the last element is known (for elements that only say "after it")

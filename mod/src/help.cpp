@@ -51,6 +51,7 @@ static const HelpLine g_helpText[] = {
     {L"      on a monitor", L"Home / End turn the picture left / right (a monitor that hangs askew)"},
     {nullptr, L"Other"},
     {L"Ctrl+F12", L"a picture of both eyes into mw4vr_shots"},
+    {L"Ctrl+F5", L"a video of both eyes with sound into mw4vr_videos: begin / end"},
     {L"Ctrl+F1", L"this page"},
 };
 enum { HELP_LINES = sizeof g_helpText / sizeof g_helpText[0] };

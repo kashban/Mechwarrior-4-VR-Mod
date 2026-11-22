@@ -26,6 +26,18 @@ load_hold=1
 ; the game renders at this height whatever the size of its window (the width follows the window's shape);
 ; 0 = at the window's size. More pixels = sharper and slower. Read at the start
 render_height=2600
+; A video of both eyes (Ctrl+F5 begins and ends it; mw4vr_videos\, see the readme). Read when a video begins:
+; pictures a second, by the clock on the wall (10 .. 120)
+rec_fps=60
+; the video's data rate in Mbit/s; 0 = by the picture's size (about 120 for 5200 x 2600 at 60 a second)
+rec_bitrate_mbps=0
+; 1 = the HUD's layers (cross-hair, target marks, the parts on the glass) are drawn into the video as the
+; headset shows them; 0 = the eyes' pictures alone
+rec_hud=1
+; 1 = with the game's sound (this process's alone; on a Windows before 10 2004 all the output device plays)
+rec_audio=1
+; 1 = a red light beside the cross-hair while a video runs (in the headset, not in the video)
+rec_light=1
 ; the rendered field of view: the headset's, times this (smaller = sharper)
 fov_scale=1.0
 ; 1 = the water mirrors the scene in both eyes (drawn a second time for the right eye); 0 = in the left eye only

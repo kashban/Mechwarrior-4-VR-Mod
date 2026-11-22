@@ -934,3 +934,33 @@ static inline float mcHoldStep(McHold &h, bool battle, bool complete, double now
     }
     return 0;
 }
+
+// ---- the video of both eyes (rec.cpp) ----
+// Which picture of a video of fps pictures a second the time t belongs to (seconds since the video began); a time
+// before its beginning: none, -1
+static inline long long mcRecTick(double t, double fps) { return t < 0 ? -1 : (long long)floor(t * fps); }
+
+// v turned by the quaternion q (x y z w, of length 1); out must not be v
+static inline void mcQuatTurn(const float *q, const float *v, float *out) {
+    const float tx = 2 * (q[1] * v[2] - q[2] * v[1]), ty = 2 * (q[2] * v[0] - q[0] * v[2]);
+    const float tz = 2 * (q[0] * v[1] - q[1] * v[0]);
+    out[0] = v[0] + q[3] * tx + (q[1] * tz - q[2] * ty);
+    out[1] = v[1] + q[3] * ty + (q[2] * tx - q[0] * tz);
+    out[2] = v[2] + q[3] * tz + (q[0] * ty - q[1] * tx);
+}
+
+// Where the tangent t lies in a picture that spans the tangents a .. b: -1 at a, 1 at b
+static inline float mcTanPlace(float t, float a, float b) { return (2 * t - (a + b)) / (b - a); }
+
+// A point p of the headset's space as an eye sees it: the eye stands at pos, turned by q (x y z w; it looks along
+// its own -z), and its picture spans the tangents tn: left, right, up, down (left and down are negative). out: the
+// point's place in the picture times its distance (x to the right, y up, each -1 .. 1 between the picture's edges),
+// and that distance ahead of the eye (not positive: the point is behind it).
+static inline void mcEyeClip(const float *p, const float *pos, const float *q, const float *tn, float *out) {
+    const float d[3] = {p[0] - pos[0], p[1] - pos[1], p[2] - pos[2]}, back[4] = {-q[0], -q[1], -q[2], q[3]};
+    float v[3];
+    mcQuatTurn(back, d, v);
+    out[2] = -v[2];
+    out[0] = (2 * v[0] - (tn[1] + tn[0]) * out[2]) / (tn[1] - tn[0]);
+    out[1] = (2 * v[1] - (tn[2] + tn[3]) * out[2]) / (tn[2] - tn[3]);
+}

@@ -23,6 +23,7 @@ static void helpPause(IDXGISwapChain *sc, int eye) {
         helpKey(true);
         if (!g_helpOn) break;
         shotKeys(); // Ctrl+F12 takes a picture of the page too
+        recKeys();  // (a video goes on, and can be ended)
         DWORD a = GetTickCount();
         vrOnPresent(sc, eye);
         if (GetTickCount() - a < 3) Sleep(8); // no frame of the runtime's to wait for: not a busy loop
@@ -77,6 +78,7 @@ void onPresent(IDXGISwapChain *sc) {
         mw5OnPresent();
         armsOnPresent();
         shotKeys();
+        recKeys();
         bool inBattle = g_vr.ok && g_hudLayerOn && g_srcCamActive && g_camEyeFrame != ~0u &&
                         g_frame - g_camEyeFrame < 30 && !g_menuMode;
         if (inBattle) helpClocks();
@@ -150,7 +152,7 @@ void onPresent(IDXGISwapChain *sc) {
 HRESULT STDMETHODCALLTYPE H_CreateBuffer(ID3D11Device *d, const D3D11_BUFFER_DESC *desc,
                                          const D3D11_SUBRESOURCE_DATA *init, ID3D11Buffer **out) {
     HRESULT hr = ORIG(PFN_CreateBuffer, d, VT_Dev_CreateBuffer)(d, desc, init, out);
-    if (d == g_foreignDev) return hr;
+    if (d == g_foreignDev || d == g_recDev) return hr;
     if (SUCCEEDED(hr) && out && *out && desc && (desc->BindFlags & D3D11_BIND_CONSTANT_BUFFER)) {
         std::lock_guard<std::mutex> lk(g_shMx);
         g_cbSize[*out] = desc->ByteWidth;
@@ -162,7 +164,7 @@ HRESULT STDMETHODCALLTYPE H_CreateBuffer(ID3D11Device *d, const D3D11_BUFFER_DES
     HRESULT STDMETHODCALLTYPE H_Create##Kind(ID3D11Device *d, const void *code, SIZE_T len, ID3D11ClassLinkage *cl,    \
                                              void **out) {                                                             \
         HRESULT hr = ORIG(PFN_CreateShader, d, VT_Dev_Create##Kind)(d, code, len, cl, out);                            \
-        if (SUCCEEDED(hr) && out && *out && d != g_foreignDev) onShader(letter, code, len, *out);                      \
+        if (SUCCEEDED(hr) && out && *out && d != g_foreignDev && d != g_recDev) onShader(letter, code, len, *out);     \
         return hr;                                                                                                     \
     }
 SHADER_HOOK(VertexShader, 'V')

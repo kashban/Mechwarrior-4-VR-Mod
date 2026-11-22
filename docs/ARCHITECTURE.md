@@ -67,6 +67,7 @@ log, the shaders' table, the contexts' table) has a mutex. The build optimises a
 | `arms` | `[vr] arms=1`: the player's own mech beside the cockpit. Its parts are read once from the picture seen from outside (the parts' constant buffer and vertex buffers), kept in `mw4vr_arms\<mech>.mwa`, and those beside or above the seat are drawn with the cockpit; the arms go forth and back with the sway's steps. |
 | `cross` | The cross-hair taken out of the HUD's picture by its colour, as a layer of its own. |
 | `sway`, `note`, `help`, `shot` | The sway's values for its users, and the cockpit's place read where the game hands its cockpit to its renderer; a line of text in the headset; the page of keys (Ctrl+F1); pictures for diagnosis (Ctrl+F12). |
+| `rec` | A video of both eyes with the game's sound (Ctrl+F5): the frame's layers drawn side by side into a texture shared with a device of the video's own, where Media Foundation's writer hands it to the graphics card's HEVC encoder on a thread of its own; the sound from this process's loopback. No picture passes through the processor's memory, and the render thread never waits for the encoder. |
 | `e2e` | The test mode for the end-to-end test: only with `MW4VR_E2E` set, plays a plan of keys and records every frame. |
 | `perf` | For a performance run of that test: every frame's length and the time of its parts, and where the render thread is ([PERFORMANCE.md](PERFORMANCE.md)). |
 | `eye_tl_vs.hlsl` / `.h` | The replacement vertex shader for the CPU path. |
