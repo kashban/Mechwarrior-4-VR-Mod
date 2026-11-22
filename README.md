@@ -112,6 +112,15 @@ the group's name) and writes `mw4vr_paint.mwd` from two of the game's own pictur
 patches, worn paint, a fine grain and gloss (`[vr] mw5_paint`, `mw5_paint_wear`). An approximation: the game's
 shader itself cannot be exported.
 
+**The mech's own arms** (`[vr] arms=1`, off by default). From the seat the game draws nothing of your mech, so
+beside a cockpit with side windows the arms' weapons fire out of thin air. With `arms=1` the mod reads the mech's
+parts once, the first time you look at it from outside (`V`; stand still, torso ahead), keeps them in
+`mw4vr_arms\<mech>.mwa` in the game's folder and draws from then on what lies beside or above the cockpit: arms,
+weapon pods, a gun on the roof. The arms go forth and back with the mech's steps (`arms_swing`, metres; 0: not).
+They do not follow the game's glance keys, and they do not recoil. The file is the game's own geometry: keep it
+to yourself. Which parts are taken: `arms_side`, `arms_low`, `arms_deep`, `arms_wide`, `arms_above`, `arms_near`
+(see `mw4vr.ini.example`); `arms_all=1` draws every part, to see what there is.
+
 The converter turns the larger faces of the material `Panels*` into monitors and writes a `<name>.ini` beside
 each `.mwc`: which part of the HUD each monitor shows (`screen_<n>`; `screen_<n>_turn`: its picture turned by so
 many degrees), the eye's place, the size. Change it as

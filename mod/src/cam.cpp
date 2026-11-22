@@ -18,8 +18,7 @@ static float g_camLast[12];                       // the main camera's matrix as
 static unsigned g_camLastFrame = ~0u;
 static void *g_camMain;                       // the main camera's object
 static float g_camWritten[12], g_camBase[12]; // what we wrote last time, and the game's matrix under it
-static float g_camSeat[12]; // the game's matrix as the eyes are moved from: its own, a glance's turn taken out
-volatile int g_camEye = -1; // the eye the main camera was moved for, this frame
+volatile int g_camEye = -1;                   // the eye the main camera was moved for, this frame
 unsigned g_camEyeFrame = ~0u;
 static volatile LONG g_statCamMoves, g_statCamCalls;
 float g_camEyeBase[2][12]; // the game's matrix under each eye's latest image
@@ -341,300 +340,6 @@ static void camEyeMatrix(const float *base, int eye, float *out, float *Rc, floa
     }
 }
 
-// (A trial, [vr] arms_glance=1.) While the pilot glances to a side (the game's own look-left / look-right keys)
-// the game draws the player's mech - the arms too, moving as they do - and turns its camera about its upright
-// axis, smoothly, up to a quarter. That turn is taken out again here: the view stays the seat's, and the mech's
-// parts stay in the picture.
-// How far the camera is turned is read from the game's own cockpit (sway.cpp has that shape's matrix): its
-// heading in the camera's space against what it was when the pilot first sat. Only that one angle is taken, and it is
-// the full quarter exactly once it is near it: the cockpit also sways with the mech's steps, and a view tied to it
-// frame by frame trembled.
-// [vr] arms_glance_hold=1 (default): the mod holds the glance key itself while the pilot sits in the mech, so the
-// parts are always there; arms_glance_key=LEFT or RIGHT.
-static bool g_glanceKeyDown;
-static int g_glanceVk = VK_LEFT;
-static void camGlanceKey(bool want) {
-    DWORD pid = 0;
-    GetWindowThreadProcessId(GetForegroundWindow(), &pid);
-    const bool front = pid == GetCurrentProcessId();
-    if (!front) {
-        g_glanceKeyDown = false; // (with another window in front the game let the key go itself)
-        return;
-    }
-    // Held, it is pressed again a few times a second: the pilot's own press and release of the same key ends the
-    // game's glance, and nothing tells the mod (a key held down repeats by itself anyway).
-    if (want == g_glanceKeyDown && !(want && g_frame % 8 == 0)) return;
-    INPUT in = {};
-    in.type = INPUT_KEYBOARD;
-    in.ki.wScan = (WORD)MapVirtualKeyW((UINT)g_glanceVk, MAPVK_VK_TO_VSC);
-    in.ki.dwFlags = KEYEVENTF_SCANCODE | KEYEVENTF_EXTENDEDKEY | (want ? 0 : KEYEVENTF_KEYUP);
-    if (SendInput(1, &in, sizeof in)) g_glanceKeyDown = want;
-}
-static void camGlance(float *base) {
-    static int want = -1, hold = 1;
-    if (want < 0) {
-        const std::wstring ini = g_dir + L"mw4vr.ini";
-        want = GetPrivateProfileIntW(L"vr", L"arms_glance", 0, ini.c_str());
-        hold = GetPrivateProfileIntW(L"vr", L"arms_glance_hold", 1, ini.c_str());
-        wchar_t k[16];
-        GetPrivateProfileStringW(L"vr", L"arms_glance_key", L"LEFT", k, 16, ini.c_str());
-        g_glanceVk = !_wcsicmp(k, L"RIGHT") ? VK_RIGHT : VK_LEFT;
-    }
-    if (!want) return;
-    if (want == 2) { // (diagnosis: the camera's and the cockpit's headings, nothing changed)
-        static unsigned at;
-        if (g_frame != at && g_frame % 6 == 0) {
-            at = g_frame;
-            const float *w = g_swayShapeW;
-            logf("cam: DIAG2 frame %u cam yaw %.1f pos %.2f %.2f %.2f | cockpit (frame %d) yaw %.1f pos %.2f %.2f %.2f",
-                 g_frame, atan2f(base[8], base[0]) * 57.2958f, base[3], base[7], base[11], (int)g_swayShapeWFrame,
-                 atan2f(w[8], w[0]) * 57.2958f, w[3], w[7], w[11]);
-        }
-        return;
-    }
-    static float ref[12], angle; // angle: the glance's turn (radians) that is taken out now
-    static unsigned realFrame = ~0u, seenFrame = ~0u;
-    static bool haveRef;
-    static int seen; // frames in a row with the cockpit's matrix
-    const float *A = g_camA;
-    if (realFrame != g_frame) {
-        const float was = angle;
-        // This frame's camera against the cockpit's matrix of the frame before (this frame's comes later, with its
-        // draws): the mech turns little in a frame, the glance's camera much - and at times it jumps, when the key
-        // is pressed again while the camera swings back. With the camera of the frame before as well, the view
-        // was a frame behind the swing and shook with it.
-        if (g_swayShapeWFrame == g_frame - 1 && g_camCal) {
-            float inv[12], rel[12], invRef[12], d[12];
-            mcInv34(base, inv);
-            mcMul34(inv, g_swayShapeW, rel);
-            if (!haveRef) memcpy(ref, rel, sizeof ref), haveRef = true;
-            seenFrame = g_frame;
-            ++seen;
-            mcInv34(ref, invRef);
-            mcMul34(rel, invRef, d);
-            // d turns the view's forward axis (the camera's own coordinates) towards its right axis by the angle
-            float fr = 0, ff = 0;
-            for (int i = 0; i < 3; ++i)
-                for (int j = 0; j < 3; ++j)
-                    fr += A[i * 3 + 0] * d[i * 4 + j] * A[j * 3 + 2], ff += A[i * 3 + 2] * d[i * 4 + j] * A[j * 3 + 2];
-            float a = atan2f(fr, ff);
-            const float q = 1.5707963f, snap = 0.05f; // (3 degrees)
-            if (fabsf(a) < snap) a = 0;
-            if (fabsf(a) > q || fabsf(fabsf(a) - q) < snap) a = a > 0 ? q : -q;
-            angle = a;
-        } else if (seenFrame == ~0u || g_frame - seenFrame > 45) { // no cockpit for a while: another view
-            angle = 0, haveRef = false, seen = 0;
-        }
-        if ((angle != 0) != (was != 0))
-            logf("cam: frame %u - %s", g_frame,
-                 angle != 0 ? "a glance to a side: its turn is taken out, the mech's parts stay in the picture"
-                            : "the glance is over");
-        realFrame = g_frame;
-        if (hold)
-            camGlanceKey(haveRef && seen > 45 && g_frame - seenFrame < 10 && g_mechSeated && !g_mechSeat.outside &&
-                         !g_menuMode);
-    }
-    if (angle != 0) { // base * Y: Y turns about the view's upright axis, in the camera's own coordinates
-        const float c = cosf(angle), s = sinf(angle);
-        float Y[12] = {}, o[12];
-        for (int i = 0; i < 3; ++i)
-            for (int j = 0; j < 3; ++j) {
-                const float r_i = A[i * 3 + 0], u_i = A[i * 3 + 1], f_i = A[i * 3 + 2];
-                const float r_j = A[j * 3 + 0], u_j = A[j * 3 + 1], f_j = A[j * 3 + 2];
-                Y[i * 4 + j] = c * (r_i * r_j + f_i * f_j) + u_i * u_j + s * (r_i * f_j - f_i * r_j);
-            }
-        mcMul34(base, Y, o);
-        memcpy(base, o, sizeof o);
-    }
-}
-
-// (Diagnosis, [debug] level=1: a file mw4vr_memdump.txt in the game's folder has the player's vehicle, the camera
-// and what they point to - two steps deep - written to mw4vr_mem_<n>.bin: records of address, size, depth, bytes.
-// For finding, by comparing such pictures, what the game changes when it begins to draw the player's own mech.)
-static void camMemDump(uint8_t *cam) {
-    static unsigned at = ~0u;
-    static int n;
-    if (!g_dbg || g_frame == at || g_frame % 20) return;
-    at = g_frame;
-    const std::wstring trig = g_dir + L"mw4vr_memdump.txt";
-    if (GetFileAttributesW(trig.c_str()) == INVALID_FILE_ATTRIBUTES) return;
-    DeleteFileW(trig.c_str());
-    uintptr_t veh = 0;
-    {
-        uint32_t refp = 0, ref = 0, key = 0, hold = 0, v = 0;
-        if (camRead((const void *)GM_PLAYER_REF, &refp, 4) && refp && camRead((const void *)(uintptr_t)refp, &ref, 4) &&
-            camRead((const void *)GM_PLAYER_KEY, &key, 4) && (key ^ ref) &&
-            camRead((const void *)(uintptr_t)((key ^ ref) + PL_HOLDER), &hold, 4) &&
-            (hold ^ GM_PLAYER_XOR) >= 0x10000 &&
-            camRead((const void *)(uintptr_t)((hold ^ GM_PLAYER_XOR) + PL_VEHICLE), &v, 4))
-            veh = v;
-    }
-    wchar_t name[64];
-    swprintf(name, 64, L"mw4vr_mem_%03d.bin", n++);
-    FILE *f = fileOpen((g_dir + name).c_str(), L"wb");
-    if (!f) return;
-    struct Item {
-        uintptr_t p;
-        uint32_t size, depth;
-    };
-    std::vector<Item> q;
-    std::unordered_set<uintptr_t> seen;
-    if (veh >= 0x10000) q.push_back({veh, 0x4000, 0}), seen.insert(veh);
-    q.push_back({(uintptr_t)cam, 0x400, 0}), seen.insert((uintptr_t)cam);
-    std::vector<uint8_t> buf;
-    size_t written = 0;
-    const uintptr_t img = (uintptr_t)GetModuleHandleW(nullptr);
-    for (size_t i = 0; i < q.size() && written < 60000; ++i) {
-        const Item it = q[i];
-        buf.assign(it.size, 0);
-        if (!camRead((const void *)it.p, buf.data(), it.size)) {
-            if (it.size <= 0x100 || !camRead((const void *)it.p, buf.data(), 0x100)) continue;
-            buf.resize(0x100);
-        }
-        const uint32_t head[3] = {(uint32_t)it.p, (uint32_t)buf.size(), it.depth};
-        fwrite(head, 4, 3, f);
-        fwrite(buf.data(), 1, buf.size(), f);
-        ++written;
-        uint32_t vt0;
-        memcpy(&vt0, buf.data(), 4);
-        const bool cls = vt0 >= img && vt0 < img + GM_KNOWN.image; // an object of one of the game's classes
-        if (it.depth >= 4 || (it.depth >= 2 && !cls)) continue;
-        for (size_t o = 0; o + 4 <= buf.size(); o += 4) {
-            uint32_t v;
-            memcpy(&v, buf.data() + o, 4);
-            if (v < 0x10000 || v >= 0x7fff0000 || (v & 3) || !seen.insert(v).second) continue;
-            q.push_back({v, 0x400, it.depth + 1});
-        }
-    }
-    fclose(f);
-    logf("cam: DUMP %ls at frame %u - vehicle %p, camera %p, %u records", name, g_frame, (void *)veh, cam,
-         (unsigned)written);
-}
-
-// (A trial, [vr] arms_own=1.) Every object of the player's mech - the vehicle and what hangs on it, some seventy
-// objects of the game's own classes - has a word at +0x158 that is 2 while the pilot looks ahead from the seat and
-// 0x20 while they glance to a side; and the game draws the mech only then (found by comparing the memory of both
-// states). Here the word is set to 0x20 before the camera is drawn, in every frame the pilot sits in the mech: the
-// mech's own parts are drawn without a glance - the arms where they are, moving as the game moves them.
-enum { OWN_STATE = 0x158, OWN_SEAT = 2, OWN_SEEN = 0x20, OWN_MAX = 1200 };
-// Beside them: small objects of one class (0x78c638), one for a part each, with the same word at +0x30 and the part
-// they belong to at +0x34. They lie elsewhere in the heap and nothing found here points to them - so the heap is
-// searched for them, once when the pilot sits down.
-enum : uint32_t { OWN_LINK_CLASS = 0x78c638, OWN_LINK_STATE = 0x30, OWN_LINK_OWNER = 0x34, OWN_LINK_MAX = 8192 };
-static uintptr_t g_ownLink[OWN_LINK_MAX];
-static int g_ownLinkN;
-// every place in a block of memory where such an object begins
-static void camOwnScan(const uint8_t *base, size_t size) {
-    __try {
-        for (size_t o = 0; o + 0x44 <= size && g_ownLinkN < OWN_LINK_MAX; o += 4)
-            if (*(const uint32_t *)(base + o) == OWN_LINK_CLASS) g_ownLink[g_ownLinkN++] = (uintptr_t)(base + o);
-    } __except (EXCEPTION_EXECUTE_HANDLER) {}
-}
-static uintptr_t g_ownList[OWN_MAX];
-static int g_ownN;
-static uintptr_t camPlayerVehicle() {
-    uint32_t refp = 0, ref = 0, key = 0, hold = 0, v = 0;
-    if (camRead((const void *)GM_PLAYER_REF, &refp, 4) && refp && camRead((const void *)(uintptr_t)refp, &ref, 4) &&
-        camRead((const void *)GM_PLAYER_KEY, &key, 4) && (key ^ ref) &&
-        camRead((const void *)(uintptr_t)((key ^ ref) + PL_HOLDER), &hold, 4) && (hold ^ GM_PLAYER_XOR) >= 0x10000 &&
-        camRead((const void *)(uintptr_t)((hold ^ GM_PLAYER_XOR) + PL_VEHICLE), &v, 4))
-        return v;
-    return 0;
-}
-// an object of one of the game's classes (its first word points into the game's image) with the state word
-static bool camOwnIs(uintptr_t p, uint32_t *state) {
-    uint32_t vt = 0;
-    const uintptr_t img = (uintptr_t)GetModuleHandleW(nullptr);
-    return camRead((const void *)p, &vt, 4) && vt >= img && vt < img + GM_KNOWN.image &&
-           camRead((const void *)(p + OWN_STATE), state, 4) && (*state == OWN_SEAT || *state == OWN_SEEN);
-}
-static void camOwnCollect() {
-    g_ownN = 0;
-    const uintptr_t veh = camPlayerVehicle();
-    uint32_t st = 0;
-    if (veh < 0x10000 || !camOwnIs(veh, &st)) return;
-    std::unordered_set<uintptr_t> seen{veh}, parts;
-    std::vector<std::pair<uintptr_t, int>> q{{veh, 0}};
-    std::vector<uint8_t> buf;
-    for (size_t i = 0; i < q.size() && q.size() < 150000; ++i) {
-        const uintptr_t p = q[i].first;
-        const int depth = q[i].second;
-        const bool own = camOwnIs(p, &st);
-        if (own && g_ownN < OWN_MAX) g_ownList[g_ownN++] = p + OWN_STATE, parts.insert(p);
-        if (depth >= 3 || (depth == 2 && !own))
-            continue; // (the mech's parts hang two steps below the vehicle, in lists of other objects)
-        buf.assign(depth ? 0x400 : 0x1000, 0);
-        if (!camRead((const void *)p, buf.data(), buf.size())) continue;
-        for (size_t o = 0; o + 4 <= buf.size(); o += 4) {
-            uint32_t v;
-            memcpy(&v, buf.data() + o, 4);
-            if (v < 0x10000 || v >= 0x7fff0000 || (v & 3) || !seen.insert(v).second) continue;
-            q.push_back({v, depth + 1});
-        }
-    }
-    const int ownParts = g_ownN;
-    g_ownLinkN = 0;
-    MEMORY_BASIC_INFORMATION mi;
-    for (uintptr_t a = 0x10000; a < 0x7fff0000 && VirtualQuery((const void *)a, &mi, sizeof mi) == sizeof mi;
-         a = (uintptr_t)mi.BaseAddress + mi.RegionSize) {
-        if (mi.State == MEM_COMMIT && mi.Type == MEM_PRIVATE && mi.Protect == PAGE_READWRITE &&
-            mi.RegionSize <= (256u << 20))
-            camOwnScan((const uint8_t *)mi.BaseAddress, mi.RegionSize);
-    }
-    for (int i = 0; i < g_ownLinkN && g_ownN < OWN_MAX; ++i) {
-        uint32_t owner = 0, stw = 0;
-        if (camRead((const void *)(g_ownLink[i] + OWN_LINK_OWNER), &owner, 4) && parts.count(owner) &&
-            camRead((const void *)(g_ownLink[i] + OWN_LINK_STATE), &stw, 4) && (stw == OWN_SEAT || stw == OWN_SEEN))
-            g_ownList[g_ownN++] = g_ownLink[i] + OWN_LINK_STATE;
-    }
-    logf("cam: the player's mech - %d parts, %d of %d link objects are theirs", ownParts, g_ownN - ownParts,
-         g_ownLinkN);
-}
-// (two more words change with a glance: +0x1e4 of the one object of class 0x7a339c, and +0x2e8 of the object the
-// vehicle points to at +0x3b8 - tried one by one, bits 2 and 4 of arms_own)
-static int camOwnSet(int want) {
-    int n = 0;
-    if (want & 4) {
-        __try {
-            const uintptr_t veh = g_ownN ? g_ownList[0] - OWN_STATE : 0;
-            uint32_t *o = veh ? *(uint32_t **)(veh + 0x3b8) : nullptr;
-            if (o && o[0x2e8 / 4] == 0) o[0x2e8 / 4] = 1;
-        } __except (EXCEPTION_EXECUTE_HANDLER) {}
-    }
-    for (int i = 0; i < g_ownN; ++i) {
-        __try {
-            uint32_t *s = (uint32_t *)g_ownList[i];
-            if (*s == OWN_SEAT) *s = OWN_SEEN, ++n;
-        } __except (EXCEPTION_EXECUTE_HANDLER) {
-            g_ownList[i] = g_ownList[--g_ownN];
-            --i;
-        }
-    }
-    return n;
-}
-static void camOwn() {
-    static int want = -1;
-    if (want < 0) want = GetPrivateProfileIntW(L"vr", L"arms_own", 0, (g_dir + L"mw4vr.ini").c_str());
-    static unsigned at = ~0u, listAt = ~0u;
-    if (!want || at == g_frame) return;
-    at = g_frame;
-    if (!g_mechSeated || g_mechSeat.outside || g_menuMode) {
-        g_ownN = 0, listAt = ~0u;
-        return;
-    }
-    if (listAt == ~0u || g_frame - listAt >= 1800) {
-        const int was = g_ownN;
-        camOwnCollect();
-        if (listAt == ~0u || was != g_ownN)
-            logf("cam: frame %u - %d objects of the player's mech are told to be drawn from the seat", g_frame, g_ownN);
-        listAt = g_frame;
-    }
-    const int n = camOwnSet(want);
-    static int told;
-    if (told < 6 && n)
-        ++told, logf("cam: frame %u - %d of them were set back by the game since the frame before", g_frame, n);
-}
-
 static void camPreEye(uint8_t *cam, int eyeOv) {
     InterlockedIncrement(&g_statCamCalls);
     {
@@ -652,8 +357,6 @@ static void camPreEye(uint8_t *cam, int eyeOv) {
     }
     if (!cam || !camIsMain(cam)) return;
     if (eyeOv <= 0) camDump(cam);
-    if (eyeOv <= 0) camMemDump(cam);
-    if (eyeOv <= 0) camOwn();
     float *m = (float *)(cam + EL_WORLD);
     // the game's own matrix: what is there, unless it is still what we wrote last time
     float base[12];
@@ -664,13 +367,7 @@ static void camPreEye(uint8_t *cam, int eyeOv) {
         camLocalBase(cam, base);
     } __except (EXCEPTION_EXECUTE_HANDLER) {}
     g_camMain = cam;
-    // (base stays the game's own matrix - it is what is put back after the Draw, and what the game's frustum
-    // planes were made from; seat is what the eyes see from)
-    float seat[12];
-    memcpy(seat, base, sizeof seat);
-    camGlance(seat);
-    memcpy(g_camSeat, seat, sizeof seat);
-    memcpy(g_camLast, seat, sizeof seat);
+    memcpy(g_camLast, base, sizeof base);
     g_camLastFrame = g_frame;
     __try { // the scene graph above the camera: parent at +0x10, matrix at +0x80
         int n = 0;
@@ -694,7 +391,7 @@ static void camPreEye(uint8_t *cam, int eyeOv) {
     }
     const float *A = g_camA, *t = g_vrT[eye];
     float out[12], Rc[9], tc[3];
-    camEyeMatrix(seat, eye, out, Rc, tc);
+    camEyeMatrix(base, eye, out, Rc, tc);
     if (g_camLocal > 0 && eyeOv <= 0) { // once per frame: the middle between the eyes, for the game's next update
         float tm[3], tcm[3];
         bool two = g_vrPoseOk[0] && g_vrPoseOk[1];
@@ -710,7 +407,7 @@ static void camPreEye(uint8_t *cam, int eyeOv) {
     memcpy(g_camBase, base, sizeof base);
     g_camEye = eye;
     g_camEyeFrame = g_frame;
-    memcpy(g_camEyeBase[eye], seat, sizeof seat);
+    memcpy(g_camEyeBase[eye], base, sizeof base);
     g_camEyeBaseOk[eye] = true;
     InterlockedIncrement(&g_statCamMoves);
 }
@@ -799,7 +496,7 @@ static int __cdecl camDraw(uint8_t *cam, void *edxv, void *arg) {
         LONG before = g_tonemapCount;
         if (e == 1 && replay) {
             // not drawn by the game: its picture is in the twin of the frame's texture
-            memcpy(g_camEyeBase[1], g_camSeat, sizeof g_camSeat);
+            memcpy(g_camEyeBase[1], g_camBase, sizeof g_camBase);
             g_camEyeBaseOk[1] = true;
             g_camEye = 1;
             PerfScope perf(PF_GRAB);
@@ -815,7 +512,7 @@ static int __cdecl camDraw(uint8_t *cam, void *edxv, void *arg) {
             g_camPassEye = e;
             if (e == 0 && (rpWanted() || g_rpMode == RP_COMPARE)) {
                 float c1[12], Rc[9], tc[3], k1[16];
-                camEyeMatrix(g_camSeat, 1, c1, Rc, tc);
+                camEyeMatrix(g_camBase, 1, c1, Rc, tc);
                 g_kEyeOverride = 1;
                 buildK();
                 memcpy(k1, g_K, sizeof k1);

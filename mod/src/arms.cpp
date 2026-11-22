@@ -327,7 +327,8 @@ static void armCapture(ID3D11DeviceContext *c, UINT count, UINT start, INT baseV
     const UINT isz = iFmt == DXGI_FORMAT_R16_UINT ? 2u : iFmt == DXGI_FORMAT_R32_UINT ? 4u : 0u;
     const std::vector<uint8_t> *vd = vb ? armBuf(c, vb) : nullptr, *id = ib ? armBuf(c, ib) : nullptr;
     std::string key((const char *)W, sizeof W);
-    key.append((const char *)&vb, sizeof vb).append((const char *)&ib, sizeof ib);
+    const uintptr_t bufs[2] = {(uintptr_t)vb, (uintptr_t)ib}; // which buffers: their addresses
+    key.append((const char *)bufs, sizeof bufs);
     key.append((const char *)&start, sizeof start).append((const char *)&count, sizeof count);
     key.append((const char *)&baseV, sizeof baseV);
     const bool usable = L.pos >= 0 && isz && vd && id && stride >= 12 && count >= 3 && count <= 600000 &&
@@ -545,7 +546,7 @@ static float armsFeet(FILE *f, uint32_t n) {
             h[1] > 600000)
             break;
         if (h[0] >= 8) feet = min(feet, 0.5f * (lo[1] + hi[1]));
-        if (fseek(f, (long)(h[0] * 32 + h[1] * 4), SEEK_CUR)) break;
+        if (fseek(f, (long)h[0] * 32 + (long)h[1] * 4, SEEK_CUR)) break;
     }
     fseek(f, at, SEEK_SET);
     return feet;
