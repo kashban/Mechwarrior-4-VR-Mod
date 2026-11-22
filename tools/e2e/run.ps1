@@ -30,6 +30,7 @@ param(
     [ValidateSet('steamvr-null', 'active')][string]$Runtime = 'steamvr-null',
     [int]$Seconds = 62,
     [string]$Yaw = '7:0 10:45 14:45 17:0',
+    [string]$Pitch = '',
     [string]$Shots = '1 19.2 26 35 43 46',
     [string]$Keys = '19:LMB:0.4 20.5:LMB:0.4 23:W:5 33:V:0.1 37:V:0.1 37.5:V:0.1 38:V:0.1 42:ESC:0.1 43.5:MOVE:0.5,0.459 44:LMB:0.15 48:MOVE:0.835,0.767 48.5:LMB:0.15 51:ESC:0.1 53.5:CTRL:0.6 53.7:F7:0.1 55:CTRL:0.6 55.2:F11:0.1 58:CTRL:0.6 58.2:F11:0.1',
     [string]$Walk = '23:31',
@@ -98,7 +99,7 @@ try {
     Copy-Item $new $dll -Force
     Remove-Item $csv -ErrorAction SilentlyContinue
     $plan = Join-Path $out 'plan.ini'
-    $planLines = @('[e2e]', "yaw=$Yaw", "shots=$Shots", "keys=$Keys")
+    $planLines = @('[e2e]', "yaw=$Yaw", "pitch=$Pitch", "shots=$Shots", "keys=$Keys")
     if ($Perf) { $planLines += $(if ($Samples) { 'perf=2' } else { 'perf=1' }) }
     Set-Content $plan -Value $planLines -Encoding ASCII
     $perfCsv = Join-Path $Game 'mw4vr_perf.csv'

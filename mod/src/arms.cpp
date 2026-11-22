@@ -14,6 +14,8 @@ int g_armN;
 volatile bool g_armsOn, g_armsWant;
 static float g_armsSide = 1.2f;   // a part is drawn when its middle lies this far (m) to the side of the eye
 static float g_armsLow = -2.5f;   // and not lower than this (m): the legs move, and that is not known here
+static float g_armsDeep = 0.45f;  // lower than that, down to this share of the way to the feet, a part is an arm
+static float g_armsWide = 2.4f;   // only if it is this far out (m) - or long and slim like a barrel; the rest are legs
 static float g_armsAbove = 0.8f;  // or its middle lies this far (m) above the eye: a weapon on the mech's back
 static float g_armsNear = 1.3f;   // not a part nearer to the eye than this (m): it would stand inside the cockpit
 static bool g_armsAll;            // (diagnosis) every part that does not hold the eye
@@ -531,6 +533,24 @@ static ID3D11ShaderResourceView *armsTexture(const uint8_t *top, UINT size) {
     return v;
 }
 
+// How far under the eye the mech's feet are (m, negative): the lowest middle of its parts. Leaves the file where
+// it was.
+static float armsFeet(FILE *f, uint32_t n) {
+    const long at = ftell(f);
+    float feet = 0;
+    for (uint32_t i = 0; i < n; ++i) {
+        uint32_t h[3] = {};
+        float lo[3], hi[3];
+        if (fread(h, 4, 3, f) != 3 || fread(lo, 4, 3, f) != 3 || fread(hi, 4, 3, f) != 3 || h[0] > 600000 ||
+            h[1] > 600000)
+            break;
+        if (h[0] >= 8) feet = min(feet, 0.5f * (lo[1] + hi[1]));
+        if (fseek(f, (long)(h[0] * 32 + h[1] * 4), SEEK_CUR)) break;
+    }
+    fseek(f, at, SEEK_SET);
+    return feet;
+}
+
 // false: no file for this mech (or one that cannot be read)
 static bool armsLoad() {
     armsFree();
@@ -554,6 +574,7 @@ static bool armsLoad() {
             tex.push_back(ok ? armsTexture(px.data(), size) : nullptr);
         }
         bool plainUsed = false;
+        const float feet = ok ? armsFeet(f, head[0]) : 0;
         for (uint32_t i = 0; i < head[0] && ok; ++i) {
             uint32_t h[3] = {};
             float lo[3], hi[3];
@@ -575,7 +596,11 @@ static bool armsLoad() {
                 const float dk = lo[k] > 0 ? lo[k] : hi[k] < 0 ? -hi[k] : 0;
                 near2 += dk * dk;
             }
-            const bool beside = fabsf(cx) >= g_armsSide && cy >= g_armsLow, above = cy >= g_armsAbove;
+            // under the usual height the legs begin: there a part is an arm only far out, or long and slim
+            const float len = hi[2] - lo[2];
+            const bool low = cy < g_armsLow && cy >= min(g_armsLow, g_armsDeep * feet) &&
+                             (fabsf(cx) >= g_armsWide || (len >= 2.5f && len >= 2 * (hi[1] - lo[1])));
+            const bool beside = fabsf(cx) >= g_armsSide && (cy >= g_armsLow || low), above = cy >= g_armsAbove;
             const bool take = !holds && g_armN < ARMS_MAX && h[0] >= 8 &&
                               (g_armsAll || ((beside || above) && near2 >= g_armsNear * g_armsNear));
             logf("arms:   part %2u - %6u vertices, %6u triangles, middle %6.2f right %6.2f up %6.2f ahead, %.1f x "
@@ -643,6 +668,8 @@ void armsOnPresent() {
         g_armsAll = GetPrivateProfileIntW(L"vr", L"arms_all", 0, ini.c_str()) != 0;
         if (GetPrivateProfileStringW(L"vr", L"arms_side", L"", b, 32, ini.c_str())) g_armsSide = (float)_wtof(b);
         if (GetPrivateProfileStringW(L"vr", L"arms_low", L"", b, 32, ini.c_str())) g_armsLow = (float)_wtof(b);
+        if (GetPrivateProfileStringW(L"vr", L"arms_deep", L"", b, 32, ini.c_str())) g_armsDeep = (float)_wtof(b);
+        if (GetPrivateProfileStringW(L"vr", L"arms_wide", L"", b, 32, ini.c_str())) g_armsWide = (float)_wtof(b);
         if (GetPrivateProfileStringW(L"vr", L"arms_swing", L"", b, 32, ini.c_str())) g_armsSwing = (float)_wtof(b);
         if (GetPrivateProfileStringW(L"vr", L"arms_above", L"", b, 32, ini.c_str())) g_armsAbove = (float)_wtof(b);
         if (GetPrivateProfileStringW(L"vr", L"arms_near", L"", b, 32, ini.c_str())) g_armsNear = (float)_wtof(b);
