@@ -6,6 +6,8 @@ extern volatile bool g_swayOn; // [vr] hud_sway=1
 extern float g_swayGain;
 extern float g_swayR[9], g_swayT[3];
 extern volatile bool g_swayValid;
+extern float g_swayShapeW[12]; // the game's cockpit -> world, as the game handed it on last
+extern unsigned g_swayShapeWFrame;
 void swayOrtho(float *R);
 void swayHookInstall();
 // the cockpit's step against the camera since the frame before, from its place in the world (sway.cpp)

@@ -75,6 +75,7 @@ void onPresent(IDXGISwapChain *sc) {
         mouseCapture();
         camKeepKey();
         mw5OnPresent();
+        armsOnPresent();
         shotKeys();
         bool inBattle = g_vr.ok && g_hudLayerOn && g_srcCamActive && g_camEyeFrame != ~0u &&
                         g_frame - g_camEyeFrame < 30 && !g_menuMode;

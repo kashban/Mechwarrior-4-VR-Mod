@@ -25,7 +25,8 @@
 extern "C" {
 extern const int VT_Dev_CreateBuffer, VT_Dev_CreateVertexShader, VT_Dev_CreatePixelShader, VT_Dev_CreateComputeShader,
     VT_Dev_CreateGeometryShader, VT_Dev_CreateHullShader, VT_Dev_CreateDomainShader, VT_Dev_CreateDeferredContext,
-    VT_Dev_CreateDeferredContext1, VT_Dev_CreateDeferredContext2, VT_Dev_CreateDeferredContext3;
+    VT_Dev_CreateDeferredContext1, VT_Dev_CreateDeferredContext2, VT_Dev_CreateDeferredContext3,
+    VT_Dev_CreateInputLayout;
 extern const int VT_Ctx_VSSetConstantBuffers, VT_Ctx_PSSetConstantBuffers, VT_Ctx_CSSetConstantBuffers,
     VT_Ctx_VSSetConstantBuffers1, VT_Ctx_PSSetConstantBuffers1, VT_Ctx_CSSetConstantBuffers1, VT_Ctx_VSSetShader,
     VT_Ctx_VSSetShaderResources, VT_Ctx_PSSetShader, VT_Ctx_CSSetShader, VT_Ctx_Draw, VT_Ctx_DrawIndexed,

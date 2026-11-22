@@ -1242,9 +1242,16 @@ struct M5Seq {
     int vpW, ours; // ours: 1 - our cockpit was drawn at this draw
 };
 void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw, int ckTris) {
-    const bool gameCockpit = ckTris >= 10;
     int e = g_camPassEye;
     if (e < 0 || e > 1 || !g_camInMain || !g_kTlOnly || mw5Waiting()) return;
+    // Ten triangles of the game's cockpit make a draw one of its cockpit's. While it was seen in the frames before, a
+    // few do: a small cockpit (the Marauder II's has some thirty) is cut down to less by the picture's edge as the
+    // head moves, and ours went with it.
+    static unsigned ckFrame[2] = {~0u, ~0u}; // the frame the game's cockpit was last drawn in for this eye
+    const bool expected = ckFrame[e] != ~0u && g_frame - ckFrame[e] <= 2;
+    // (or the game handed its cockpit's shape to its renderer in this frame, sway.cpp)
+    const bool gameCockpit = ckTris >= (expected || g_swayShapeWFrame == g_frame ? (int)MC_FEW_COCKPIT_TRIS : 10);
+    if (gameCockpit && e == 0) armsSeatFrame();
     // A pass that went by without our cockpit (one eye bright for a frame): told with what its draws were.
     static unsigned trFrame[2] = {~0u, ~0u};
     static int trDraws[2], trCk[2][8];
@@ -1304,11 +1311,10 @@ void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw, int ckTris) {
     // CPU-path draw as a rule - the log of a test.) The first CPU-path draw only while no cockpit of the game's
     // was seen in the frames before.
     {
-        static unsigned ckFrame[2] = {~0u, ~0u}, ordFrame[2] = {~0u, ~0u};
+        static unsigned ordFrame[2] = {~0u, ~0u};
         static int ord[2];
         if (ordFrame[e] != g_frame) ordFrame[e] = g_frame, ord[e] = 0;
         ++ord[e];
-        bool expected = ckFrame[e] != ~0u && g_frame - ckFrame[e] <= 2;
         if (gameCockpit) {
             static int told;
             if (ckFrame[e] != g_frame && told < 6) {
@@ -1516,6 +1522,42 @@ void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw, int ckTris) {
             if (scr) {
                 cb[27] = 0;
                 put();
+            }
+        }
+        // The mech's own arms and weapon pods (arms.cpp): shapes in the game camera's space, at the world's scale
+        // and at the world's depth - what the world draws later (a shot's beam) lies before or behind them rightly.
+        // They go with the cockpit's sway; the monitors' glow does not reach them.
+        if (g_armsOn && g_armN) {
+            float ob[3];
+            for (int i = 0; i < 3; ++i) ob[i] = d[i] - T[i];
+            for (int i = 0; i < 3; ++i) {
+                for (int j = 0; j < 3; ++j)
+                    cb[i * 4 + j] =
+                        R[0 * 3 + i] * D[0 * 3 + j] + R[1 * 3 + i] * D[1 * 3 + j] + R[2 * 3 + i] * D[2 * 3 + j];
+                cb[i * 4 + 3] = R[0 * 3 + i] * ob[0] + R[1 * 3 + i] * ob[1] + R[2 * 3 + i] * ob[2];
+            }
+            mcEyeInMesh(cb, 1, cb + 52);
+            cb[18] = g_near, cb[23] = 0, cb[27] = 0, cb[55] = 0;
+            for (int i = 0; i < 8; ++i) cb[92 + i * 4 + 3] = 0;
+            const float m3[3] = {cb[3], cb[7], cb[11]};
+            const float sw = armsSwing();
+            if (put()) {
+                int shifted = 0;
+                for (int i = 0; i < g_armN; ++i) {
+                    const ArmPart &a = g_arm[i];
+                    if (a.swing != shifted) { // (an arm ahead of or behind its place: along the mesh's forward axis)
+                        shifted = a.swing;
+                        for (int r = 0; r < 3; ++r) cb[r * 4 + 3] = m3[r] + cb[r * 4 + 2] * sw * (float)shifted;
+                        mcEyeInMesh(cb, 1, cb + 52);
+                        if (!put()) continue;
+                    }
+                    UINT stride = 32, off = 0;
+                    c->IASetVertexBuffers(0, 1, &a.vb, &stride, &off);
+                    c->IASetIndexBuffer(a.ib, DXGI_FORMAT_R32_UINT, 0);
+                    ID3D11ShaderResourceView *sv[4] = {a.clr, nullptr, nullptr, g_m5Detail};
+                    c->PSSetShaderResources(0, 4, sv);
+                    draw(c, a.nIdx, 0, 0);
+                }
             }
         }
     }

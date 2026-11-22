@@ -64,6 +64,7 @@ log, the shaders' table, the contexts' table) has a mutex. The build optimises a
 | `hud` | The HUD pass drawn into a texture of our own; the eyes' textures. |
 | `vr` | OpenXR: the session, the swap chains, the layers of a frame, the settings in `mw4vr.ini`, the hot keys for seat and sizes. |
 | `mw5` | A cockpit mesh of our own (`.mwc`): loading, drawing, its monitors, the HUD's parts on its glass, the hot keys that place them. |
+| `arms` | `[vr] arms=1`: the player's own mech beside the cockpit. Its parts are read once from the picture seen from outside (the parts' constant buffer and vertex buffers), kept in `mw4vr_arms\<mech>.mwa`, and those beside or above the seat are drawn with the cockpit; the arms go forth and back with the sway's steps. |
 | `cross` | The cross-hair taken out of the HUD's picture by its colour, as a layer of its own. |
 | `sway`, `note`, `help`, `shot` | The sway's values for its users, and the cockpit's place read where the game hands its cockpit to its renderer; a line of text in the headset; the page of keys (Ctrl+F1); pictures for diagnosis (Ctrl+F12). |
 | `e2e` | The test mode for the end-to-end test: only with `MW4VR_E2E` set, plays a plan of keys and records every frame. |

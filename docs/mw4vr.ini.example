@@ -125,6 +125,23 @@ mw5_reflect=0.5
 ; painted metal of mod cockpits: the patches, worn paint and gloss (0: plain colours .. 1); how much paint is worn off (0..1)
 mw5_paint=1
 mw5_paint_wear=0.5
+; the mech's own arms and weapons beside and above the cockpit (0: off). Its parts are read once, the first time
+; the mech is looked at from outside (V), and kept in mw4vr_arms\<mech>.mwa
+arms=1
+; how far (m) the arms go forth and back with the mech's steps (0: not)
+arms_swing=0.25
+; mechs whose arms have no joints and stay put (their names as in mw4vr_arms, with commas)
+arms_rigid=urbanmech,urbanmech_iic,rifleman,catapult,catapultk2,jenner2c,locust2c,raven,stalker,madcat_mkii
+; which parts are drawn: a part's middle at least arms_side m to the side and not lower than arms_low m, or at
+; least arms_above m over the eye; lower down, to arms_deep of the way to the feet, only a part arms_wide m out
+; or long and slim; nothing nearer to the eye than arms_near m. arms_all=1: every part
+arms_side=1.2
+arms_low=-2.5
+arms_deep=0.45
+arms_wide=2.4
+arms_above=0.8
+arms_near=1.3
+arms_all=0
 mw5_linear_output=1
 mw5_reversed_depth=1
 ; share of the depth range kept for the cockpit alone (0.9 .. 0.98): the ground and the mech's own hull cannot

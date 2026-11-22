@@ -13,6 +13,8 @@ float g_swayGain = 1.0f;
 // the sway (view space: x right, y up, z forward; game metres): p' = R p + T
 float g_swayR[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1}, g_swayT[3];
 volatile bool g_swayValid;
+float g_swayShapeW[12]; // the game's cockpit -> world, as the game handed it on last (cam.cpp, the glance)
+unsigned g_swayShapeWFrame = ~0u;
 
 void swayOrtho(float *R) { // Gram-Schmidt on the rows
     float *a = R, *b = R + 3, *c = R + 6;
@@ -59,6 +61,8 @@ static void __stdcall swayShape(const uint8_t *info) {
     float dx = m[3] - b[3], dy = m[7] - b[7], dz = m[11] - b[11];
     if (!(dx * dx + dy * dy + dz * dz < GM_COCKPIT_REACH * GM_COCKPIT_REACH)) return;
     InterlockedIncrement(&g_swayShapesNear);
+    memcpy(g_swayShapeW, m, sizeof m);
+    g_swayShapeWFrame = g_frame;
     memcpy(g_swayPose[1], g_swayPose[0], sizeof g_swayPose[0]);
     g_swayPoseFrame[1] = g_swayPoseFrame[0];
     mcShapeInView(b, g_camA, m, g_swayPose[0]);

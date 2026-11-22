@@ -19,6 +19,7 @@
 #include "e2e.h"
 #include "hooks.h"
 #include "vr.h"
+#include "arms.h"
 #include "mw5.h"
 #include "draws.h"
 #include "replay.h"

@@ -10,8 +10,8 @@
 // The plan, an .ini:   [e2e]  yaw=2:0 6:45 10:45 14:0     seconds:degrees to the right, straight lines between
 //                             shots=5 12                  seconds
 //                             keys=13:LMB:0.3 18:W:5      seconds:key:seconds held - a letter or digit, ESC, SPACE,
-//                                                         ENTER, TAB, F1..F12, CTRL, ALT, SHIFT, LMB / RMB (the
-//                                                         mouse's buttons)
+//                                                         ENTER, TAB, F1..F12, LEFT, RIGHT, UP, DOWN, CTRL, ALT, SHIFT,
+//                                                         LMB / RMB (the mouse's buttons)
 //                                  43:MOVE:0.5,0.47       the mouse's pointer to this place of the picture (parts of
 //                                                         its width and height), for a click in a menu
 // Seconds count from the frame the camera first sits in the mech. Without MW4VR_E2E none of this does anything.
@@ -23,6 +23,7 @@ static int g_e2ePerf; // the plan asks for the frames' times (perf.cpp), not for
 static FILE *g_e2eCsv;
 static ULONGLONG g_e2eStart, g_e2eSeat; // ticks: the first frame, the first frame in the mech (0: not yet)
 std::vector<std::pair<float, float>> g_e2eYaw;
+std::vector<std::pair<float, float>> g_e2ePitch;
 static std::vector<float> g_e2eShots;
 static size_t g_e2eShotNext;
 struct E2eKey {
@@ -46,6 +47,10 @@ static int e2eVk(const wchar_t *s, size_t n) {
     if (n == 4 && !_wcsnicmp(s, L"CTRL", 4)) return VK_CONTROL; // (held over another key's time: Ctrl+F11)
     if (n == 3 && !_wcsnicmp(s, L"ALT", 3)) return VK_MENU;
     if (n == 5 && !_wcsnicmp(s, L"SHIFT", 5)) return VK_SHIFT;
+    if (n == 4 && !_wcsnicmp(s, L"LEFT", 4)) return VK_LEFT;
+    if (n == 5 && !_wcsnicmp(s, L"RIGHT", 5)) return VK_RIGHT;
+    if (n == 2 && !_wcsnicmp(s, L"UP", 2)) return VK_UP;
+    if (n == 4 && !_wcsnicmp(s, L"DOWN", 4)) return VK_DOWN;
     if (n == 3 && !_wcsnicmp(s, L"LMB", 3)) return -1;
     if (n == 3 && !_wcsnicmp(s, L"RMB", 3)) return -2;
     if (n == 4 && !_wcsnicmp(s, L"MOVE", 4)) return -3;
@@ -84,6 +89,8 @@ static void e2eSend(const E2eKey &k, bool down) {
         in.type = INPUT_KEYBOARD;
         in.ki.wScan = (WORD)MapVirtualKeyW((UINT)k.vk, MAPVK_VK_TO_VSC);
         in.ki.dwFlags = KEYEVENTF_SCANCODE | (down ? 0 : KEYEVENTF_KEYUP);
+        // (the arrow keys share their scan codes with the number pad's: the extended flag tells them apart)
+        if (k.vk >= VK_LEFT && k.vk <= VK_DOWN) in.ki.dwFlags |= KEYEVENTF_EXTENDEDKEY;
     }
     UINT sent = SendInput(1, &in, sizeof in);
     logf("e2e: %s %s at %.2f s%s", k.name, down ? "down" : "up",
@@ -101,16 +108,18 @@ static void e2eInit() {
     // perf=1: the frames' times are recorded (perf.cpp) and the eyes' pictures are not read back for their colours -
     // reading them makes the graphics card wait
     g_e2ePerf = GetPrivateProfileIntW(L"e2e", L"perf", 0, plan); // (2: with the sampler)
-    GetPrivateProfileStringW(L"e2e", L"yaw", L"", b, 512, plan);
-    for (const wchar_t *p = b; *p;) {
-        wchar_t *end;
-        float t = wcstof(p, &end);
-        if (end == p || *end != L':') break;
-        p = end + 1;
-        float deg = wcstof(p, &end);
-        if (end == p) break;
-        g_e2eYaw.push_back({t, deg});
-        p = end;
+    for (int k = 0; k < 2; ++k) { // yaw=, and pitch= (degrees downwards) written the same way
+        GetPrivateProfileStringW(L"e2e", k ? L"pitch" : L"yaw", L"", b, 512, plan);
+        for (const wchar_t *p = b; *p;) {
+            wchar_t *end;
+            float t = wcstof(p, &end);
+            if (end == p || *end != L':') break;
+            p = end + 1;
+            float deg = wcstof(p, &end);
+            if (end == p) break;
+            (k ? g_e2ePitch : g_e2eYaw).push_back({t, deg});
+            p = end;
+        }
     }
     GetPrivateProfileStringW(L"e2e", L"shots", L"", b, 512, plan);
     for (const wchar_t *p = b; *p;) {
@@ -164,20 +173,26 @@ static void e2eInit() {
 // seconds since the camera first sat in the mech; below 0: not yet
 float e2eTime() { return g_e2eSeat ? (float)(GetTickCount64() - g_e2eSeat) / 1000.0f : -1.0f; }
 
-// the head's turn to the right the plan asks for now, in degrees
-float e2eYawNow() {
+// what a plan of seconds:degrees asks for now, straight lines between
+static float e2ePlanNow(const std::vector<std::pair<float, float>> &plan) {
     e2eInit();
-    if (!g_e2eOn || g_e2eYaw.empty()) return 0;
+    if (!g_e2eOn || plan.empty()) return 0;
     float t = e2eTime();
-    if (t <= g_e2eYaw.front().first) return t < 0 ? 0 : g_e2eYaw.front().second;
-    for (size_t i = 1; i < g_e2eYaw.size(); ++i) {
-        const auto &a = g_e2eYaw[i - 1], &b = g_e2eYaw[i];
+    if (t <= plan.front().first) return t < 0 ? 0 : plan.front().second;
+    for (size_t i = 1; i < plan.size(); ++i) {
+        const auto &a = plan[i - 1], &b = plan[i];
         if (t <= b.first)
             return b.first > a.first ? a.second + (b.second - a.second) * (t - a.first) / (b.first - a.first)
                                      : b.second;
     }
-    return g_e2eYaw.back().second;
+    return plan.back().second;
 }
+
+// the head's turn to the right the plan asks for now, in degrees
+float e2eYawNow() { return e2ePlanNow(g_e2eYaw); }
+
+// and its nod downwards
+float e2ePitchNow() { return e2ePlanNow(g_e2ePitch); }
 
 // once for every picture the game presents (a paused battle's menu too): the plan's keys go down and up
 void e2eKeysStep() {

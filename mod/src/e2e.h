@@ -8,6 +8,7 @@ extern std::vector<std::pair<float, float>> g_e2eYaw;
 float e2eTime();
 // the head's turn to the right the plan asks for now, in degrees
 float e2eYawNow();
+float e2ePitchNow();
 // once for every picture the game presents (a paused battle's menu too): the plan's keys go down and up
 void e2eKeysStep();
 // once for every frame with both eyes, before shot.cpp's pictures are taken - and for every flat picture of a menu's

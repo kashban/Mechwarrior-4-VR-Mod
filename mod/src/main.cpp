@@ -310,6 +310,7 @@ int hookContext(ID3D11DeviceContext *ctx, bool deferred, bool repair) {
 static void hookDevice(ID3D11Device *dev) {
     patch(dev, VT_Dev_CreateBuffer, (void *)H_CreateBuffer);
     patch(dev, VT_Dev_CreateVertexShader, (void *)H_CreateVertexShader);
+    patch(dev, VT_Dev_CreateInputLayout, (void *)H_CreateInputLayout);
     patch(dev, VT_Dev_CreatePixelShader, (void *)H_CreatePixelShader);
     patch(dev, VT_Dev_CreateComputeShader, (void *)H_CreateComputeShader);
     patch(dev, VT_Dev_CreateGeometryShader, (void *)H_CreateGeometryShader);
@@ -667,7 +668,7 @@ BOOL WINAPI DllMain(HINSTANCE h, DWORD reason, LPVOID) {
         if (g_dbg) g_shlog = _wfsopen((g_dir + L"mw4vr_shaders.txt").c_str(), L"w", _SH_DENYNO);
         wchar_t exe[MAX_PATH];
         GetModuleFileNameW(nullptr, exe, MAX_PATH);
-        logf("MW4VR v11.93 (debug level %d) loaded into %s", g_dbg, narrow(exe).c_str());
+        logf("MW4VR v11.94 (debug level %d) loaded into %s", g_dbg, narrow(exe).c_str());
         if (!loadReal()) logf("ERROR: the system d3d11.dll could not be loaded");
         rpReadIni();
     }

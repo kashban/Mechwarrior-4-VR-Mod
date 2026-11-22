@@ -478,9 +478,11 @@ static void vrLocate(XrTime when) {
         g_vrPoseOk[0] = g_vrPoseOk[1] = false;
         return;
     }
-    if (float deg = e2eYawNow()) {      // a test run turns the head (e2e.cpp): both eyes about the point between them
-        float a = -deg * 0.0174532925f; // (about +y a positive angle turns to the left)
-        XrQuaternionf q = {0, sinf(a / 2), 0, cosf(a / 2)};
+    const float deg = e2eYawNow(), down = e2ePitchNow();
+    if (deg != 0 || down != 0) { // a test run turns the head (e2e.cpp): both eyes about the point between them
+        const float a = -deg * 0.0174532925f;  // (about +y a positive angle turns to the left)
+        const float n = -down * 0.0174532925f; // (about +x a positive angle looks up)
+        XrQuaternionf q = qmul({0, sinf(a / 2), 0, cosf(a / 2)}, {sinf(n / 2), 0, 0, cosf(n / 2)});
         XrVector3f mid = {(views[0].pose.position.x + views[1].pose.position.x) / 2,
                           (views[0].pose.position.y + views[1].pose.position.y) / 2,
                           (views[0].pose.position.z + views[1].pose.position.z) / 2};

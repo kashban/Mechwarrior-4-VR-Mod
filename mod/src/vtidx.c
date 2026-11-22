@@ -10,6 +10,7 @@
 
 const int VT_Dev_CreateBuffer = IDX(ID3D11Device, CreateBuffer);
 const int VT_Dev_CreateVertexShader = IDX(ID3D11Device, CreateVertexShader);
+const int VT_Dev_CreateInputLayout = IDX(ID3D11Device, CreateInputLayout);
 const int VT_Dev_CreatePixelShader = IDX(ID3D11Device, CreatePixelShader);
 const int VT_Dev_CreateComputeShader = IDX(ID3D11Device, CreateComputeShader);
 const int VT_Dev_CreateGeometryShader = IDX(ID3D11Device, CreateGeometryShader);
