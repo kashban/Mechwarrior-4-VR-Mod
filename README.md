@@ -103,7 +103,8 @@ it is saved.
   runs leaves a file that does not play.
 - The pictures are encoded by the graphics card and never pass through the processor's memory. It needs a card
   with an HEVC encoder that Windows' Media Foundation can use (tested with NVIDIA; `mw4vr.log` says why a video
-  did not begin).
+  did not begin). A frame of the game takes about 0.3 ms longer while a video runs
+  ([measured](docs/PERFORMANCE.md#a-videos-cost)).
 - The video has 60 pictures a second by the clock on the wall (`rec_fps`), whatever the headset's rate is. A picture
   the encoder has no room for is left out, never waited for; the log counts them.
 - Beside the video lies a `.json` with what a tool needs to cut or reproject the picture: sizes, pictures a
