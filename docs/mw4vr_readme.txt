@@ -336,7 +336,7 @@ Cockpits nennen, das beste zuerst (kodiak=kodiak,atlas): benutzt wird das erste,
 Datei gibt.
 
 Die eigenen Arme des Mechs ([vr] arms, ab Werk an; arms=0: aus): Vom Sitz aus zeichnet das Spiel nichts vom
-eigenen Mech, neben einem Cockpit mit Seitenfenstern feuern die Armwaffen darum aus der Luft. Mit
+eigenen Mech, neben einem Cockpit mit Seitenfenstern feuern die Armwaffen darum aus der Luft.
 Der Mod liest die Teile des Mechs beim ersten Blick von außen (V; stehen bleiben, Torso nach
 vorn), legt sie in mw4vr_arms\<mech>.mwa ab und zeichnet von da an Arme, Waffengondeln und eine
 Kanone auf dem Dach. Die Arme schwingen mit den Schritten (arms_swing, Meter). Sie folgen nicht den

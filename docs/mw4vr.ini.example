@@ -127,7 +127,7 @@ mw5_paint=1
 mw5_paint_wear=0.5
 ; the mech's own arms and weapons beside and above the cockpit (0: off). Its parts are read once, the first time
 ; the mech is looked at from outside (V), and kept in mw4vr_arms\<mech>.mwa
-arms=0
+arms=1
 ; how far (m) the arms go forth and back with the mech's steps (0: not)
 arms_swing=0.25
 ; which parts are drawn: a part's middle at least arms_side m to the side and not lower than arms_low m, or at
