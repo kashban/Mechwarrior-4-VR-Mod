@@ -105,6 +105,7 @@ trusted: sizes, counts and names are checked before they are used (`core.h`: `mc
 | `tools/e2e` | The end-to-end test's runner and judge (see Tests). |
 | `tools/security` | The security checks the pipeline runs. |
 | `tools/package.ps1` | Puts the release package together. |
+| `tools/pack_arms.ps1` | Packs a game folder's `mw4vr_arms\*.mwa` into `release\MW4VR-arms-<version>.zip`: a release's attachment, uploaded by hand - the files are the game's geometry and are not in the repository. |
 
 ## Tests
 

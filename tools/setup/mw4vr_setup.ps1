@@ -251,6 +251,39 @@ function Install-Tree([string]$Game) {
     Say 'The trees are installed (clutter.txt as it was: clutter.txt.before_mw4vr).'
 }
 
+# The mechs' own arms (mw4vr_arms\<mech>.mwa): files the mod otherwise makes itself, the first time a mech is seen
+# from outside. They come apart from the package (MW4VR-arms-<version>.zip): unpacked into the package's folder as
+# "arms", or the zip itself beside the package or in it.
+function Find-Arm {
+    $dir = Join-Path $script:Pkg 'arms'
+    if (@(Get-ChildItem $dir -Filter *.mwa -ErrorAction SilentlyContinue).Count) { return $dir }
+    foreach ($at in @($script:Pkg, (Split-Path -Parent $script:Pkg))) {
+        $zip = Get-ChildItem $at -Filter 'MW4VR-arms*.zip' -ErrorAction SilentlyContinue | Sort-Object Name | Select-Object -Last 1
+        if ($zip) { return $zip.FullName }
+    }
+    return ''
+}
+
+function Install-Arm([string]$Game) {
+    $src = Find-Arm
+    if (-not $src) { Say "No arms beside this package (MW4VR-arms-<version>.zip) - the mod reads each mech's the first time you look at it from outside."; return }
+    $tmp = ''
+    if ($src -like '*.zip') {
+        $tmp = Join-Path ([IO.Path]::GetTempPath()) ('mw4vr_arms_' + [Guid]::NewGuid().ToString('N'))
+        Expand-Archive $src $tmp
+        $src = $tmp
+    }
+    $to = Join-Path $Game 'mw4vr_arms'
+    New-Item -ItemType Directory -Force $to | Out-Null
+    $new = 0; $kept = 0
+    foreach ($f in Get-ChildItem $src -Filter *.mwa -Recurse) {
+        # (a file that is there already is the player's own: read from their game, with their mechs)
+        if (Test-Path (Join-Path $to $f.Name)) { $kept++ } else { Copy-Item $f.FullName $to; $new++ }
+    }
+    if ($tmp) { Remove-Item $tmp -Recurse -Force }
+    Say "The mechs' arms: $new installed, $kept there already (left as they are)."
+}
+
 function New-StartShortcut([string]$Game) {
     $sh = New-Object -ComObject WScript.Shell
     $lnk = $sh.CreateShortcut((Join-Path ([Environment]::GetFolderPath('Desktop')) 'MechWarrior 4 VR.lnk'))
@@ -406,6 +439,8 @@ $cDinput = Add-Check 'Start-up fix dinput.dll (the game dying or hanging at star
 $cHook = Add-Check "Set MW4Engine's settings for VR in mw4hook.ini (antihack=0, fov=130, vsync=0, taa=0, windowed 1300x1300)" $true
 $cTrees = Add-Check 'More trees and shrubs for the terrain (needs MW4Engine''s terrain clutter)' (Test-Path (Join-Path $script:Pkg 'trees\clutter_trees.txt'))
 $cTrees.Enabled = $cTrees.Checked
+$cArms = Add-Check 'The mechs'' own arms beside the cockpit (from MW4VR-arms-<version>.zip, if it is here)' ([bool](Find-Arm))
+$cArms.Enabled = $cArms.Checked
 $cLink = Add-Check 'Shortcut "MechWarrior 4 VR" on the desktop' $true
 $script:y += 6
 [void](Add-Label '3. MechWarrior 5 cockpits (optional - only if you own MechWarrior 5: Mercenaries)' 14 690 $true)
@@ -602,6 +637,7 @@ $bGo.Add_Click({
         elseif ($cDinput.Checked) { Copy-Kept (Join-Path $script:Pkg 'game\dinput.dll') (Join-Path $g 'dinput.dll'); Say 'dinput.dll installed.' }
         if ($cHook.Checked) { [void](Set-HookIni $g) }
         if ($cTrees.Checked) { Install-Tree $g }
+        if ($cArms.Checked) { Install-Arm $g }
         if ($cLink.Checked) { New-StartShortcut $g }
     } catch {
         Say "FAILED: $($_.Exception.Message)"

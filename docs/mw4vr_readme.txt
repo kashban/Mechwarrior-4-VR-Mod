@@ -128,7 +128,9 @@ so beside a cockpit with side windows the arms' weapons fire out of thin air. Th
 reads the mech's parts the first time you look at it from outside (V; stand still, torso ahead),
 keeps them in mw4vr_arms\<mech>.mwa and draws the arms, weapon pods and a gun on the roof from then
 on. The arms go forth and back with the steps (arms_swing, metres). They do not follow the glance
-keys and do not recoil. The file is the game's own geometry: keep it to yourself.
+keys and do not recoil. A release has the files of all MekPak 3.1c mechs as
+MW4VR-arms-<version>.zip: put it beside the unpacked package and the setup installs what you do
+not have yet, or copy its .mwa files into mw4vr_arms\ yourself.
 
   Ctrl+F11                     the cockpits on / off
   Ctrl+Alt+F11 (Shift: back)   the next cockpit; remembered for the mech you sit in
@@ -340,7 +342,9 @@ eigenen Mech, neben einem Cockpit mit Seitenfenstern feuern die Armwaffen darum 
 Der Mod liest die Teile des Mechs beim ersten Blick von außen (V; stehen bleiben, Torso nach
 vorn), legt sie in mw4vr_arms\<mech>.mwa ab und zeichnet von da an Arme, Waffengondeln und eine
 Kanone auf dem Dach. Die Arme schwingen mit den Schritten (arms_swing, Meter). Sie folgen nicht den
-Seitenblick-Tasten und haben keinen Rückstoß. Die Datei ist Geometrie des Spiels: nicht weitergeben.
+Seitenblick-Tasten und haben keinen Rückstoß. Ein Release hat die Dateien aller Mechs des MekPak
+3.1c als MW4VR-arms-<Version>.zip: neben das entpackte Paket legen, dann spielt das Setup ein, was
+noch fehlt - oder die .mwa-Dateien selbst nach mw4vr_arms\ kopieren.
 
   Strg+F11                     Cockpits an / aus
   Strg+Alt+F11 (Umschalt: zurück)   nächstes Cockpit; für den Mech gemerkt, in dem du sitzt
