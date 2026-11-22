@@ -609,7 +609,12 @@ void mechOnPresent(bool inBattle, bool zoomed) {
     if (inBattle && !zoomed && g_doubleDraw && g_camBothFrame == g_frame) {
         bool was = g_mechSeat.outside,
              ahead = g_vrPoseOk[0] && g_vrR[0][8] > 0.94f; // (within 20 degrees of straight ahead)
-        mcSeatStep(g_mechSeat, ckTris, ahead);
+        // A little of the cockpit says nothing by its triangles - but the game handed its cockpit's shape, at the
+        // camera, to its renderer in this frame (sway.cpp): that is the seat. (Without it the Marauder II's small
+        // cockpit, the head a little down after a look from outside, never came to thirty triangles: the game's
+        // cockpit stayed in the picture, ours away.)
+        const bool shape = g_swayShapeWFrame == g_frame && ckTris >= MC_NO_COCKPIT_TRIS;
+        mcSeatStep(g_mechSeat, shape && ckTris < MC_COCKPIT_TRIS ? (int)MC_COCKPIT_TRIS : ckTris, ahead);
         // what the judgement rests on, for the log: how much of the game's cockpit there is while the head looks ahead
         static int least = 1 << 30, most = -1, told, toldSum;
         static unsigned judged, little, sumFrame;

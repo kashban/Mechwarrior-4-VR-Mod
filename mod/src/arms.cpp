@@ -23,7 +23,8 @@ static float g_armsSwing = 0.25f; // an arm's way forth and back with the steps 
 static float g_armsLong = 2.5f;   // a part this long (m) from back to front is an arm
 static float g_armsBase[12];      // the game's camera -> world while the camera sat in the mech
 static unsigned g_armsBaseFrame = ~0u;
-static wchar_t g_armsMech[32]; // the mech the parts are of
+static wchar_t g_armsMech[32];       // the mech the parts are of
+static const float ARM_TOUCH = 0.3f; // parts no further apart than this (m) hang together
 // mechs whose arms have no joints to swing in - guns and pods fixed to the body ([vr] arms_rigid, names with commas)
 static std::wstring g_armsRigid = L"urbanmech,urbanmech_iic,rifleman,catapult,catapultk2,jenner2c,locust2c,raven,"
                                   L"stalker";
@@ -587,6 +588,8 @@ static bool armsLoad() {
         }
         bool plainUsed = false;
         const bool rigid = armsRigid();
+        static float box[ARMS_MAX][6]; // the drawn parts' corners, and whether they lie beside the cockpit
+        static bool side[ARMS_MAX];
         const float feet = ok ? armsFeet(f, head[0]) : 0;
         for (uint32_t i = 0; i < head[0] && ok; ++i) {
             uint32_t h[3] = {};
@@ -640,7 +643,25 @@ static bool armsLoad() {
                 a = {};
                 continue;
             }
+            memcpy(box[g_armN], lo, sizeof lo), memcpy(box[g_armN] + 3, hi, sizeof hi);
+            side[g_armN] = beside;
             ++g_armN;
+        }
+        // An arm is more than its long part: the hand, the shoulder, a gun on it are parts of their own. What lies
+        // beside the cockpit and touches a part that swings goes with it - else the arm swung and its fist stood.
+        for (bool more = !rigid; more;) {
+            more = false;
+            for (int i = 0; i < g_armN; ++i) {
+                if (g_arm[i].swing || !side[i]) continue;
+                for (int j = 0; j < g_armN && !g_arm[i].swing; ++j) {
+                    if (!g_arm[j].swing || (box[i][0] + box[i][3] > 0) != (g_arm[j].swing > 0)) continue;
+                    bool touch = true;
+                    for (int k = 0; k < 3; ++k)
+                        touch =
+                            touch && box[i][k] <= box[j][k + 3] + ARM_TOUCH && box[j][k] <= box[i][k + 3] + ARM_TOUCH;
+                    if (touch) g_arm[i].swing = g_arm[j].swing, more = true;
+                }
+            }
         }
         // (every part holds a reference of its own to its picture; armsFree gives each picture back once - so the
         // references beyond the first are given back here)
@@ -661,8 +682,10 @@ static bool armsLoad() {
         logf("arms: %ls cannot be read", armsFile().c_str());
         return false;
     }
-    logf("arms: '%ls' - %d parts of the mech are drawn beside the cockpit%s (%ls)", g_armsMech, g_armN,
-         armsRigid() ? ", its arms stay put (arms_rigid)" : "", armsFile().c_str());
+    int swing = 0;
+    for (int i = 0; i < g_armN; ++i) swing += g_arm[i].swing != 0;
+    logf("arms: '%ls' - %d parts of the mech are drawn beside the cockpit, %d of them swing%s (%ls)", g_armsMech,
+         g_armN, swing, armsRigid() ? " - its arms stay put (arms_rigid)" : "", armsFile().c_str());
     return true;
 }
 

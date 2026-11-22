@@ -1249,7 +1249,8 @@ void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw, int ckTris) {
     // head moves, and ours went with it.
     static unsigned ckFrame[2] = {~0u, ~0u}; // the frame the game's cockpit was last drawn in for this eye
     const bool expected = ckFrame[e] != ~0u && g_frame - ckFrame[e] <= 2;
-    const bool gameCockpit = ckTris >= (expected ? (int)MC_FEW_COCKPIT_TRIS : 10);
+    // (or the game handed its cockpit's shape to its renderer in this frame, sway.cpp)
+    const bool gameCockpit = ckTris >= (expected || g_swayShapeWFrame == g_frame ? (int)MC_FEW_COCKPIT_TRIS : 10);
     if (gameCockpit && e == 0) armsSeatFrame();
     // A pass that went by without our cockpit (one eye bright for a frame): told with what its draws were.
     static unsigned trFrame[2] = {~0u, ~0u};
