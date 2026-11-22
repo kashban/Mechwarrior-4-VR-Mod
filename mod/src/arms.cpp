@@ -665,7 +665,7 @@ void armsOnPresent() {
         read = true;
         const std::wstring ini = g_dir + L"mw4vr.ini";
         wchar_t b[32];
-        g_armsOn = GetPrivateProfileIntW(L"vr", L"arms", 0, ini.c_str()) != 0;
+        g_armsOn = GetPrivateProfileIntW(L"vr", L"arms", 1, ini.c_str()) != 0;
         g_armsAll = GetPrivateProfileIntW(L"vr", L"arms_all", 0, ini.c_str()) != 0;
         if (GetPrivateProfileStringW(L"vr", L"arms_side", L"", b, 32, ini.c_str())) g_armsSide = (float)_wtof(b);
         if (GetPrivateProfileStringW(L"vr", L"arms_low", L"", b, 32, ini.c_str())) g_armsLow = (float)_wtof(b);

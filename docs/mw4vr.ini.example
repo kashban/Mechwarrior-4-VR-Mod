@@ -125,7 +125,7 @@ mw5_reflect=0.5
 ; painted metal of mod cockpits: the patches, worn paint and gloss (0: plain colours .. 1); how much paint is worn off (0..1)
 mw5_paint=1
 mw5_paint_wear=0.5
-; the mech's own arms and weapons beside and above the cockpit (1: on). Its parts are read once, the first time
+; the mech's own arms and weapons beside and above the cockpit (0: off). Its parts are read once, the first time
 ; the mech is looked at from outside (V), and kept in mw4vr_arms\<mech>.mwa
 arms=0
 ; how far (m) the arms go forth and back with the mech's steps (0: not)

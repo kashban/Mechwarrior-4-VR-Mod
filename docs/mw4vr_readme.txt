@@ -123,8 +123,8 @@ the game's own, so mw4vr_cockpit_map.ini names none of them: choose one with Ctr
 into that file. A line there may name several cockpits, the best first (kodiak=kodiak,atlas): the first
 there is a file of is used.
 
-The mech's own arms ([vr] arms=1, off by default): from the seat the game draws nothing of your mech,
-so beside a cockpit with side windows the arms' weapons fire out of thin air. With arms=1 the mod
+The mech's own arms ([vr] arms, on by default; arms=0: off): from the seat the game draws nothing of your mech,
+so beside a cockpit with side windows the arms' weapons fire out of thin air. The mod
 reads the mech's parts the first time you look at it from outside (V; stand still, torso ahead),
 keeps them in mw4vr_arms\<mech>.mwa and draws the arms, weapon pods and a gun on the roof from then
 on. The arms go forth and back with the steps (arms_swing, metres). They do not follow the glance
@@ -335,9 +335,9 @@ keines davon: mit Strg+Alt+F11 wählen oder in die Datei eintragen. Eine Zeile d
 Cockpits nennen, das beste zuerst (kodiak=kodiak,atlas): benutzt wird das erste, für das es eine
 Datei gibt.
 
-Die eigenen Arme des Mechs ([vr] arms=1, ab Werk aus): Vom Sitz aus zeichnet das Spiel nichts vom
+Die eigenen Arme des Mechs ([vr] arms, ab Werk an; arms=0: aus): Vom Sitz aus zeichnet das Spiel nichts vom
 eigenen Mech, neben einem Cockpit mit Seitenfenstern feuern die Armwaffen darum aus der Luft. Mit
-arms=1 liest der Mod die Teile des Mechs beim ersten Blick von außen (V; stehen bleiben, Torso nach
+Der Mod liest die Teile des Mechs beim ersten Blick von außen (V; stehen bleiben, Torso nach
 vorn), legt sie in mw4vr_arms\<mech>.mwa ab und zeichnet von da an Arme, Waffengondeln und eine
 Kanone auf dem Dach. Die Arme schwingen mit den Schritten (arms_swing, Meter). Sie folgen nicht den
 Seitenblick-Tasten und haben keinen Rückstoß. Die Datei ist Geometrie des Spiels: nicht weitergeben.
