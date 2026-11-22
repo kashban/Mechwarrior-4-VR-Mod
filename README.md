@@ -119,8 +119,9 @@ parts once, the first time you look at it from outside (`V`; stand still, torso 
 weapon pods, a gun on the roof. The arms go forth and back with the mech's steps (`arms_swing`, metres; 0: not).
 Mechs whose arms have no joints - guns fixed to the body, as the Rifleman's or the Urban Mech's - are named in
 `arms_rigid`; theirs stay put.
-They do not follow the game's glance keys, and they do not recoil. The file is the game's own geometry: keep it
-to yourself. Which parts are taken: `arms_side`, `arms_low`, `arms_deep`, `arms_wide`, `arms_above`, `arms_near`
+They do not follow the game's glance keys, and they do not recoil. A release has the files of all MekPak 3.1c mechs
+as `MW4VR-arms-<version>.zip` beside the package: put the zip beside the unpacked package (or unpack it there as
+`arms`) and the setup installs what you do not have yet - or copy the `.mwa` files into `mw4vr_arms\` yourself. Which parts are taken: `arms_side`, `arms_low`, `arms_deep`, `arms_wide`, `arms_above`, `arms_near`
 (see `mw4vr.ini.example`); `arms_all=1` draws every part, to see what there is.
 
 The converter turns the larger faces of the material `Panels*` into monitors and writes a `<name>.ini` beside
