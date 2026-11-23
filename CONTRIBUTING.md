@@ -13,7 +13,7 @@ How the code is built: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). The pipelin
 
 ```
 mod\build.bat                  the DLLs, into mod\build
-tests\run_tests.bat            all tests (a minute)
+tests\run_tests.bat            all tests (a minute); with CPPCHECK set to cppcheck.exe also cppcheck, as the pipeline
 tests\run_tests.bat mutation   with the mutation round (some minutes)
 python tools\ci\guard.py       nothing of MechWarrior 5, no private data
 ```

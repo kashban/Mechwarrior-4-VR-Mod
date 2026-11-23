@@ -5,7 +5,7 @@ Five workflows on GitHub Actions (`.github/workflows`). What a workflow checks, 
 | Workflow | When | What it does |
 |---|---|---|
 | **CI** (`ci.yml`) | every push to `main`, every pull request | builds the DLLs, runs all tests, holds the coverage gate, puts the package together, runs the guards, the SAST scan and the security checks (`docs/security-check.md`) |
-| **Mutation tests** (`mutation.yml`) | every night after a day with commits; pull requests that touch `core.h`, the converter or their tests; by hand | plants errors into `core.h` and the converter and fails when a test does not notice one |
+| **Mutation tests** (`mutation.yml`) | every night after a day with commits; by hand (not on pull requests: run `python tests/mutate.py` before one that touches `core.h`, the converter or their tests) | plants errors into `core.h` and the converter and fails when a test does not notice one |
 | **AI review** (`ai-review.yml`) | pull requests from the repository itself, once switched on | a local model reads the diff and writes its findings as a comment; advisory, never fails |
 | **Release** (`release.yml`) | a tag `v<version>` | checks the tag against the version the mod logs, builds, tests, packages with the trees, makes the pre-release |
 | **Publish** (`publish.yml`) | by hand, for a version tested in the headset | makes the pre-release the latest release and sends the package to Nexus Mods |
