@@ -2,19 +2,12 @@ name: Mutation tests
 
 # Do the tests find bugs? tests/mutate.py plants one small error at a time into core.h and the converter and runs
 # their tests; a score below its floor (tests/mutation_floor.json, 100 %) fails. Every night after a day with
-# commits, on pull requests that touch those files, and by hand.
+# commits, and by hand. Not on pull requests: a run takes some 25 minutes of a Windows runner, and every push to
+# such a pull request began one. Who changes core.h, the converter or their tests runs it before the pull request
+# (python tests/mutate.py, two minutes on a developer's PC); the night's run is the gate.
 on:
   schedule:
     - cron: '30 2 * * *' # 02:30 UTC
-  pull_request:
-    paths:
-      - mod/src/core.h
-      - tests/core_test.cpp
-      - tests/core_test.bat
-      - tools/cockpit_convert.py
-      - tests/test_convert.py
-      - tests/mutate.py
-      - tests/mutation_floor.json
   workflow_dispatch:
 
 permissions:

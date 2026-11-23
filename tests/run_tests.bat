@@ -4,4 +4,6 @@ rem set MW4_DIR=<the game's folder> to have mw4hook_abi.h held against mw4hook.d
 cd /d "%~dp0.."
 python -W error -m unittest discover -s tests || exit /b 1
 call tests\core_test.bat || exit /b 1
+rem cppcheck as the pipeline runs it (a finding of the severity "error" fails), where CPPCHECK names cppcheck.exe
+if defined CPPCHECK (call tools\security\cppcheck.bat || exit /b 1) else echo cppcheck left out: set CPPCHECK to the path of cppcheck.exe
 if "%1"=="mutation" python tests\mutate.py || exit /b 1
