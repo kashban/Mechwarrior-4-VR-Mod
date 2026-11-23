@@ -111,8 +111,11 @@ it is saved.
   second, and each eye's field of view as tangents. Each eye's picture is flat (rectilinear) and, with the game's own
   camera, symmetric: about 100 degrees wide and high. A menu or a film - one flat screen in the headset, some
   metres away - fills the video's picture instead, the same in both eyes.
-- For YouTube's 3D the two halves go into one 16:9 frame marked `stereo_mode=left_right`, for example
-  `ffmpeg -i in.mp4 -vf scale=3840:2160,setsar=1 -c:v hevc_nvenc -b:v 60M -c:a copy -metadata:s:v:0 stereo_mode=left_right out.mkv`.
+- For YouTube's 3D: `python tools/video/youtube3d.py <the video>` writes an `.mkv` beside it that YouTube shows
+  as 3D - one 16:9 picture, the left eye squeezed into its left half and the right eye into its right half, marked
+  `stereo_mode=left_right`. An eye's picture is square: `--fit whole` (the default) keeps all of it, with black to
+  its left and right; `--fit fill` shows a 16:9 part of it over the whole width (`--down 1`: the lower part, with the
+  dashboard). `--height 4320` for a video of 7680 x 4320, `--from` / `--to` for a part. It needs ffmpeg.
 - **Sharper:** `render_height=3840` (read at the start) renders each eye at 3840 x 3840 and makes a video of
   7680 x 3840. That is 2.2 times the pixels for every picture of the game, not only for the video.
 - Settings in `mw4vr.ini`: `rec_fps`, `rec_bitrate_mbps`, `rec_hud` (0: the eyes' pictures without the HUD's

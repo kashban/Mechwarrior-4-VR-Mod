@@ -104,7 +104,7 @@ Videos
     did not begin.
   - A .json beside the video holds its sizes and each eye's field of view, for cutting or
     reprojecting it later. For YouTube's 3D: both halves into one 16:9 frame, marked
-    stereo_mode=left_right (the README has an ffmpeg line).
+    stereo_mode=left_right (the project's tools/video/youtube3d.py does it).
   - Sharper: render_height=3840 gives a video of 7680 x 3840 - and 2.2 times the pixels to render.
   - mw4vr.ini: rec_fps, rec_bitrate_mbps, rec_hud, rec_audio, rec_light.
 
@@ -333,8 +333,8 @@ Videos
   - Es braucht eine Grafikkarte mit HEVC-Encoder (getestet mit NVIDIA). mw4vr.log sagt, warum ein Video
     nicht begann.
   - Eine .json neben dem Video nennt Größen und das Sichtfeld jedes Auges, für späteres Zuschneiden oder
-    Entzerren. Für YouTube-3D: beide Hälften in ein 16:9-Bild, markiert mit stereo_mode=left_right (eine
-    ffmpeg-Zeile steht im README).
+    Entzerren. Für YouTube-3D: beide Hälften in ein 16:9-Bild, markiert mit stereo_mode=left_right (das
+    Skript tools/video/youtube3d.py des Projekts macht das).
   - Schärfer: render_height=3840 ergibt ein Video von 7680 x 3840 - und 2,2-mal so viele Pixel zu rendern.
   - mw4vr.ini: rec_fps, rec_bitrate_mbps, rec_hud, rec_audio, rec_light.
 
