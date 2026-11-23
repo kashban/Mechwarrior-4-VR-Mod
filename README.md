@@ -109,7 +109,8 @@ it is saved.
   the encoder has no room for is left out, never waited for; the log counts them.
 - Beside the video lies a `.json` with what a tool needs to cut or reproject the picture: sizes, pictures a
   second, and each eye's field of view as tangents. Each eye's picture is flat (rectilinear) and, with the game's own
-  camera, symmetric: about 100 degrees wide and high.
+  camera, symmetric: about 100 degrees wide and high. A menu or a film - one flat screen in the headset, some
+  metres away - fills the video's picture instead, the same in both eyes.
 - For YouTube's 3D the two halves go into one 16:9 frame marked `stereo_mode=left_right`, for example
   `ffmpeg -i in.mp4 -vf scale=3840:2160,setsar=1 -c:v hevc_nvenc -b:v 60M -c:a copy -metadata:s:v:0 stereo_mode=left_right out.mkv`.
 - **Sharper:** `render_height=3840` (read at the start) renders each eye at 3840 x 3840 and makes a video of

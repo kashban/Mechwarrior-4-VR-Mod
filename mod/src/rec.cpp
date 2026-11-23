@@ -389,7 +389,7 @@ void recFrame(ID3D11DeviceContext *c, const XrCompositionLayerBaseHeader *const 
         g_recFovKnown = true;
     } else {
         proj = nullptr;
-        const bool ref = g_vr.tracking && g_vr.haveRef;
+        const bool ref = g_vrTracking && g_vr.haveRef;
         const XrQuaternionf q = ref ? g_vr.ref.orientation : XrQuaternionf{0, 0, 0, 1};
         const XrVector3f p = ref ? g_vr.ref.position : XrVector3f{0, 0, 0};
         for (int e = 0; e < 2; ++e) {
@@ -398,12 +398,45 @@ void recFrame(ID3D11DeviceContext *c, const XrCompositionLayerBaseHeader *const 
             view[e].position = {p.x + o.x, p.y + o.y, p.z + o.z};
         }
     }
+    // The tangents each eye's part of the picture spans in this frame: the world's view - or, without a world (a
+    // menu, a film: one flat screen some metres away, small in the headset's view), just that screen. It fills
+    // the picture then, the same for both eyes.
+    float span[2][4];
+    memcpy(span, g_recTan, sizeof span);
+    for (int e = 0; e < 2 && !proj; ++e)
+        for (uint32_t i = 0; i < n; ++i) {
+            if (layers[i]->type != XR_TYPE_COMPOSITION_LAYER_QUAD) continue;
+            const XrCompositionLayerQuad &q = *(const XrCompositionLayerQuad *)layers[i];
+            if (q.subImage.swapchain != g_vr.sc[0] && q.subImage.swapchain != g_vr.sc[1]) continue;
+            if (q.eyeVisibility == XR_EYE_VISIBILITY_LEFT && e != 0) continue;
+            if (q.eyeVisibility == XR_EYE_VISIBILITY_RIGHT && e != 1) continue;
+            const XrPosef &ev = view[e];
+            const float at[3] = {ev.position.x, ev.position.y, ev.position.z}, unit[4] = {-1, 1, 1, -1};
+            const float turn[4] = {ev.orientation.x, ev.orientation.y, ev.orientation.z, ev.orientation.w};
+            float c[4][3];
+            bool ahead = true;
+            for (int k = 0; k < 4; ++k) {
+                const XrVector3f o = qrot(q.pose.orientation, {(k & 1 ? 0.5f : -0.5f) * q.size.width,
+                                                               (k & 2 ? -0.5f : 0.5f) * q.size.height, 0});
+                const float p[3] = {q.pose.position.x + o.x, q.pose.position.y + o.y, q.pose.position.z + o.z};
+                mcEyeClip(p, at, turn, unit, c[k]); // (between tangents of 1: x and y are the tangents times w)
+                ahead = ahead && c[k][2] > 0.01f;
+            }
+            if (!ahead) break;
+            span[e][0] = fminf(c[0][0] / c[0][2], c[2][0] / c[2][2]);
+            span[e][1] = fmaxf(c[1][0] / c[1][2], c[3][0] / c[3][2]);
+            span[e][2] = fmaxf(c[0][1] / c[0][2], c[1][1] / c[1][2]);
+            span[e][3] = fminf(c[2][1] / c[2][2], c[3][1] / c[3][2]);
+            if (!(span[e][1] - span[e][0] > 0.01f) || !(span[e][2] - span[e][3] > 0.01f))
+                memcpy(span[e], g_recTan[e], sizeof span[e]);
+            break;
+        }
 
     static RecVertex vtx[4 * REC_DRAWS];
     static RecDraw draw[REC_DRAWS];
     int nd = 0;
     for (int e = 0; e < 2; ++e) {
-        const float *tn = g_recTan[e];
+        const float *tn = span[e];
         if (nd < REC_DRAWS) { // black, where no layer is
             const float all[4][3] = {{-1, 1, 1}, {1, 1, 1}, {-1, -1, 1}, {1, -1, 1}}, uv[4] = {0, 0, 1, 1};
             recQuad(vtx + 4 * nd, all, uv, 2, 1);
@@ -946,7 +979,9 @@ static void recJson(const RecFile &f, double seconds, UINT32 bitrate) {
             g_recSet.fps, g_recFrames.load(), g_recDropped.load(), seconds);
     fprintf(j, "  \"codec\": \"hevc\",\n  \"bitrate_mbps\": %.1f,\n  \"sound\": \"%s\",\n  \"hud\": %s,\n",
             bitrate / 1000000.0, f.sound, g_recSet.hud ? "true" : "false");
-    // each eye's picture spans these tangents (a flat, rectilinear picture; left and down are negative)
+    // each eye's picture spans these tangents (a flat, rectilinear picture; left and down are negative) - while
+    // the world is shown. A menu's or a film's flat screen fills the picture instead.
+    fprintf(j, "  \"flat_screens\": \"fill the picture\",\n");
     fprintf(j, "  \"fov_known\": %s,\n  \"eyes\": [\n", known ? "true" : "false");
     for (int e = 0; e < 2; ++e)
         fprintf(j,
