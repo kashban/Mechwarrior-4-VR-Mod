@@ -90,6 +90,23 @@ The HUD's parts: 1 radar, 2 target, 3 damage, 4 lance list, 5 weapons, 6 top str
 
 Other
   Ctrl+F12                     a picture of both eyes into mw4vr_shots\
+  Ctrl+F5                      a video of both eyes with the game's sound into mw4vr_videos\:
+                               begin / end
+
+Videos
+  Ctrl+F5 begins a video of what the headset shows, Ctrl+F5 again ends it: both eyes side by side
+  (left | right) at the size they are rendered at (5200 x 2600 with render_height=2600), with the HUD
+  and the game's sound, as mw4vr_videos\mw4vr_<date>_<time>.mp4 (HEVC, AAC). A high beep and a red
+  light beside the cross-hair (in the headset only) say that it runs.
+  - End the video before you leave the game: a game closed while a video runs leaves a file that
+    does not play.
+  - It needs a graphics card with an HEVC encoder (tested with NVIDIA). mw4vr.log says why a video
+    did not begin.
+  - A .json beside the video holds its sizes and each eye's field of view, for cutting or
+    reprojecting it later. For YouTube's 3D: both halves into one 16:9 frame, marked
+    stereo_mode=left_right (the README has an ffmpeg line).
+  - Sharper: render_height=3840 gives a video of 7680 x 3840 - and 2.2 times the pixels to render.
+  - mw4vr.ini: rec_fps, rec_bitrate_mbps, rec_hud, rec_audio, rec_light.
 
 The seat, the sizes and the parts' places are remembered - the seat and sizes for each mech, the seat apart for
 the game's cockpit and for a MechWarrior 5 one. Seen from outside (the third-person view) the HUD's parts have
@@ -304,6 +321,22 @@ Teile des HUD: 1 Radar, 2 Ziel, 3 Schaden, 4 Lanzenliste, 5 Waffen, 6 Kopfleiste
 
 Sonstiges
   Strg+F12                     Bild beider Augen nach mw4vr_shots\
+  Strg+F5                      Video beider Augen mit dem Ton des Spiels nach mw4vr_videos\:
+                               Anfang / Ende
+
+Videos
+  Strg+F5 beginnt ein Video dessen, was das Headset zeigt, Strg+F5 beendet es: beide Augen nebeneinander
+  (links | rechts) in der Größe, in der sie gerendert werden (5200 x 2600 bei render_height=2600), mit HUD
+  und dem Ton des Spiels, als mw4vr_videos\mw4vr_<Datum>_<Zeit>.mp4 (HEVC, AAC). Ein hoher Ton und ein
+  rotes Licht neben dem Fadenkreuz (nur im Headset) zeigen, dass es läuft.
+  - Das Video beenden, bevor du das Spiel verlässt: sonst bleibt eine Datei, die sich nicht abspielen lässt.
+  - Es braucht eine Grafikkarte mit HEVC-Encoder (getestet mit NVIDIA). mw4vr.log sagt, warum ein Video
+    nicht begann.
+  - Eine .json neben dem Video nennt Größen und das Sichtfeld jedes Auges, für späteres Zuschneiden oder
+    Entzerren. Für YouTube-3D: beide Hälften in ein 16:9-Bild, markiert mit stereo_mode=left_right (eine
+    ffmpeg-Zeile steht im README).
+  - Schärfer: render_height=3840 ergibt ein Video von 7680 x 3840 - und 2,2-mal so viele Pixel zu rendern.
+  - mw4vr.ini: rec_fps, rec_bitrate_mbps, rec_hud, rec_audio, rec_light.
 
 Sitz, Größen und Plätze der Teile werden gemerkt - Sitz und Größen je Mech, der Sitz getrennt für das Cockpit
 des Spiels und für ein MechWarrior-5-Cockpit. Von außen gesehen (Außenansicht) haben die HUD-Teile eigene

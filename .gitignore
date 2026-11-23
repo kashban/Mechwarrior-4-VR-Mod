@@ -26,6 +26,7 @@ tools/fmodel/
 mw4vr_dump_*
 mw4vr_frame_*.txt
 mw4vr_shots/
+mw4vr_videos/
 
 # reverse-engineering dumps of the game (its code: not ours to publish)
 re/

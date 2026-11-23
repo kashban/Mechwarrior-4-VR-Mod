@@ -2056,7 +2056,47 @@ static void testShape() {
     }
 }
 
+// ---------------------------------------------------------------- the video of both eyes
+static void testRec() {
+    g_test = "rec";
+    CHECK(mcRecTick(0, 60) == 0);
+    CHECK(mcRecTick(0.5, 60) == 30);
+    CHECK(mcRecTick(0.0166, 60) == 0 && mcRecTick(0.0167, 60) == 1);
+    CHECK(mcRecTick(2.27, 50) == 113);
+    CHECK(mcRecTick(-1, 60) == -1 && mcRecTick(-0.001, 60) == -1);
+    // a quarter turn about z takes x to y; about x, y to z
+    const float h = 0.70710678f, qz[4] = {0, 0, h, h}, qx[4] = {h, 0, 0, h}, ex[3] = {1, 0, 0}, ey[3] = {0, 1, 0};
+    float o[4];
+    o[3] = -77;
+    mcQuatTurn(qz, ex, o);
+    NEAR(o[0], 0), NEAR(o[1], 1), NEAR(o[2], 0);
+    mcQuatTurn(qx, ey, o);
+    NEAR(o[0], 0), NEAR(o[1], 0), NEAR(o[2], 1);
+    // any turn, against its matrix
+    const float q[4] = {0.1f, 0.2f, 0.3f, 0.92736185f}, v[3] = {1, -2, 3};
+    mcQuatTurn(q, v, o);
+    NEAR(o[0], 3.0656684f), NEAR(o[1], -1.2f), NEAR(o[2], 1.7781105f);
+    CHECK(o[3] == -77);
+    CHECK(mcTanPlace(-1.376f, -1.376f, 0.839f) == -1 && mcTanPlace(0.839f, -1.376f, 0.839f) == 1);
+    NEAR(mcTanPlace(0, -1.376f, 0.839f), 0.2424379f);
+    NEAR(mcTanPlace(0.5f, -1, 3), -0.25f);
+    // an eye that looks straight ahead from the origin, its picture between tangents of 1: a point 2 m ahead
+    const float none[4] = {0, 0, 0, 1}, zero[3] = {0, 0, 0}, sym[4] = {-1, 1, 1, -1}, a[3] = {1, 0.5f, -2};
+    mcEyeClip(a, zero, none, sym, o);
+    NEAR(o[0], 1), NEAR(o[1], 0.5f), NEAR(o[2], 2);
+    CHECK(o[3] == -77);
+    // a headset's own view (wider to the outside and downwards), the eye turned and not at the origin
+    const float tn[4] = {-1.376f, 0.839f, 0.966f, -1.428f}, p[3] = {0.5f, 1.25f, -3}, pos[3] = {0.1f, -0.2f, 0.3f};
+    mcEyeClip(p, pos, q, tn, o);
+    NEAR(o[0], 2.6759133f), NEAR(o[1], 0.5125773f), NEAR(o[2], 2.8925570f);
+    // behind the eye: no positive distance
+    const float b[3] = {0, 0, 1};
+    mcEyeClip(b, zero, none, sym, o);
+    CHECK(o[2] == -1);
+}
+
 int main() {
+    testRec();
     testM4(), testM4Inv(), testProj(), testEyeStep(), testStereo(), testAuto(), testAutoLimits(), testAutoChange(),
         testAutoMission(), testShape(), testHold(), testBand(), testFogCut();
     testHolds(), testTurnNorm(), testTurnFit(), testEyeInMesh(), testHudCross(), testHudGlass(), testGlassPose(),

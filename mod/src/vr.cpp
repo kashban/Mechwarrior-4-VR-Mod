@@ -827,6 +827,7 @@ static bool vrCrossImage(ID3D11DeviceContext *ctx, ID3D11Texture2D *dst, ID3D11T
         ctx->CopySubresourceRegion(g_crossImg[idx].texture, 0, 0, 0, 0, src, 0, &part);
         ctx->CopySubresourceRegion(dst, 0, x0, y0, 0, empty, 0, nullptr);
     }
+    recImage(g_crossSc, ctx, g_crossImg[idx].texture, false); // (for a video, rec.cpp: while a picture is due)
     XrSwapchainImageReleaseInfo ri = {XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
     g_vr.ReleaseSwapchainImage(g_crossSc, &ri);
     g_crossX = x0, g_crossY = y0;
@@ -1004,6 +1005,9 @@ void vrOnPresent(IDXGISwapChain *swap, int eye) {
     g_presWait = GetTickCount() - waitT0;
     if (!vrCheck(waited, "xrWaitFrame")) return;
     if (!vrCheck(g_vr.BeginFrame(g_vr.session, nullptr), "xrBeginFrame")) return;
+    // the layers are made while the runtime shows them - and while a video runs (rec.cpp), which is made of them:
+    // a headset that nobody wears asks for no pictures
+    const bool show = fs.shouldRender || recRunning();
     bool track = g_vr.tracking && g_P00 > 0 && g_P11 > 0;
     g_vrTracking = track;
     if (g_P00 > 0 && g_P11 > 0 && g_in3DSeen && (g_vr.baseP00 <= 0 || g_P00 < g_vr.baseP00 * 0.995f)) {
@@ -1023,8 +1027,8 @@ void vrOnPresent(IDXGISwapChain *swap, int eye) {
     // loses the focus after some seconds, and the run stood still until somebody touched it)
     vrHoldStep();
     fadeKeep();
-    if ((fs.shouldRender || g_e2eOn) && SUCCEEDED(swap->GetBuffer(0, __uuidof(ID3D11Texture2D), (void **)&bb)) && bb &&
-        ctx) {
+    const bool rec = recBegin(); // this frame's picture goes into the video (rec.cpp)
+    if ((show || g_e2eOn) && SUCCEEDED(swap->GetBuffer(0, __uuidof(ID3D11Texture2D), (void **)&bb)) && bb && ctx) {
         D3D11_TEXTURE2D_DESC bd;
         bb->GetDesc(&bd);
         D3D11_BOX box = {0, 0, 0, min(bd.Width, g_vr.w), min(bd.Height, g_vr.h), 1};
@@ -1045,13 +1049,16 @@ void vrOnPresent(IDXGISwapChain *swap, int eye) {
                 D3D11_BOX eb = {0, 0, 0, min(g_eyeTexW, g_vr.w), min(g_eyeTexH, g_vr.h), 1};
                 ID3D11Texture2D *black = g_holdA >= 1 ? vrHoldBlack(ctx, g_eyeTex[e]) : nullptr;
                 ctx->CopySubresourceRegion(g_vr.img[e][idx].texture, 0, 0, 0, 0, black ? black : g_eyeTex[e], 0, &eb);
+                if (rec) recImage(g_vr.sc[e], ctx, black ? black : g_eyeTex[e], true);
                 if (track && g_vr.usedOk[e]) {
                     g_vr.layerPose[e] = g_vr.used[e];
                     g_vr.layerFov[e] = g_vr.usedFov[e];
                     g_vr.layerOk[e] = true;
                 }
-            } else
+            } else {
                 ctx->CopySubresourceRegion(g_vr.img[e][idx].texture, 0, 0, 0, 0, bb, 0, &box);
+                if (rec) recImage(g_vr.sc[e], ctx, bb, false);
+            }
             if (!bothNow && track && renderedOk && e == renderedEye) {
                 g_vr.layerPose[e] = renderedPose;
                 g_vr.layerFov[e] = g_vr.usedFov[e];
@@ -1079,7 +1086,7 @@ void vrOnPresent(IDXGISwapChain *swap, int eye) {
         if (!g_fadeMenu && !(vrEscLately() && g_escOpens)) mw5HudCopy(ctx, g_hudTex);
     if (ctx && g_hudLayerOn && g_hudTex && g_hudDrawnFrame == g_frame) fadeProbe(ctx, g_hudTex);
     if (ctx && g_hudLayerOn && g_hudTex && g_hudDrawnFrame == g_frame) wideProbe(ctx, g_hudTex);
-    if (ctx && fs.shouldRender && g_hudLayerOn && g_hudTex && g_hudDrawnFrame == g_frame) {
+    if (ctx && show && g_hudLayerOn && g_hudTex && g_hudDrawnFrame == g_frame) {
         uint32_t idx = 0;
         XrSwapchainImageAcquireInfo ai = {XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO};
         if (XR_SUCCEEDED(g_vr.AcquireSwapchainImage(g_vr.hudSc, &ai, &idx))) {
@@ -1099,6 +1106,9 @@ void vrOnPresent(IDXGISwapChain *swap, int eye) {
             }
             helpDraw(ctx, g_vr.hudImg[idx].texture, min(g_hudW, g_vr.w), hb.bottom, g_vr.hudLeft, g_vr.hudRight,
                      g_vr.hudTop, g_vr.hudBottom);
+            // a video (rec.cpp) gets the image as it is now; its red light is for the headset alone
+            if (rec) recImage(g_vr.hudSc, ctx, g_vr.hudImg[idx].texture, false);
+            recLight(ctx, g_vr.hudImg[idx].texture, min(g_hudW, g_vr.w), hb.bottom);
             XrSwapchainImageReleaseInfo ri = {XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
             g_vr.ReleaseSwapchainImage(g_vr.hudSc, &ri);
             if (!g_vr.hudHave)
@@ -1120,7 +1130,7 @@ void vrOnPresent(IDXGISwapChain *swap, int eye) {
     bool battle = !g_srcCamActive || (g_camEyeFrame != ~0u && g_frame - g_camEyeFrame < 30 && !g_menuMode);
     mechOnPresent(battle && track && g_srcCamActive, g_vr.baseP00 > 0 && g_P00 > g_vr.baseP00 * 1.05f);
     XrCompositionLayerQuad menuQ = {XR_TYPE_COMPOSITION_LAYER_QUAD};
-    if (track && !battle && fs.shouldRender && g_vr.have[0]) {
+    if (track && !battle && show && g_vr.have[0]) {
         // menus and films: the frame went to both eyes' images; one of them as a screen 3 m away
         float D = 3.0f, W = 3.6f;
         menuQ.space = g_vr.space;
@@ -1135,7 +1145,7 @@ void vrOnPresent(IDXGISwapChain *swap, int eye) {
         menuQ.size = {W, W * g_vr.h / (float)g_vr.w};
         layers[nl++] = (const XrCompositionLayerBaseHeader *)&menuQ;
     }
-    if (track && battle && fs.shouldRender && g_vr.layerOk[0] && g_vr.layerOk[1] && g_vr.have[0] && g_vr.have[1]) {
+    if (track && battle && show && g_vr.layerOk[0] && g_vr.layerOk[1] && g_vr.have[0] && g_vr.have[1]) {
         for (int e = 0; e < 2; ++e) {
             pv[e].pose = g_vr.layerPose[e];
             // the mech turned since this eye's image was drawn: the image turns with it (about the reference),
@@ -1183,7 +1193,7 @@ void vrOnPresent(IDXGISwapChain *swap, int eye) {
         layers[nl++] = (const XrCompositionLayerBaseHeader *)&proj;
     }
     for (int e = 0; e < 2 && !track; ++e) {
-        if (!g_vr.have[e] || !fs.shouldRender) continue;
+        if (!g_vr.have[e] || !show) continue;
         XrCompositionLayerQuad &q = quads[e];
         q.type = XR_TYPE_COMPOSITION_LAYER_QUAD;
         q.space = g_vr.space;
@@ -1199,8 +1209,7 @@ void vrOnPresent(IDXGISwapChain *swap, int eye) {
     // the HUD: three strips of its image as quads fixed to the mech (the reference pose), each spanning
     // the game's field of view from there - the top and bottom strips (panels, radar) near, in the
     // cockpit; the middle (cross-hair, target marks) far ahead
-    if (nl && battle && g_hudLayerOn && g_vr.hudHave && g_vr.haveRef && fs.shouldRender &&
-        g_hudDrawnFrame + 3 >= g_frame) {
+    if (nl && battle && g_hudLayerOn && g_vr.hudHave && g_vr.haveRef && show && g_hudDrawnFrame + 3 >= g_frame) {
         // rectangles of the HUD image (u0 v0 u1 v1): the far middle first, then the near frame around it -
         // top and bottom strips over the whole width, the side columns between them
         float T = g_vr.hudTop, B = g_vr.hudBottom, L = g_vr.hudLeft, R = g_vr.hudRight;
@@ -1435,6 +1444,7 @@ void vrOnPresent(IDXGISwapChain *swap, int eye) {
     ei.environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
     ei.layerCount = nl;
     ei.layers = layers;
+    if (rec) recFrame(g_imm, layers, nl); // what the headset is about to show, into the video (rec.cpp)
     vrCheck(g_vr.EndFrame(g_vr.session, &ei), "xrEndFrame");
     // poses for the next frame (rendered now, shown one period later)
     if (track)

@@ -200,6 +200,23 @@ For the author of MW4Engine DX11 - the numbers above are what such a request res
    detail, the clutter's records. (The sun's shadow maps are made once a frame already.)
 3. A way for a caller to say "this is the second eye of the same frame" would be enough of an interface for both.
 
+## A video's cost
+
+Measured on 2026-11-22 (RTX 5080, Virtual Desktop, 2600 x 2600 pixels an eye, Tharkad - Resupply, the mech
+standing; the headset not worn, so the frames are not paced by it). One run, a video (Ctrl+F5, 5200 x 2600 at 60
+pictures a second, HEVC at 122 Mbit/s, with sound) switched on and off every twelve seconds:
+
+| | A frame (ms) | The mod's work at `Present` (ms) |
+|---|---|---|
+| video on | 9.39 | 0.72 |
+| off | 9.08 | 0.61 |
+| on | 9.58 | 0.69 |
+| off | 9.16 | 0.63 |
+
+A video makes a frame 0.3 to 0.4 ms longer (about 4 %), 0.1 ms of it the mod's own work on the render thread; the
+rest is the graphics card's (the picture drawn once more, the encoder). No picture was left out in any run.
+Not measured: a video at `render_height=3840`, and one on a graphics card that is the limit already.
+
 ## Measuring
 
 ```

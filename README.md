@@ -83,12 +83,40 @@ Ctrl+Alt keys below.
 | Ctrl+PgUp / PgDn / End | the far HUD (cross-hair, target marks) farther / nearer / far |
 | Ctrl+F10 | this cockpit fits: remember it for this mech |
 | Ctrl+F12 | a picture of both eyes and the HUD into `mw4vr_shots\` |
+| Ctrl+F5 | a video of both eyes with the game's sound into `mw4vr_videos\`: begin / end (see [Videos](#videos)) |
 | Ctrl+F9 | the renderer's labels of one frame into `mw4vr_labels.txt` |
 | Ctrl+F6 / F7 / F8 | diagnosis, only with `[debug] level=1`: the camera's matrix kept / the eyes' mode / shaders hidden one by one |
 
 `[debug] level=1` in `mw4vr.ini` writes the diagnosis files (shaders, frame captures with Ctrl+Shift+F11) and the full log.
 
 Everything else is in `mw4vr.ini`, with a comment at each key.
+
+## Videos
+
+Ctrl+F5 begins a video of what the headset shows, Ctrl+F5 again ends it: both eyes side by side (left | right) at the
+size they are rendered at - 5200 x 2600 with `render_height=2600` -, the HUD drawn in as the headset shows it, with the
+game's sound, as `mw4vr_videos\mw4vr_<date>_<time>.mp4` (HEVC, AAC). A high beep and a red light up and to the left of
+the cross-hair (in the headset only, not in the video) say that it runs; a lower beep and a line in the headset that
+it is saved.
+
+- **End the video before you leave the game.** The file is complete only then; a game that is closed while a video
+  runs leaves a file that does not play.
+- The pictures are encoded by the graphics card and never pass through the processor's memory. It needs a card
+  with an HEVC encoder that Windows' Media Foundation can use (tested with NVIDIA; `mw4vr.log` says why a video
+  did not begin). A frame of the game takes about 0.3 ms longer while a video runs
+  ([measured](docs/PERFORMANCE.md#a-videos-cost)).
+- The video has 60 pictures a second by the clock on the wall (`rec_fps`), whatever the headset's rate is. A picture
+  the encoder has no room for is left out, never waited for; the log counts them.
+- Beside the video lies a `.json` with what a tool needs to cut or reproject the picture: sizes, pictures a
+  second, and each eye's field of view as tangents. Each eye's picture is flat (rectilinear) and, with the game's own
+  camera, symmetric: about 100 degrees wide and high. A menu or a film - one flat screen in the headset, some
+  metres away - fills the video's picture instead, the same in both eyes.
+- For YouTube's 3D the two halves go into one 16:9 frame marked `stereo_mode=left_right`, for example
+  `ffmpeg -i in.mp4 -vf scale=3840:2160,setsar=1 -c:v hevc_nvenc -b:v 60M -c:a copy -metadata:s:v:0 stereo_mode=left_right out.mkv`.
+- **Sharper:** `render_height=3840` (read at the start) renders each eye at 3840 x 3840 and makes a video of
+  7680 x 3840. That is 2.2 times the pixels for every picture of the game, not only for the video.
+- Settings in `mw4vr.ini`: `rec_fps`, `rec_bitrate_mbps`, `rec_hud` (0: the eyes' pictures without the HUD's
+  layers), `rec_audio`, `rec_light`.
 
 ## MechWarrior 5 cockpits
 

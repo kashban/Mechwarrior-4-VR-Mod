@@ -63,7 +63,10 @@ not signed; it was unpacked with `msiexec /a`, not installed).
 ## What an attacker could reach
 
 The mod opens no network connection, starts no process and writes nothing to the registry. It imports only
-`kernel32`, `user32`, `advapi32`, `gdi32`. What comes from outside:
+`kernel32`, `user32`, `advapi32`, `gdi32`, `ole32` - and, loaded from the system's folder only when a video begins
+(Ctrl+F5, `rec.cpp`), Media Foundation (`mfplat`, `mfreadwrite`) and the sound's loopback (`mmdevapi`). A video
+records the game's own pictures and this process's own sound (on a Windows before 10 2004: what the default output
+device plays) into `mw4vr_videos\` in the game's folder, and only between the user's two key presses. What comes from outside:
 
 - cockpit files `mw4vr_cockpits\*.mwc` / `mw4vr_paint.mwd` - the only input that may come from a stranger
   (somebody passes a converted cockpit on);
