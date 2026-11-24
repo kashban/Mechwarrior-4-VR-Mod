@@ -54,14 +54,17 @@ V vs(A a) {
     o.u = a.u;
     return o;
 }
-// u.z: 0 the texture's values as they are (encoded for a display already), 1 they are linear light and are encoded
-// here, 2 black. u.w: 1 the picture is opaque whatever its alpha says.
+// The result is linear light: the picture drawn into encodes it itself (an sRGB format), so that a layer is laid
+// over what is there in linear light - as a headset's runtime does it. (Laid over the encoded values, a pane
+// that lets 30 % through let far less of a bright sky through than in the headset.)
+// u.z: 0 the texture's values are encoded for a display and are decoded here, 1 they are linear light already,
+// 2 black. u.w: 1 the picture is opaque whatever its alpha says.
 float4 ps(V i) : SV_Target {
     if (i.u.z > 1.5) return float4(0, 0, 0, 1);
     float4 c = t.Sample(s, i.u.xy);
-    if (i.u.z > 0.5) {
-        float3 l = saturate(c.rgb);
-        c.rgb = lerp(1.055 * pow(abs(l), 1 / 2.4) - 0.055, l * 12.92, step(l, 0.0031308));
+    if (i.u.z < 0.5) {
+        float3 e = saturate(c.rgb);
+        c.rgb = lerp(pow(abs((e + 0.055) / 1.055), 2.4), e / 12.92, step(e, 0.04045));
     }
     if (i.u.w > 0.5) c.a = 1;
     return c;
@@ -125,6 +128,11 @@ static ID3D11PixelShader *g_recPS;
 static ID3D11InputLayout *g_recIL;
 static ID3D11Buffer *g_recVB;
 static ID3D11BlendState *g_recBlend[2]; // opaque; over what is there (colour times alpha already)
+// The picture is put together here and copied into the pool's texture: this one says that its values are encoded
+// (sRGB), so the graphics card lays the layers over each other in linear light. The pool's textures cannot say
+// so themselves - the encoder reads them as plain BGRA - and hold the same bytes.
+static ID3D11Texture2D *g_recWork;
+static ID3D11RenderTargetView *g_recWorkRtv;
 static ID3D11DepthStencilState *g_recDepth;
 static ID3D11RasterizerState *g_recRaster;
 static ID3D11SamplerState *g_recSampler;
@@ -246,6 +254,9 @@ static void recPoolFree() {
         s.rtv = nullptr, s.tex = nullptr, s.shared = nullptr;
         s.busy = 0;
     }
+    if (g_recWorkRtv) g_recWorkRtv->Release();
+    if (g_recWork) g_recWork->Release();
+    g_recWorkRtv = nullptr, g_recWork = nullptr;
 }
 
 static bool recPoolCreate() {
@@ -265,6 +276,12 @@ static bool recPoolCreate() {
             recPoolFree();
             return false;
         }
+    }
+    d.Format = DXGI_FORMAT_B8G8R8A8_UNORM_SRGB, d.BindFlags = D3D11_BIND_RENDER_TARGET, d.MiscFlags = 0;
+    if (FAILED(g_dev->CreateTexture2D(&d, nullptr, &g_recWork)) || !g_recWork ||
+        FAILED(g_dev->CreateRenderTargetView(g_recWork, nullptr, &g_recWorkRtv)) || !g_recWorkRtv) {
+        recPoolFree();
+        return false;
     }
     return true;
 }
@@ -539,7 +556,7 @@ void recFrame(ID3D11DeviceContext *c, const XrCompositionLayerBaseHeader *const 
         c->RSSetState(g_recRaster);
         c->PSSetSamplers(0, 1, &g_recSampler);
         c->PSSetShaderResources(0, 1, &none); // (a picture bound to be read cannot be drawn into)
-        ORIG(PFN_OMSet, c, VT_Ctx_OMSetRenderTargets)(c, 1, &slot.rtv, nullptr);
+        ORIG(PFN_OMSet, c, VT_Ctx_OMSetRenderTargets)(c, 1, &g_recWorkRtv, nullptr);
         for (int i = 0; i < nd; ++i) {
             const D3D11_VIEWPORT vp = {(float)(draw[i].eye * g_recEyeW), 0, (float)g_recEyeW, (float)g_recH, 0, 1};
             ORIG(RecPFN_Viewports, c, VT_Ctx_RSSetViewports)(c, 1, &vp);
@@ -586,6 +603,7 @@ void recFrame(ID3D11DeviceContext *c, const XrCompositionLayerBaseHeader *const 
     for (IUnknown *u : rel)
         if (u) u->Release();
     if (!drawn) return;
+    c->CopyResource(slot.tex, g_recWork); // (the same bytes: both are BGRA, one says "encoded")
 
     // The picture is handed over: what was drawn must be on its way to the graphics card before the other device
     // reads it.
