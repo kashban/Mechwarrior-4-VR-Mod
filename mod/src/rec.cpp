@@ -14,8 +14,8 @@
 //     encoder. The game's device is not touched by it (no lock on it, no call from another thread).
 //   - a third thread reads the game's sound (the loopback of this process alone, Windows 10 2004 and later; else of
 //     the default output device) and writes it into the same file, by the same clock.
-// The file is complete only when the video is ended with the key: a game that is closed while it runs leaves a file
-// that does not play.
+// The file is complete only when the video is ended: with the key, or by recOnExit when the game ends while it
+// runs. A game that dies or is killed then leaves a file that does not play.
 
 #include "mod.h"
 #include <objbase.h>
@@ -1072,6 +1072,43 @@ static DWORD WINAPI recThreadMain(void *) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// the game ends while a video runs
+//
+// A video's file is whole only once its writer has finished it. So the first video puts a jump at the beginning of
+// ntdll's RtlExitUserProcess - where ExitProcess goes, before it stops the other threads: there the video is ended
+// and waited for, then the game ends as it would have. A game that dies or is killed does not come by here; its
+// video stays a file that does not play.
+
+typedef void(NTAPI *PFN_ExitUserProcess)(LONG); // (the argument is an NTSTATUS: the exit code)
+static PFN_ExitUserProcess g_recExitReal;
+
+// (the call below goes into the middle of ntdll's function, behind our jump: not a place control flow guard knows)
+__declspec(guard(nocf)) static void NTAPI recOnExit(LONG code) {
+    for (int i = 0; i < 150 && g_recState.load() == REC_STARTING; ++i) Sleep(20); // (its file is being opened)
+    int running = REC_RUNNING;
+    if (g_recState.compare_exchange_strong(running, REC_STOPPING)) {
+        logf("video: the game ends - the video is finished first");
+        SetEvent(g_recWake);
+    }
+    for (int i = 0; i < 1000 && g_recState.load() != REC_IDLE; ++i) Sleep(20); // 20 s at most
+    g_recExitReal(code);
+}
+
+static void recExitHook() {
+    static bool tried;
+    if (tried) return;
+    tried = true;
+    HMODULE nt = GetModuleHandleW(L"ntdll.dll");
+    uint8_t *p = nt ? (uint8_t *)GetProcAddress(nt, "RtlExitUserProcess") : nullptr;
+    if (!p) {
+        logf("video: end it before you leave the game (no RtlExitUserProcess to end it at)");
+        return;
+    }
+    g_recExitReal = (PFN_ExitUserProcess)(p + 2);
+    if (!hotpatch(p, (void *)recOnExit))
+        logf("video: end it before you leave the game (RtlExitUserProcess does not begin as expected)");
+}
+
 // the render thread: the key
 
 static void recStart() {
@@ -1119,6 +1156,7 @@ static void recStart() {
     g_recFrames = 0, g_recDropped = 0;
     g_recFovKnown = false, g_recIpd = g_vr.ipd;
     QueryPerformanceFrequency(&g_recFreq);
+    recExitHook();
     g_recState = REC_STARTING;
     g_recThread = CreateThread(nullptr, 0, recThreadMain, nullptr, 0, nullptr);
     if (!g_recThread) {

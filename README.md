@@ -99,8 +99,8 @@ game's sound, as `mw4vr_videos\mw4vr_<date>_<time>.mp4` (HEVC, AAC). A high beep
 the cross-hair (in the headset only, not in the video) say that it runs; a lower beep and a line in the headset that
 it is saved.
 
-- **End the video before you leave the game.** The file is complete only then; a game that is closed while a video
-  runs leaves a file that does not play.
+- A video that still runs when you leave the game is ended and saved first (the game closes a moment later). Only
+  a game that crashes or is killed while a video runs leaves a file that does not play.
 - The pictures are encoded by the graphics card and never pass through the processor's memory. It needs a card
   with an HEVC encoder that Windows' Media Foundation can use (tested with NVIDIA; `mw4vr.log` says why a video
   did not begin). A frame of the game takes about 0.3 ms longer while a video runs

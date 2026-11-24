@@ -10,6 +10,9 @@ void eyeTlRightSet(const float *k, bool on);
 bool eyeTlRightPre(ID3D11DeviceContext *c);
 void eyeTlRightPost(ID3D11DeviceContext *c);
 void e2eState(int *v);
+// a jump to hook at the beginning of fn, if fn begins as Windows' hot-patchable functions do (the function itself
+// goes on at fn + 2)
+bool hotpatch(void *fn, void *hook);
 void hotpatchScan(ID3D11DeviceContext *ctx);
 typedef void(STDMETHODCALLTYPE *PFN_OMSet)(ID3D11DeviceContext *, UINT, ID3D11RenderTargetView *const *,
                                            ID3D11DepthStencilView *);

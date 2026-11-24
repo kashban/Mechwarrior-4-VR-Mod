@@ -98,8 +98,8 @@ Videos
   (left | right) at the size they are rendered at (5200 x 2600 with render_height=2600), with the HUD
   and the game's sound, as mw4vr_videos\mw4vr_<date>_<time>.mp4 (HEVC, AAC). A high beep and a red
   light beside the cross-hair (in the headset only) say that it runs.
-  - End the video before you leave the game: a game closed while a video runs leaves a file that
-    does not play.
+  - A video that still runs when you leave the game is ended and saved first. Only a game that
+    crashes or is killed while a video runs leaves a file that does not play.
   - It needs a graphics card with an HEVC encoder (tested with NVIDIA). mw4vr.log says why a video
     did not begin.
   - A .json beside the video holds its sizes and each eye's field of view, for cutting or
@@ -330,7 +330,8 @@ Videos
   (links | rechts) in der Größe, in der sie gerendert werden (5200 x 2600 bei render_height=2600), mit HUD
   und dem Ton des Spiels, als mw4vr_videos\mw4vr_<Datum>_<Zeit>.mp4 (HEVC, AAC). Ein hoher Ton und ein
   rotes Licht neben dem Fadenkreuz (nur im Headset) zeigen, dass es läuft.
-  - Das Video beenden, bevor du das Spiel verlässt: sonst bleibt eine Datei, die sich nicht abspielen lässt.
+  - Ein Video, das beim Verlassen des Spiels noch läuft, wird vorher beendet und gespeichert. Nur wenn das
+    Spiel abstürzt oder abgeschossen wird, bleibt eine Datei, die sich nicht abspielen lässt.
   - Es braucht eine Grafikkarte mit HEVC-Encoder (getestet mit NVIDIA). mw4vr.log sagt, warum ein Video
     nicht begann.
   - Eine .json neben dem Video nennt Größen und das Sichtfeld jedes Auges, für späteres Zuschneiden oder

@@ -652,7 +652,7 @@ static void *const g_hpHook[SL_N][HP_VARS] = {HP_ROW(HP_Draw),
                                               HP_ROW(HP_CopyReg),
                                               HP_ROW(HP_GenMips)};
 
-static bool hotpatch(void *fn, void *hook) {
+bool hotpatch(void *fn, void *hook) {
     uint8_t *p = (uint8_t *)fn;
     if (p[0] != 0x8B || p[1] != 0xFF) return false;
     for (int i = 1; i <= 5; ++i)
