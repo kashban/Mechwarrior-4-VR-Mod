@@ -40,6 +40,15 @@ class Layout(unittest.TestCase):
         # of a wider eye: its whole height, the middle of its width
         self.assertEqual(youtube3d.eye_filter(4000, 2000, 4000, 2160, 'fill', 0), 'crop=3556:2000:4222:0,scale=1920:2160:flags=lanczos')
 
+    def test_flat_is_one_eye(self):
+        # an ordinary 16:9 video: the same rows as fill takes, of the left eye or the right, over the whole width
+        self.assertEqual(youtube3d.flat_graph(3200, 3200, 0, 2160, 0),
+                         '[0:v]crop=3200:1800:0:700,scale=3840:2160:flags=lanczos,setsar=1[v]')
+        self.assertEqual(youtube3d.flat_graph(3200, 3200, 3200, 1080, 1),
+                         '[0:v]crop=3200:1800:3200:1400,scale=1920:1080:flags=lanczos,setsar=1[v]')
+        self.assertEqual(youtube3d.flat_graph(4000, 2000, 0, 1440, 0),
+                         '[0:v]crop=3556:2000:222:0,scale=2560:1440:flags=lanczos,setsar=1[v]')
+
     def test_graph_has_both_eyes(self):
         g = youtube3d.graph('crop=1', 'crop=2')
         self.assertEqual(g, '[0:v]split[a][b];[a]crop=1[l];[b]crop=2[r];[l][r]hstack,setsar=1[v]')
