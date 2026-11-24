@@ -111,11 +111,13 @@ it is saved.
   second, and each eye's field of view as tangents. Each eye's picture is flat (rectilinear) and, with the game's own
   camera, symmetric: about 100 degrees wide and high. A menu or a film - one flat screen in the headset, some
   metres away - fills the video's picture instead, the same in both eyes.
-- For YouTube's 3D: `python tools/video/youtube3d.py <the video>` writes an `.mkv` beside it that YouTube shows
-  as 3D - one 16:9 picture, the left eye squeezed into its left half and the right eye into its right half, marked
-  `stereo_mode=left_right`. An eye's picture is square: `--fit whole` (the default) keeps all of it, with black to
-  its left and right; `--fit fill` shows a 16:9 part of it over the whole width (`--down 1`: the lower part, with the
-  dashboard). `--height 4320` for a video of 7680 x 4320, `--from` / `--to` for a part. It needs ffmpeg.
+- For YouTube's 3D: `python tools/video/youtube3d.py <the video>` writes an `.mp4` beside it with the marks
+  YouTube knows a 3D video by (the boxes `st3d` and `sv3d`; a mark in an `.mkv` is not enough). By default it is
+  a VR180 video, what a headset shows around the viewer: each eye's picture laid onto the half of a sphere in
+  front of them, black where the game drew nothing, 8192 x 4096 at most. That takes about ten times the video's
+  length. `--fit whole` and `--fit fill` make a flat 16:9 picture with depth instead (all of the eye's square
+  picture with black beside it, or a 16:9 part of it; `--down 1`: the lower part, with the dashboard).
+  `--from` / `--to` for a part. It needs ffmpeg.
 - **Sharper:** `render_height=3840` (read at the start) renders each eye at 3840 x 3840 and makes a video of
   7680 x 3840. That is 2.2 times the pixels for every picture of the game, not only for the video.
 - Settings in `mw4vr.ini`: `rec_fps`, `rec_bitrate_mbps`, `rec_hud` (0: the eyes' pictures without the HUD's
