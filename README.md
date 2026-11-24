@@ -117,6 +117,8 @@ it is saved.
   front of them, black where the game drew nothing, 8192 x 4096 at most. That takes about ten times the video's
   length. `--fit whole` and `--fit fill` make a flat 16:9 picture with depth instead (all of the eye's square
   picture with black beside it, or a 16:9 part of it; `--down 1`: the lower part, with the dashboard).
+  `--fit flat` makes an ordinary video without 3D of that 16:9 part of one eye (`--eye right`: the other one;
+  3840 x 2160, `--height 1080` or `1440` for less) - for a trailer, or where no headset is at hand.
   `--from` / `--to` for a part. It needs ffmpeg.
 - **Sharper:** `render_height=3840` (read at the start) renders each eye at 3840 x 3840 and makes a video of
   7680 x 3840. That is 2.2 times the pixels for every picture of the game, not only for the video.

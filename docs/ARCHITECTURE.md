@@ -104,7 +104,7 @@ trusted: sizes, counts and names are checked before they are used (`core.h`: `mc
 | `tools/trees` | Card trees for mw4hook's terrain clutter, made from Poly Haven's plants (CC0). |
 | `tools/ci` | The repository guard (nothing of MechWarrior 5, no private data) and the AI review. |
 | `tools/e2e` | The end-to-end test's runner and judge (see Tests). |
-| `tools/video` | `youtube3d.py`: a video of the mod (both eyes at full size) made into a VR180 video (or a flat 16:9 one with depth) with ffmpeg, and the boxes that mark an .mp4 as 3D. |
+| `tools/video` | `youtube3d.py`: a video of the mod (both eyes at full size) made into a VR180 video (or a flat 16:9 one with depth, or an ordinary one of one eye) with ffmpeg, and the boxes that mark an .mp4 as 3D. |
 | `tools/security` | The security checks the pipeline runs. |
 | `tools/package.ps1` | Puts the release package together. |
 | `tools/pack_arms.ps1` | Packs a game folder's `mw4vr_arms\*.mwa` into `release\MW4VR-arms-<version>.zip`: a release's attachment, uploaded by hand - the files are the game's geometry and are not in the repository. |

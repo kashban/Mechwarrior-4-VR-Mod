@@ -1,8 +1,9 @@
-"""A video of the mod (Ctrl+F5: both eyes side by side, each at its full size) made into what YouTube shows as 3D.
+"""A video of the mod (Ctrl+F5: both eyes side by side, each at its full size) made into what YouTube shows as 3D -
+or into an ordinary 16:9 video of one eye.
 
-    python tools/video/youtube3d.py <mw4vr_videos/mw4vr_....mp4> [--fit vr180|whole|fill] [--height 4096]
-                                    [--fov 100.7] [--down 0.3] [--from 12.5] [--to 95] [--out file.mp4]
-                                    [--encoder hevc_nvenc]
+    python tools/video/youtube3d.py <mw4vr_videos/mw4vr_....mp4> [--fit vr180|whole|fill|flat] [--height 4096]
+                                    [--fov 100.7] [--down 0.3] [--eye right] [--from 12.5] [--to 95]
+                                    [--out file.mp4] [--encoder hevc_nvenc]
 
 YouTube knows a video as 3D by two boxes in the .mp4 (Google's "Spherical Video V2": st3d says left | right, sv3d
 says which part of a sphere the picture is); this script writes them. A mark in an .mkv is not enough.
@@ -12,8 +13,11 @@ says which part of a sphere the picture is); this script writes them. A mark in 
     --fit whole   a flat 16:9 picture with depth: all of the eye's square picture, black to its left and right
     --fit fill    the same with a 16:9 part of the eye's picture over the whole width; top and bottom are cut off.
                   --down says which part: -1 the top, 0 the middle, 1 the bottom (the cockpit's dashboard)
+    --fit flat    no 3D at all: the same 16:9 part of one eye's picture (--eye left, the default, or right) as an
+                  ordinary video, for a trailer or wherever a headset is not at hand. No marks are written.
 --height: the picture's height. vr180: by default what keeps the video's sharpness, 4096 at most (8192 x 4096).
 whole and fill: 2160 (3840 x 2160, the default) or 4320 (7680 x 4320, for a video of render_height 3200 and more).
+flat: 1080, 1440 or 2160 (3840 x 2160, the default).
 Needs ffmpeg and ffprobe.
 """
 
@@ -36,6 +40,23 @@ def even(x: float) -> int:
     return max(2, 2 * round(x / 2))
 
 
+def wide_part(eye_w: int, eye_h: int, x0: int, down: float) -> str:
+    """The crop that takes the 16:9 part of one eye's picture (it begins at x0): as wide as the picture or, of a
+    wider one, as high. down says which rows: -1 the top ones, 0 the middle, 1 the bottom."""
+    cw, ch = eye_w, even(eye_w * 9 / 16)
+    if ch > eye_h:
+        cw, ch = even(eye_h * 16 / 9), eye_h
+    x = x0 + (eye_w - cw) // 2
+    y = round((eye_h - ch) * (1 + max(-1.0, min(1.0, down))) / 2)
+    return 'crop=%d:%d:%d:%d' % (cw, ch, x, y)
+
+
+def flat_graph(eye_w: int, eye_h: int, x0: int, out_h: int, down: float) -> str:
+    """ffmpeg's filter graph for an ordinary 16:9 video of one eye's picture (it begins at x0)."""
+    part = wide_part(eye_w, eye_h, x0, down)
+    return '[0:v]%s,scale=%d:%d:flags=lanczos,setsar=1[v]' % (part, even(out_h * 16 / 9), out_h)
+
+
 def eye_filter(eye_w: int, eye_h: int, x0: int, out_h: int, fit: str, down: float) -> str:
     """The filters that make one eye's half of the 16:9 picture from its part of the video (it begins at x0).
 
@@ -43,13 +64,7 @@ def eye_filter(eye_w: int, eye_h: int, x0: int, out_h: int, fit: str, down: floa
     """
     half_w = even(out_h * 8 / 9)
     if fit == 'fill':
-        # the part of the eye's picture that is 16:9: as wide as the picture or, of a wider one, as high
-        cw, ch = eye_w, even(eye_w * 9 / 16)
-        if ch > eye_h:
-            cw, ch = even(eye_h * 16 / 9), eye_h
-        x = x0 + (eye_w - cw) // 2
-        y = round((eye_h - ch) * (1 + max(-1.0, min(1.0, down))) / 2)
-        return 'crop=%d:%d:%d:%d,scale=%d:%d:flags=lanczos' % (cw, ch, x, y, half_w, out_h)
+        return '%s,scale=%d:%d:flags=lanczos' % (wide_part(eye_w, eye_h, x0, down), half_w, out_h)
     # all of it: as high as the picture or, of a wider one, as wide - and half as wide as it is shown
     w, h = even(out_h * eye_w / eye_h / 2), out_h
     if w > half_w:
@@ -245,14 +260,17 @@ def eyes(src: str) -> tuple[int, int, list[Tans]]:
 
 
 def main(argv: list[str]) -> int:
-    p = argparse.ArgumentParser(description="A video of the mod made into YouTube's 3D layout.")
+    p = argparse.ArgumentParser(description="A video of the mod made into YouTube's 3D layout, or a flat one.")
     p.add_argument('video')
-    p.add_argument('--fit', choices=['vr180', 'whole', 'fill'], default='vr180')
-    p.add_argument('--height', type=int, help='vr180: 4096 at most; whole and fill: 2160 or 4320')
+    p.add_argument('--fit', choices=['vr180', 'whole', 'fill', 'flat'], default='vr180')
+    p.add_argument(
+        '--height', type=int, help='vr180: 4096 at most; whole and fill: 2160 or 4320; flat: 1080, 1440 or 2160'
+    )
     p.add_argument('--fov', type=float, help="vr180: an eye's field of view in degrees, if no .json says it")
     p.add_argument(
-        '--down', type=float, default=0.0, help='with --fit fill: -1 the top part, 0 the middle, 1 the bottom'
+        '--down', type=float, default=0.0, help='with --fit fill or flat: -1 the top part, 0 the middle, 1 the bottom'
     )
+    p.add_argument('--eye', choices=['left', 'right'], default='left', help='with --fit flat: whose picture')
     p.add_argument('--from', dest='start', type=float, help='seconds: where to begin')
     p.add_argument('--to', dest='end', type=float, help='seconds: where to end')
     p.add_argument('--out', help='the file to write (default: beside the video, <name>_3d_<fit>_<height>.mp4)')
@@ -262,7 +280,16 @@ def main(argv: list[str]) -> int:
         print('no such file: %s' % a.video)
         return 2
     eye_w, eye_h, tans = eyes(a.video)
-    if a.fit == 'vr180':
+    said = "YouTube's 3D: left | right"
+    if a.fit == 'flat':
+        h = a.height or 2160
+        if h not in (1080, 1440, 2160):
+            print('--height: 1080, 1440 or 2160')
+            return 2
+        w = even(h * 16 / 9)
+        filters = flat_graph(eye_w, eye_h, eye_w if a.eye == 'right' else 0, h, a.down)
+        said = 'the %s eye, no 3D' % a.eye
+    elif a.fit == 'vr180':
         if a.fov:
             t = math.tan(math.radians(min(a.fov, 170.0)) / 2)
             tans = [(-t, t, t, -t)] * 2
@@ -284,13 +311,14 @@ def main(argv: list[str]) -> int:
         filters = graph(
             eye_filter(eye_w, eye_h, 0, h, a.fit, a.down), eye_filter(eye_w, eye_h, eye_w, h, a.fit, a.down)
         )
-    dst = a.out or '%s_3d_%s_%d.mp4' % (os.path.splitext(a.video)[0], a.fit, h)
+    kind = 'flat' if a.fit == 'flat' else '3d_' + a.fit
+    dst = a.out or '%s_%s_%d.mp4' % (os.path.splitext(a.video)[0], kind, h)
     if not dst.lower().endswith('.mp4'):
         print('--out: an .mp4 (YouTube reads the 3D marks from that)')
         return 2
-    print("each eye %d x %d -> %s, %d x %d (YouTube's 3D: left | right)" % (eye_w, eye_h, dst, w, h))
+    print('each eye %d x %d -> %s, %d x %d (%s)' % (eye_w, eye_h, dst, w, h, said))
     code = subprocess.run(command(a.video, dst, filters, w * h, a), check=False).returncode
-    if code == 0:
+    if code == 0 and a.fit != 'flat':
         mark_file(dst, a.fit == 'vr180')
     return code
 
