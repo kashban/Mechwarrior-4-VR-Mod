@@ -44,7 +44,7 @@ A model on the developer's PC (llama.cpp's `llama-server` behind llama-swap) rev
 `tools/ci/ai-review.mjs` sends it `docs/ai-review-guide.md`, the changed files that are small enough and the diff
 of `mod/src`, `tools` and `tests`, and writes the answer as one comment that every push replaces. It is advice,
 not a gate: with the PC off or the GPU busy the comment says that the review was skipped, and the job passes.
-The script and its tests come from the MiljanaMovingIn project's pipeline.
+The script and its tests come from another project's pipeline.
 
 A finding can be judged in a comment that starts with `<!-- ai-review-verdicts -->` (real, minor or false, with a
 reason); the next review of the same pull request gets it and does not report a finding judged false again. When

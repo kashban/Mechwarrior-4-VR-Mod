@@ -1,5 +1,5 @@
 // Black-box tests for ai-review.mjs: runs the real script against mock Ollama and GitHub servers.
-// Run: node --test tools/ci/ai-review.test.mjs (from the repo root). From the MiljanaMovingIn project, like the script.
+// Run: node --test tools/ci/ai-review.test.mjs (from the repo root). From another project, like the script.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';

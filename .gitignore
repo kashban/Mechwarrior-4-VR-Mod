@@ -36,3 +36,6 @@ re/
 
 # release packages
 release/
+
+# a letter to MW4Engine's author: not part of the mod
+/report_for_mw4engine_author.md

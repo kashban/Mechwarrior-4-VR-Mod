@@ -1,6 +1,6 @@
 # MW4Engine and the VR mod – what an interface could look like
 
-This follows up on `report_for_mw4engine_author.md`. Since that report the VR mod has become a complete thing:
+This follows up on an earlier report to MW4Engine's author. Since that report the VR mod has become a complete thing:
 both eyes at 90 Hz through OpenXR, head tracking, the HUD as its own layer, a cockpit of its own. It still does
 all of it **from the outside**, as a `d3d11.dll` proxy that watches MW4Engine and patches around it. This note
 lists what the mod takes from `mw4hook.dll` today, why each of those is fragile, and what a small interface in

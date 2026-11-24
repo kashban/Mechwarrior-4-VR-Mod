@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // AI code review for pull requests by a local model on the developer's PC: with AI_API=openai an OpenAI-compatible
 // server (llama.cpp's llama-server behind llama-swap), else Ollama; OLLAMA_URL and OLLAMA_MODEL name the server and
-// its model. Taken over from the MiljanaMovingIn project's pipeline, where it was measured and tuned; what differs
+// its model. Taken over from another project's pipeline, where it was measured and tuned; what differs
 // here is GitHub's API, the reviewed paths and the prompt. It runs on a self-hosted runner that reaches the model
 // (.github/workflows/ai-review.yml, docs/PIPELINE.md).
 //
@@ -43,7 +43,7 @@ const TOTAL_TIMEOUT_S = Number(process.env.TOTAL_TIMEOUT_S || 600);
 // Token budget, ~3.5 characters per token: MAX_PROMPT_CHARS (~24K tokens) + NUM_PREDICT < NUM_CTX.
 // NUM_PREDICT includes thinking: qwen3.6 used up 6144 on the PR #4 diff and returned nothing, so 12K.
 // It also caps models that loop. A bigger NUM_CTX costs VRAM: at 64K, devstral:24b spilled to
-// 44% CPU and ran at 5 tokens/s. (All numbers here were measured in MiljanaMovingIn's model evaluation.)
+// 44% CPU and ran at 5 tokens/s. (All numbers here were measured in that project's model evaluation.)
 const NUM_CTX = Number(process.env.NUM_CTX || 40960);
 const NUM_PREDICT = Number(process.env.NUM_PREDICT || 12288);
 const RETRY_NUM_PREDICT = Number(process.env.RETRY_NUM_PREDICT || 3072);
