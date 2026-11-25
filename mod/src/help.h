@@ -6,6 +6,8 @@ extern volatile bool g_helpOn;
 extern bool g_helpPause, g_helpClock;
 // into the HUD layer's picture tex (w x h used of it), while the page is up: its far middle
 void helpDraw(ID3D11DeviceContext *ctx, ID3D11Texture2D *tex, UINT w, UINT h, float L, float R, float T, float B);
+// while the page is up and has been drawn: where it lies in that picture, in pixels (left, top, right, bottom)
+bool helpBox(UINT *box);
 extern volatile LONGLONG g_helpOffQpc; // what the page's time adds up to, in the counter's units
 extern volatile DWORD g_helpOffMs;     // and in milliseconds
 // once, in the first battle frame (the game is unpacked and mw4hook loaded by then)
