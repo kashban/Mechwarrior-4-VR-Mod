@@ -1317,8 +1317,19 @@ void vrOnPresent(IDXGISwapChain *swap, int eye) {
             // wrong colours. No HUD for those moments; without a menu after them it is there again.
             if (vrEscLately() && !g_fadeMenu && !(g_fadeA > 0)) nr = 0;
         }
-        bool crossNow =
-            g_crossShown && g_crossSc != XR_NULL_HANDLE && nr > 0 && !(g_fadeA > 0) && !g_fadeMenu && !(g_holdA > 0);
+        // The keys' page (help.cpp) lies in the far middle of the HUD's picture - and over whatever part of the
+        // HUD has its place there. Cut up like the HUD, the page had holes where such a part is shown elsewhere
+        // (the radar on a monitor), and the cross-hair's layer and the compass stood before its text. While it is
+        // up: the page alone, as one piece. (The monitors keep their pictures: they are not made of this image.)
+        UINT pageBox[4];
+        const bool page = nr > 0 && !(g_fadeA > 0) && !g_fadeMenu && !(g_holdA > 0) && helpBox(pageBox);
+        if (page) {
+            rc[0][0] = (float)pageBox[0] / g_vr.w, rc[0][1] = (float)pageBox[1] / g_vr.h;
+            rc[0][2] = (float)pageBox[2] / g_vr.w, rc[0][3] = (float)pageBox[3] / g_vr.h, rc[0][4] = MC_FAR;
+            nr = 1;
+        }
+        bool crossNow = g_crossShown && g_crossSc != XR_NULL_HANDLE && nr > 0 && !(g_fadeA > 0) && !g_fadeMenu &&
+                        !(g_holdA > 0) && !page;
         for (int i = 0; i < nr; ++i) {
             float u0 = rc[i][0], v0 = rc[i][1], u1 = rc[i][2], v1 = rc[i][3];
             bool isFar = rc[i][4] == 1 || rc[i][4] >= 3, opaque = rc[i][4] == 2 || rc[i][4] == 3;

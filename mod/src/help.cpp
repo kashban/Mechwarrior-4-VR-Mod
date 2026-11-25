@@ -15,6 +15,7 @@ bool g_helpPause = true, g_helpClock = true;
 static int g_helpSize = 60; // [vr] help_size: the page's size, per cent of the far middle of the HUD's picture
 static std::vector<uint32_t> g_helpBits; // BGRA, top row first
 static UINT g_helpW, g_helpH;
+static UINT g_helpBox[4]; // where the page was last drawn in the HUD layer's picture (nothing: right = 0)
 
 struct HelpLine {
     const wchar_t *key; // nullptr: a heading
@@ -144,6 +145,14 @@ void helpDraw(ID3D11DeviceContext *ctx, ID3D11Texture2D *tex, UINT w, UINT h, fl
     if (x + bw > w || y + bh > h) return;
     D3D11_BOX box = {x, y, 0, x + bw, y + bh, 1};
     ctx->UpdateSubresource(tex, 0, &box, g_helpBits.data(), bw * 4, 0);
+    g_helpBox[0] = x, g_helpBox[1] = y, g_helpBox[2] = x + bw, g_helpBox[3] = y + bh;
+}
+
+bool helpBox(UINT *box) {
+    if (!g_helpOn) g_helpBox[2] = 0; // (the next time it is up it has to be drawn first)
+    if (!g_helpBox[2]) return false;
+    memcpy(box, g_helpBox, sizeof g_helpBox);
+    return true;
 }
 
 // ---- the game's clocks -----------------------------------------------------------------------
