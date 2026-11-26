@@ -1680,6 +1680,35 @@ static void testAutoLimits() {
 }
 
 // ---------------------------------------------------------------- the cockpit's sway from its place
+static void testHangs() {
+    // what hangs below a part: the rows that hold something from the part's edge on, short gaps passed over
+    unsigned char c[1024] = {};
+    CHECK(mcHangsTo(c, 1024, 100, 10) == 100); // nothing
+    for (int i = 100; i < 300; ++i) c[i] = MC_WIDE_ALPHA;
+    CHECK(mcHangsTo(c, 1024, 100, 10) == 300);
+    CHECK(mcHangsTo(c, 1024, 200, 10) == 300);
+    c[150] = MC_WIDE_ALPHA - 1; // (a row with too little alpha is a gap)
+    CHECK(mcHangsTo(c, 1024, 100, 0) == 150);
+    CHECK(mcHangsTo(c, 1024, 100, 1) == 300);
+    // ... something further down does not belong to it, unless the gap is short enough
+    for (int i = 320; i < 340; ++i) c[i] = 255;
+    CHECK(mcHangsTo(c, 1024, 100, 10) == 300);
+    CHECK(mcHangsTo(c, 1024, 100, 19) == 300);
+    CHECK(mcHangsTo(c, 1024, 100, 20) == 340);
+    // ... nor something that begins below the edge by more than a gap
+    CHECK(mcHangsTo(c, 1024, 60, 10) == 60);
+    CHECK(mcHangsTo(c, 1024, 90, 10) == 300);
+    // the column's ends
+    for (int i = 1000; i < 1024; ++i) c[i] = 255;
+    CHECK(mcHangsTo(c, 1024, 1000, 10) == 1024);
+    CHECK(mcHangsTo(c, 1024, 1024, 10) == 1024);
+    CHECK(mcHangsTo(c, 1024, 2000, 10) == 2000);
+    CHECK(mcHangsTo(c, 1024, -5, 10) == -5);
+    c[0] = c[1] = 255;
+    CHECK(mcHangsTo(c, 1024, -1, 10) == -1);
+    CHECK(mcHangsTo(c, 1024, 0, 10) == 2);
+}
+
 static void testBand() {
     // the band: the rows where all three columns hold something, the longest run
     unsigned char l[1024] = {}, m[1024] = {}, r[1024] = {};
@@ -2098,7 +2127,7 @@ static void testRec() {
 int main() {
     testRec();
     testM4(), testM4Inv(), testProj(), testEyeStep(), testStereo(), testAuto(), testAutoLimits(), testAutoChange(),
-        testAutoMission(), testShape(), testHold(), testBand(), testFogCut();
+        testAutoMission(), testShape(), testHold(), testBand(), testHangs(), testFogCut();
     testHolds(), testTurnNorm(), testTurnFit(), testEyeInMesh(), testHudCross(), testHudGlass(), testGlassPose(),
         testGlassScale(), testGlassAim();
     testGridMark(), testGridPlace(), testGridTri(), testGridCells(), testGridFree(), testGridRim(), testGridFit();

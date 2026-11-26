@@ -595,6 +595,17 @@ static inline bool mcWideBand(const unsigned char *l, const unsigned char *m, co
     *r0 = at, *r1 = at + best;
     return true;
 }
+// What hangs below a part of the HUD image (the lance orders' menu below the lance list): one column of the image
+// through the part, its alpha by rows. From the row `from` on (the part's lower edge) the rows that hold something,
+// gaps of up to `gap` rows passed over (between a text's lines). The row after the last of them; `from`: nothing
+// hangs there (nor where the edge lies above the column).
+static inline int mcHangsTo(const unsigned char *col, int n, int from, int gap) {
+    if (from < 0) return from;
+    int last = from;
+    for (int i = last; i < n && i - last <= gap; ++i)
+        if (col[i] >= MC_WIDE_ALPHA) last = i + 1;
+    return last;
+}
 // a part put into the list at a place (what stood there and after it moves on); false: a sliver, or no room
 static inline bool mcInsert(McRects &q, int at, float u0, float v0, float u1, float v1, float kind) {
     if (!(q.n < MC_RECTS && u1 - u0 > 0.005f && v1 - v0 > 0.005f)) return false;

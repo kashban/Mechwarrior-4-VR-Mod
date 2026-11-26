@@ -38,6 +38,13 @@ static const float g_m5Part[M5_PARTS][4] = {{0.320f, 0.770f, 0.690f, 0.990f}, {0
                                             {0.820f, 0.772f, 1.005f, 1.000f}, {0.000f, 0.000f, 0.243f, 0.108f},
                                             {0.716f, 0.000f, 1.000f, 0.124f}, {0.243f, 0.000f, 0.716f, 0.120f}};
 static const float g_m5LanceMenu = 0.435f; // the lance list with its open orders menu reaches this far down
+// ... or further: under a list of seven mechs the menu begins lower, and its last orders hung below the part - they
+// stood far ahead in the view, cut off from the rest. How far down the menu reaches now, as found in the HUD image
+// (vr.cpp, wideProbe); 0: not below g_m5LanceMenu.
+static float g_m5LanceDown;
+void mw5LanceColumn(float *u, float *v) { *u = 0.5f * (g_m5Part[3][0] + g_m5Part[3][2]), *v = g_m5LanceMenu; }
+void mw5LanceDown(float v) { g_m5LanceDown = v; }
+static float mw5LanceBottom() { return max(g_m5LanceMenu, g_m5LanceDown); }
 static const float g_m5WeaponsLeft =
     0.700f; // where the weapon list's frame begins (its part for a monitor begins inside it)
 static const float g_m5GlassDef[M5_PARTS][3] = {{0, -17, 11}, {-26, -14, 8}, {26, -14, 8},
@@ -893,7 +900,7 @@ int mw5GlassItems(GlassItem *out) {
         if (mw5PartOnMonitor(p)) continue;
         GlassItem &it = out[n++];
         memcpy(it.base, r, sizeof it.base), memcpy(it.rc, r, sizeof it.rc);
-        if (p == 3) it.rc[3] = g_m5LanceMenu;
+        if (p == 3) it.rc[3] = mw5LanceBottom();
         if (p == 4) it.rc[0] = g_m5WeaponsLeft, it.rc[3] = g_m5LanceMenu; // the list is as long as the mech has weapons
         if (p == 5) it.base[3] = it.rc[3] = g_vr.hudTop, it.rc[2] = g_m5WeaponsLeft;
         it.right = g[0], it.up = g[1], it.width = g[2], it.dist = g[3];
@@ -1872,7 +1879,7 @@ void mw5HighlightDraw(ID3D11DeviceContext *c) {
     } else {
         if (!(mw5G(p)[2] > 0.5f)) return; // hidden
         memcpy(rc, g_m5Part[p], sizeof rc);
-        if (p == 3) rc[3] = g_m5LanceMenu;
+        if (p == 3) rc[3] = mw5LanceBottom();
         if (p == 4) rc[0] = g_m5WeaponsLeft, rc[3] = g_m5LanceMenu;
         if (p == 5) rc[3] = g_vr.hudTop, rc[2] = g_m5WeaponsLeft;
     }
