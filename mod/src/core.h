@@ -574,7 +574,10 @@ static inline void mcHudRectsWith(const McHud &h, McRects &q, bool shrink) {
     for (int g = 0; g < h.nGlass;
          ++g) { // the parts on the glass, each with the windows in it (the target's view) over it
         const float *r = h.glass[g];
-        mcAdd(q, r[0], r[1], r[2], r[3], (float)(MC_GLASS + g));
+        // (without the zoom window: it opens over the middle and reaches into the lists beside it - a corner of
+        // the zoomed picture stood on their panes. A part that holds the window's middle keeps it.)
+        const bool own = cut && mcHolds(r, 0.5f * (zr[0] + zr[2]), 0.5f * (zr[1] + zr[3]));
+        mcAddCut(q, own ? nullptr : cut, r[0], r[1], r[2], r[3], (float)(MC_GLASS + g));
         for (int i = 0; i < h.nCam; ++i) {
             const float *c = h.cam[i];
             if (mcHolds(r, 0.5f * (c[0] + c[2]), 0.5f * (c[1] + c[3])))

@@ -744,6 +744,31 @@ static void testHudGlass() {
     h.nGlass = 0;
     mcHudRects(h, q);
     CHECK(q.n == 6);
+    // the zoom window reaches into the lists beside the middle: left out of their panes (with its frame), each
+    // pane in two pieces then. A part that holds the window's middle keeps it, the window over it.
+    McHud z = hud();
+    z.screens = true;
+    const float lance[4] = {0, 0, 0.243f, 0.435f}, weapons[4] = {0.7f, 0, 1, 0.435f},
+                mid[4] = {0.46f, 0.5f, 0.5f, 0.7f};
+    memcpy(z.glass[0], lance, sizeof lance), memcpy(z.glass[1], weapons, sizeof weapons);
+    memcpy(z.glass[2], mid, sizeof mid);
+    z.nGlass = 3;
+    setCam(z, 0.228f, 0.35f, 0.75f, 0.67f); // (its middle: 0.489 0.51)
+    mcHudRects(z, q);
+    const float pane[][5] = {
+        {0, 0, 0.243f, 0.33f, MC_GLASS},         {0, 0.33f, 0.208f, 0.435f, MC_GLASS},
+        {0.7f, 0, 1, 0.33f, MC_GLASS + 1},       {0.77f, 0.33f, 1, 0.435f, MC_GLASS + 1},
+        {0.46f, 0.5f, 0.5f, 0.7f, MC_GLASS + 2}, {0.228f, 0.35f, 0.75f, 0.67f, MC_GLASS_OPAQUE + 2}};
+    int at = 0;
+    while (at < q.n && q.rc[at][4] < MC_GLASS) ++at;
+    CHECK(q.n - at == 6);
+    for (int i = 0; i < 6 && q.n - at == 6; ++i)
+        for (int k = 0; k < 5; ++k) CHECK(nearly(q.rc[at + i][k], pane[i][k], 1e-6f));
+    z.nCam = 0; // no zoom window: the panes whole
+    mcHudRects(z, q);
+    at = 0;
+    while (at < q.n && q.rc[at][4] < MC_GLASS) ++at;
+    CHECK(q.n - at == 3 && q.rc[at][3] == 0.435f && q.rc[at + 1][0] == 0.7f);
 }
 
 // v turned by the quaternion q (x y z w)
