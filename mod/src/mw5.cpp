@@ -106,6 +106,10 @@ static float g_m5Rect[MW5_SCREENS][4]; // u0 v0 u1 v1 of the HUD image; u1 <= u0
 static float g_m5Alt[MW5_SCREENS][6];  // a second part (u0 v0 u1 v1) and its probe point (u v); u1 <= u0: none
 // ... as shown now: the lance list's is as long as its open orders menu (under seven mechs the menu's end hung
 // below the part: cut off on the monitor, and shown far ahead). The monitor shows the longer part whole, smaller.
+// The zoom window in the monitors' HUD image (u0 v0 u1 v1, with a rim for the game's frame of it; u1 <= u0: none).
+// It opens over the middle and reaches into the parts beside it: its corner stood on the lance list's monitor. A
+// monitor leaves it out, unless the window's middle lies in its part.
+static float g_m5Hole[4];
 static void mw5AltNow(int s, float *a) {
     float u, v;
     mw5LanceColumn(&u, &v);
@@ -132,9 +136,9 @@ cbuffer C : register(b13) {
     float4 lamp;          // xyz: towards the lamp (mesh space); w: the share of the depth range kept for the mesh alone
     float4 par;           // emissive, ambient, linear output, > 0: a monitor
     float4 scr;           // a monitor: the part of the HUD image, u0 v0 u1 v1
-    float4 scr2;          // z: gain; w: dark red times this at most
+    float4 scr2;          // z: gain; w: dark red times this at most; xy: see alt2
     float4 alt;           // a second part, shown while the HUD image is not empty at the probe point (z <= x: none)
-    float4 alt2;          // zw: the probe point
+    float4 alt2;          // zw: the probe point; scr2.xy .. alt2.xy: left out of the part (the zoom window; x <= x: none)
     float4 rot;           // the monitor's uv (about its middle) -> the part's (about its middle): xy the row for u, zw for v
     float4 rot2;          // as rot, for the second part
     float4 eye;           // xyz: the eye in the mesh; w > 0: painted metal, as strongly
@@ -189,7 +193,9 @@ float4 ps(VSOut i) : SV_Target {
         }
         float2 q = float2(dot(i.uv - 0.5, f.xy), dot(i.uv - 0.5, f.zw));
         float3 h = 0;
-        if (r.z > r.x && abs(q.x) < 0.5 && abs(q.y) < 0.5) h = th.SampleLevel(sm, lerp(r.xy, r.zw, q + 0.5), 0).rgb * scr2.z;
+        float2 uv = lerp(r.xy, r.zw, q + 0.5);
+        bool hole = alt2.x > scr2.x && uv.x > scr2.x && uv.x < alt2.x && uv.y > scr2.y && uv.y < alt2.y;
+        if (r.z > r.x && abs(q.x) < 0.5 && abs(q.y) < 0.5 && !hole) h = th.SampleLevel(sm, uv, 0).rgb * scr2.z;
         // dark red (an enemy's weapon list: black letters on a translucent red bar, dim without the scene behind it): brighter
         // (a weapon's state is its bar's colour - green, yellow, red: the red stays clearly red, less of its green)
         if (scr2.w > 1 && h.r > 0.06 && h.r > 1.6 * h.g && h.r > 1.6 * h.b) {
@@ -1264,6 +1270,14 @@ void mw5HudCopy(ID3D11DeviceContext *c, ID3D11Texture2D *hud) {
         }
     }
     if (g_m5Hud) c->CopyResource(g_m5Hud, hud);
+    memset(g_m5Hole, 0, sizeof g_m5Hole);
+    for (int i = 0; g_m5Hud && g_hudCamFrame == g_frame && g_hudW && g_hudH && i < g_hudCamN; ++i) {
+        const HudCamRect &r = g_hudCams[i];
+        const float u0 = (float)r.x / g_hudW, u1 = (float)(r.x + r.w) / g_hudW, rim = 0.003f;
+        if (!(u0 + u1 > 0.6f && u0 + u1 < 1.4f)) continue; // (core.h, mcZoomWindow: the window about the middle)
+        g_m5Hole[0] = u0 - rim, g_m5Hole[1] = (float)r.y / g_hudH - rim, g_m5Hole[2] = u1 + rim,
+        g_m5Hole[3] = (float)(r.y + r.h) / g_hudH + rim;
+    }
 }
 
 // at a CPU-path draw of the main camera's pass for an eye (our replacement shader is bound): once per pass
@@ -1553,6 +1567,9 @@ void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw, int ckTris) {
                 float aa = haveA ? (a[2] - a[0]) * pw / ((a[3] - a[1]) * g_m5HudH) : 1;
                 cb[36] = a[0] * ku, cb[37] = a[1], cb[38] = (haveA ? a[2] : a[0]) * ku, cb[39] = a[3];
                 cb[42] = a[4] * ku, cb[43] = a[5];
+                const float *o = g_m5Hole, ou = 0.5f * (o[0] + o[2]), ov = 0.5f * (o[1] + o[3]);
+                const bool out = have && o[2] > o[0] && !mcHolds(r, ou, ov) && !(haveA && mcHolds(a, ou, ov));
+                cb[32] = out ? o[0] * ku : 0, cb[33] = o[1], cb[40] = out ? o[2] * ku : 0, cb[41] = o[3];
                 mcTurnFit(g.aspect, aa, g_m5Turn[g.screen - 1], cb + 48);
                 sv[2] = have ? g_m5HudSrv : nullptr;
                 if (!put()) continue;
