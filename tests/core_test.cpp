@@ -1680,6 +1680,16 @@ static void testAutoLimits() {
 }
 
 // ---------------------------------------------------------------- the cockpit's sway from its place
+static void testAltBottom() {
+    // a monitor's second part grows with the menu it shows; a part elsewhere, or none, stays as set
+    const float a[4] = {0, 0, 0.243f, 0.435f}, none[4] = {};
+    CHECK(mcAltBottom(a, 0.12f, 0.05f, 0) == 0.435f);
+    CHECK(mcAltBottom(a, 0.12f, 0.05f, 0.4f) == 0.435f);
+    CHECK(mcAltBottom(a, 0.12f, 0.05f, 0.58f) == 0.58f);
+    CHECK(mcAltBottom(a, 0.5f, 0.05f, 0.58f) == 0.435f);
+    CHECK(mcAltBottom(none, 0.12f, 0.05f, 0.58f) == 0);
+}
+
 static void testHangs() {
     // what hangs below a part: the rows that hold something from the part's edge on, short gaps passed over
     unsigned char c[1024] = {};
@@ -2139,7 +2149,7 @@ static void testRec() {
 int main() {
     testRec();
     testM4(), testM4Inv(), testProj(), testEyeStep(), testStereo(), testAuto(), testAutoLimits(), testAutoChange(),
-        testAutoMission(), testShape(), testHold(), testBand(), testHangs(), testFogCut();
+        testAutoMission(), testShape(), testHold(), testBand(), testHangs(), testAltBottom(), testFogCut();
     testHolds(), testTurnNorm(), testTurnFit(), testEyeInMesh(), testHudCross(), testHudGlass(), testGlassPose(),
         testGlassScale(), testGlassAim();
     testGridMark(), testGridPlace(), testGridTri(), testGridCells(), testGridFree(), testGridRim(), testGridFit();

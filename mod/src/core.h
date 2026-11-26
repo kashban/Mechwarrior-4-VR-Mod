@@ -472,6 +472,13 @@ struct McHud {
 // the point u v lies in the rectangle r (not on its edge)
 static inline bool mcHolds(const float *r, float u, float v) { return r[0] < u && u < r[2] && r[1] < v && v < r[3]; }
 
+// A monitor's second part a (the lance list with its open orders menu) that shows the point u v (the list's
+// middle): how far down it reaches while the menu reaches down to `down` - the part grows with it, and the monitor
+// shows the whole of it, smaller. Any other part: as far as it is set.
+static inline float mcAltBottom(const float *a, float u, float v, float down) {
+    return mcHolds(a, u, v) ? fmaxf(a[3], down) : a[3];
+}
+
 // degrees as -180 < d <= 180 (a whole turn is none; what is no number: 0)
 static inline float mcTurnNorm(float d) {
     if (!(d > -1e6f && d < 1e6f)) return 0;

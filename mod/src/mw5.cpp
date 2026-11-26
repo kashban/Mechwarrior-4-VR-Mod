@@ -104,7 +104,15 @@ static UINT g_m5HudW, g_m5HudH;
 static int g_m5Screens;
 static float g_m5Rect[MW5_SCREENS][4]; // u0 v0 u1 v1 of the HUD image; u1 <= u0: dark
 static float g_m5Alt[MW5_SCREENS][6];  // a second part (u0 v0 u1 v1) and its probe point (u v); u1 <= u0: none
-static float g_m5Turn[MW5_SCREENS];    // degrees the monitor's picture is turned clockwise within the monitor
+// ... as shown now: the lance list's is as long as its open orders menu (under seven mechs the menu's end hung
+// below the part: cut off on the monitor, and shown far ahead). The monitor shows the longer part whole, smaller.
+static void mw5AltNow(int s, float *a) {
+    float u, v;
+    mw5LanceColumn(&u, &v);
+    memcpy(a, g_m5Alt[s], sizeof g_m5Alt[s]);
+    a[3] = mcAltBottom(a, u, 0.5f * (g_m5Part[3][1] + g_m5Part[3][3]), g_m5LanceDown);
+}
+static float g_m5Turn[MW5_SCREENS]; // degrees the monitor's picture is turned clockwise within the monitor
 static float g_m5ScreenGain = 1, g_m5RedBoost = 6;
 static int g_mw5ScreensWanted = 1;
 static bool g_mw5Own;      // this cockpit has a settings file of its own
@@ -914,11 +922,18 @@ int mw5GlassItems(GlassItem *out) {
     return n;
 }
 
-// the far HUD's left column begins below this row, while the lance list is on the glass (0: no such row)
+// the far HUD's left column begins below this row, while the lance list is on the glass or on a monitor that shows
+// its menu (0: no such row)
 float mw5LanceHold() {
+    if (g_m5LanceOther) return 0;
+    const int mon = mw5MonitorOf(3);
+    if (mon >= 0) {
+        float a[6];
+        mw5AltNow(mon, a);
+        return a[2] > a[0] && a[3] > g_m5Alt[mon][1] ? g_m5LanceHold : 0;
+    }
     if (!(mw5Active() && g_m5GlassOn) && !mw5Plain()) return 0;
-    if (!(mw5G(3)[2] > 0.5f) || mw5PartOnMonitor(3) || g_m5LanceOther) return 0;
-    return g_m5LanceHold;
+    return mw5G(3)[2] > 0.5f ? g_m5LanceHold : 0;
 }
 
 // the parts of the HUD image's top strip (above v = T) the monitors show, as spans of u in rising order
@@ -933,7 +948,11 @@ int mw5TopSpans(float T, float (*iv)[2]) {
 float mw5LeftAltBottom(float L) {
     float v = 0;
     for (int i = 0; i < g_m5N; ++i)
-        if (g_m5[i].screen) v = mcLeftAlt(g_m5Alt[g_m5[i].screen - 1], L, v);
+        if (g_m5[i].screen) {
+            float a[6];
+            mw5AltNow(g_m5[i].screen - 1, a);
+            v = mcLeftAlt(a, L, v);
+        }
     return v;
 }
 
@@ -1528,7 +1547,8 @@ void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw, int ckTris) {
                 cb[28] = r[0] * ku, cb[29] = r[1], cb[30] = (have ? r[2] : r[0]) * ku, cb[31] = r[3];
                 cb[34] = g_m5ScreenGain, cb[35] = g_m5RedBoost;
                 mcTurnFit(g.aspect, ar, g_m5Turn[g.screen - 1], cb + 44);
-                const float *a = g_m5Alt[g.screen - 1];
+                float a[6];
+                mw5AltNow(g.screen - 1, a);
                 bool haveA = have && a[2] > a[0] && a[3] > a[1];
                 float aa = haveA ? (a[2] - a[0]) * pw / ((a[3] - a[1]) * g_m5HudH) : 1;
                 cb[36] = a[0] * ku, cb[37] = a[1], cb[38] = (haveA ? a[2] : a[0]) * ku, cb[39] = a[3];
