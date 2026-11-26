@@ -716,13 +716,24 @@ static void wideProbe(ID3D11DeviceContext *ctx, ID3D11Texture2D *hud) {
                 float lu, lv;
                 mw5LanceColumn(&lu, &lv);
                 const int from = (int)(lv * H) - (int)y0, to = mcHangsTo(a[3].data(), (int)n, from, (int)(H / 100));
-                static bool was;
+                static bool was, wasOther;
                 const bool now = from >= 0 && to > from;
-                if (now != was)
-                    logf("hud: frame %u: the lance orders' menu %s", g_frame,
-                         now ? "reaches below the list's part - the part is as long as the menu" : "is gone");
-                was = now;
-                mw5LanceDown(now ? ((float)(y0 + to) + 2) / H : 0);
+                const float down = now ? ((float)(y0 + to) + 2) / H : 0;
+                // (what stands below the menu, or below the part without one: not the menu's)
+                const bool other = mcColumnHolds(a[3].data(), (int)n, to, (int)(mw5LanceHoldTo() * H) - (int)y0);
+                if (now != was) {
+                    if (now)
+                        logf("hud: frame %u: the lance orders' menu reaches below the list's part, down to %.3f - the "
+                             "part is as long as the menu",
+                             g_frame, down);
+                    else
+                        logf("hud: frame %u: the lance orders' menu is gone", g_frame);
+                }
+                if (other != wasOther)
+                    logf("hud: frame %u: below the lance list %s", g_frame,
+                         other ? "stands something else - the far HUD shows those rows" : "nothing else stands now");
+                was = now, wasOther = other;
+                mw5LanceDown(down, other);
             }
             int r0, r1;
             if (g_frame - copyFrame <= 3 && H && mcWideBand(a[0].data(), a[1].data(), a[2].data(), (int)n, &r0, &r1)) {
@@ -1279,6 +1290,7 @@ void vrOnPresent(IDXGISwapChain *swap, int eye) {
                     hd.rightAlt = mcRightAlt(r, hd.R, hd.rightAlt);
                 }
             }
+            hd.leftAlt = max(hd.leftAlt, mw5LanceHold()); // (a menu just opened: mw5.h)
         }
         memcpy(hd.twist, g_vr.twist, sizeof hd.twist);
         hd.twistDv = g_vr.twistDv;

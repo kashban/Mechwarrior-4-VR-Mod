@@ -1707,6 +1707,18 @@ static void testHangs() {
     c[0] = c[1] = 255;
     CHECK(mcHangsTo(c, 1024, -1, 10) == -1);
     CHECK(mcHangsTo(c, 1024, 0, 10) == 2);
+    // what else stands in a run of rows: c holds 0..1, 100..149, 151..299, 320..339, 1000..1023
+    CHECK(mcColumnHolds(c, 1024, 300, 320) == false);
+    CHECK(mcColumnHolds(c, 1024, 300, 321) == true);
+    CHECK(mcColumnHolds(c, 1024, 339, 400) == true);
+    CHECK(mcColumnHolds(c, 1024, 340, 400) == false);
+    CHECK(mcColumnHolds(c, 1024, 150, 151) == false); // (too little alpha)
+    CHECK(mcColumnHolds(c, 1024, 149, 150) == true);  // (just enough)
+    CHECK(mcColumnHolds(c, 1024, 320, 320) == false); // (no rows)
+    CHECK(mcColumnHolds(c, 1024, 0, 1) == true);
+    CHECK(mcColumnHolds(c, 1024, -1, 2) == false); // (the edge above the column: no answer)
+    CHECK(mcColumnHolds(c, 1024, 340, 5000) == true);
+    CHECK(mcColumnHolds(c, 1000, 340, 5000) == false); // (not beyond the column's end)
 }
 
 static void testBand() {

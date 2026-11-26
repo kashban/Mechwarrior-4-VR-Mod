@@ -606,6 +606,13 @@ static inline int mcHangsTo(const unsigned char *col, int n, int from, int gap) 
         if (col[i] >= MC_WIDE_ALPHA) last = i + 1;
     return last;
 }
+// true: one of the column's rows from..to-1 holds something (what stands below the menu, and is not a part of it)
+static inline bool mcColumnHolds(const unsigned char *col, int n, int from, int to) {
+    if (from < 0) return false;
+    for (int i = from; i < to && i < n; ++i)
+        if (col[i] >= MC_WIDE_ALPHA) return true;
+    return false;
+}
 // a part put into the list at a place (what stood there and after it moves on); false: a sliver, or no room
 static inline bool mcInsert(McRects &q, int at, float u0, float v0, float u1, float v1, float kind) {
     if (!(q.n < MC_RECTS && u1 - u0 > 0.005f && v1 - v0 > 0.005f)) return false;

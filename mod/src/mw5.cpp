@@ -42,8 +42,14 @@ static const float g_m5LanceMenu = 0.435f; // the lance list with its open order
 // stood far ahead in the view, cut off from the rest. How far down the menu reaches now, as found in the HUD image
 // (vr.cpp, wideProbe); 0: not below g_m5LanceMenu.
 static float g_m5LanceDown;
+// That answer comes a picture or more late: a menu just opened stood far ahead for so long, before it was the
+// part's. So the far HUD leaves the rows a menu can reach (under seven mechs: down to here) to the part - unless
+// something else was found in them, a message of the game's: that is shown far, as before.
+static const float g_m5LanceHold = 0.60f;
+static bool g_m5LanceOther;
 void mw5LanceColumn(float *u, float *v) { *u = 0.5f * (g_m5Part[3][0] + g_m5Part[3][2]), *v = g_m5LanceMenu; }
-void mw5LanceDown(float v) { g_m5LanceDown = v; }
+void mw5LanceDown(float v, bool other) { g_m5LanceDown = v, g_m5LanceOther = other; }
+float mw5LanceHoldTo() { return g_m5LanceHold; }
 static float mw5LanceBottom() { return max(g_m5LanceMenu, g_m5LanceDown); }
 static const float g_m5WeaponsLeft =
     0.700f; // where the weapon list's frame begins (its part for a monitor begins inside it)
@@ -906,6 +912,13 @@ int mw5GlassItems(GlassItem *out) {
         it.right = g[0], it.up = g[1], it.width = g[2], it.dist = g[3];
     }
     return n;
+}
+
+// the far HUD's left column begins below this row, while the lance list is on the glass (0: no such row)
+float mw5LanceHold() {
+    if (!(mw5Active() && g_m5GlassOn) && !mw5Plain()) return 0;
+    if (!(mw5G(3)[2] > 0.5f) || mw5PartOnMonitor(3) || g_m5LanceOther) return 0;
+    return g_m5LanceHold;
 }
 
 // the parts of the HUD image's top strip (above v = T) the monitors show, as spans of u in rising order
