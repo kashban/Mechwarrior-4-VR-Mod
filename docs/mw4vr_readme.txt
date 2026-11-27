@@ -16,7 +16,7 @@ WHAT YOU NEED
 - A fast graphics card: every frame is drawn twice.
 
 Where to get them:
-  MW4Engine DX11         https://www.moddb.com/mods/mw4-mercenaries-dx11-renderer-overhaul   (build 20261125_d0cbae4)
+  MW4Engine DX11         https://www.moddb.com/mods/mw4-mercenaries-dx11-renderer-overhaul   (v1.0.8)
   MechWarrior 5: Mercenaries, for its cockpits only (optional):
       Epic Games Store   https://store.epicgames.com/p/mechwarrior-5
       Steam              https://store.steampowered.com/app/784080
@@ -246,7 +246,7 @@ VORAUSSETZUNGEN
 - Schnelle Grafikkarte: jedes Bild wird zweimal gezeichnet.
 
 Bezugsquellen:
-  MW4Engine DX11         https://www.moddb.com/mods/mw4-mercenaries-dx11-renderer-overhaul   (build 20261125_d0cbae4)
+  MW4Engine DX11         https://www.moddb.com/mods/mw4-mercenaries-dx11-renderer-overhaul   (v1.0.8)
   MechWarrior 5: Mercenaries, nur für dessen Cockpits (optional):
       Epic Games Store   https://store.epicgames.com/p/mechwarrior-5
       Steam              https://store.steampowered.com/app/784080
