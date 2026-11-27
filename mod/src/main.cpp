@@ -380,7 +380,8 @@ static BOOL WINAPI fakeGetClientRect(HWND h, RECT *r) {
     BOOL ok = g_realGetClientRect(h, r);
     if (ok && r && g_renderOverride) {
         uint8_t *ra = (uint8_t *)_ReturnAddress();
-        if (ra == g_hookBase + 0x571af || ra == g_hookBase + 0x4e5a0) {
+        // (mw4hook's two questions for its output size, nobody else's)
+        if (ra == g_hookBase + HK_AT_SIZE_CALL + HK_CALL_BYTES || ra == g_hookBase + HK_AT_SIZE_CALL2 + HK_CALL_BYTES) {
             r->right = r->left + g_renderW;
             r->bottom = r->top + g_renderH;
         }

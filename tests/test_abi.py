@@ -110,6 +110,9 @@ class Mw4hook(unittest.TestCase):
         self.check('HK_AT_PICTURE_READ', b'\xa1', 'HK_PICTURE')            # mov eax, [..]
         self.check('HK_AT_WIDTH_STORE', b'\xa3', 'HK_OUT_WIDTH')           # mov [..], eax
         self.check('HK_AT_SIZE_CALL', b'\xff\x15', 'HK_IAT_GETCLIENTRECT')  # call [..]
+        self.check('HK_AT_SIZE_CALL2', b'\xff\x15', 'HK_IAT_GETCLIENTRECT')
+        self.assertLess(self.nums['HK_AT_SIZE_CALL2'], self.nums['HK_AT_WIDTH_STORE'])  # the call whose answer is stored there
+        self.assertLess(self.nums['HK_AT_WIDTH_STORE'] - self.nums['HK_AT_SIZE_CALL2'], 0x100)
         self.check('HK_AT_WATER_CHECK', b'\x80\x3d', 'HK_WATER_REFLECT', b'\0')  # cmp byte ptr [..], 0
         self.check('HK_AT_GETCURSORPOS', b'\xa1', 'HK_PTR_GETCURSORPOS')
         self.check('HK_AT_CLIPCURSOR', b'\xa1', 'HK_PTR_CLIPCURSOR')

@@ -35,6 +35,8 @@ enum : uint32_t {
     HK_AT_PICTURE_READ = 0x14d20, // mov eax, [HK_PICTURE]
     HK_AT_WIDTH_STORE = 0x4edca,  // mov [HK_OUT_WIDTH], eax
     HK_AT_SIZE_CALL = 0x579e9,    // call [HK_IAT_GETCLIENTRECT]
+    HK_AT_SIZE_CALL2 = 0x4ed5a,   // the same, where the output size is stored (before HK_AT_WIDTH_STORE)
+    HK_CALL_BYTES = 6,            // such a call's length: what it returns to lies this far behind it
     HK_AT_WATER_CHECK = 0xa4750,  // cmp byte ptr [HK_WATER_REFLECT], 0
     HK_AT_GETCURSORPOS = 0xc1a93, // mov eax, [HK_PTR_GETCURSORPOS]
     HK_AT_CLIPCURSOR = 0xc223d,   // mov eax, [HK_PTR_CLIPCURSOR]
