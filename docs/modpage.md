@@ -29,7 +29,7 @@ renderer mod and needs it.
 ## Requirements
 
 - MechWarrior 4: Mercenaries, MekTek MekPak 3.1c
-- MW4Engine DX11 (https://www.moddb.com/mods/mw4-mercenaries-dx11-renderer-overhaul), **build 20261107_ea16ef2**, that is v1.0.7 (the mod checks the build and switches parts of itself off with
+- MW4Engine DX11 (https://www.moddb.com/mods/mw4-mercenaries-dx11-renderer-overhaul), **build 20261125_d0cbae4**, that is v1.0.8 (the mod checks the build and switches parts of itself off with
   any other)
 - A VR headset with a 32-bit OpenXR runtime. Tested with a Quest 3 over Virtual Desktop (VDXR) and over SteamVR
   (the Steam Link app). Meta Quest Link's own runtime does not work.
@@ -69,7 +69,7 @@ DX11 and name MekTek MekPak 3.1c without a link. Fill in the addresses once the 
 **On the MW4Engine DX11 page (ModDB):**
 
 > Thank you for this renderer - it made something possible I did not expect to see: MechWarrior 4: Mercenaries
-> in VR. MW4VR is an add-on for MW4Engine v1.0.7: real stereo with head tracking in the cockpit, the HUD as
+> in VR. MW4VR is an add-on for MW4Engine v1.0.8: real stereo with head tracking in the cockpit, the HUD as
 > panes with depth, optionally the cockpits of MechWarrior 5 for those who own it. Single player only, free,
 > source included.
 > GitHub: https://github.com/kashban/Mechwarrior-4-VR-Mod
@@ -80,7 +80,7 @@ DX11 and name MekTek MekPak 3.1c without a link. Fill in the addresses once the 
 
 **On the MekTek MW4: Mercenaries page (ModDB):**
 
-> For VR players: MW4VR plays MekPak 3.1c in a VR headset (needs the MW4Engine DX11 mod, v1.0.7). Real stereo,
+> For VR players: MW4VR plays MekPak 3.1c in a VR headset (needs the MW4Engine DX11 mod, v1.0.8). Real stereo,
 > head tracking in the cockpit, a HUD with depth. Single player only, free.
 > GitHub: https://github.com/kashban/Mechwarrior-4-VR-Mod
 > Nexus Mods: <address>

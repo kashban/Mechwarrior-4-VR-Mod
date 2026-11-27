@@ -7,7 +7,7 @@ $ErrorActionPreference = 'Stop'
 $script:Pkg = $PSScriptRoot
 $script:LogFile = Join-Path $env:TEMP 'mw4vr_setup.log'
 $script:Say = { param($t) Write-Host $t }
-$KnownHookStamp = 0x6aef4435   # MW4Engine DX11 build 20261107_ea16ef2 (the PE header's time stamp)
+$KnownHookStamp = 0x6b06a117   # MW4Engine DX11 build 20261125_d0cbae4 (the PE header's time stamp)
 $HookKeys = [ordered]@{ antihack = '0'; fov = '130'; vsync = '0'; taa = '0'; mode = 'windowed'; resolution = '1300x1300' }
 
 function Say([string]$t) {

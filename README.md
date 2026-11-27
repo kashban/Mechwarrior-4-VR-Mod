@@ -20,7 +20,7 @@ It sits behind the *MW4Engine DX11* renderer mod (`mw4hook.dll`, by another auth
 ## Requirements
 
 - MechWarrior 4: Mercenaries, MekTek MekPak 3.1c
-- [MW4Engine DX11](https://www.moddb.com/mods/mw4-mercenaries-dx11-renderer-overhaul) (`mw4hook.dll`) **build 20261107_ea16ef2** (v1.0.7). The mod reaches into this build's memory; with any
+- [MW4Engine DX11](https://www.moddb.com/mods/mw4-mercenaries-dx11-renderer-overhaul) (`mw4hook.dll`) **build 20261125_d0cbae4** (v1.0.8). The mod reaches into this build's memory; with any
   other build those parts switch themselves off (see `mw4vr.log`, lines starting `abi:`).
 - A 32-bit OpenXR runtime. Tested with a Quest 3 over Virtual Desktop (VDXR) and over SteamVR (the Steam Link app).
   Meta Quest Link's own runtime does not work: its 32-bit library dies in its own code at the start (the game's

@@ -64,6 +64,7 @@ class File(unittest.TestCase):
         for name in ('HK_SCREEN_MODE', 'HK_WATER_REFLECT', 'HK_PICTURE', 'HK_PICTURE_KNOWN', 'HK_PICTURE_RECT', 'HK_OUT_WINDOW', 'HK_OUT_RECT',
                      'HK_OUT_WIDTH', 'HK_PTR_GETCURSORPOS', 'HK_PTR_SETCURSORPOS', 'HK_PTR_CLIPCURSOR', 'HK_IAT_GETCLIENTRECT',
                      'HK_AT_PICTURE_READ', 'HK_AT_WIDTH_STORE', 'HK_AT_SIZE_CALL', 'HK_AT_WATER_CHECK', 'HK_AT_GETCURSORPOS', 'HK_AT_CLIPCURSOR',
+                     'HK_AT_DRAWSHAPE', 'HK_PTR_DRAWSHAPE', 'HK_AT_FOG', 'HK_FOG',
                      'GM_CAMERA_DRAW', 'GM_HWND', 'EL_PARENT', 'EL_LOCAL', 'EL_LOCAL_COPY', 'EL_WORLD', 'CAM_PLANES', 'CAM_TANGENTS', 'CAM_VIEWPORT'):
             self.assertIn(name, self.nums)
         self.assertEqual(set(self.builds), {'HK_KNOWN', 'GM_KNOWN'})
@@ -109,9 +110,14 @@ class Mw4hook(unittest.TestCase):
         self.check('HK_AT_PICTURE_READ', b'\xa1', 'HK_PICTURE')            # mov eax, [..]
         self.check('HK_AT_WIDTH_STORE', b'\xa3', 'HK_OUT_WIDTH')           # mov [..], eax
         self.check('HK_AT_SIZE_CALL', b'\xff\x15', 'HK_IAT_GETCLIENTRECT')  # call [..]
+        self.check('HK_AT_SIZE_CALL2', b'\xff\x15', 'HK_IAT_GETCLIENTRECT')
+        self.assertLess(self.nums['HK_AT_SIZE_CALL2'], self.nums['HK_AT_WIDTH_STORE'])  # the call whose answer is stored there
+        self.assertLess(self.nums['HK_AT_WIDTH_STORE'] - self.nums['HK_AT_SIZE_CALL2'], 0x100)
         self.check('HK_AT_WATER_CHECK', b'\x80\x3d', 'HK_WATER_REFLECT', b'\0')  # cmp byte ptr [..], 0
         self.check('HK_AT_GETCURSORPOS', b'\xa1', 'HK_PTR_GETCURSORPOS')
         self.check('HK_AT_CLIPCURSOR', b'\xa1', 'HK_PTR_CLIPCURSOR')
+        self.check('HK_AT_DRAWSHAPE', b'\xff\x15', 'HK_PTR_DRAWSHAPE')     # call [..]
+        self.check('HK_AT_FOG', b'\x0f\x11\x05', 'HK_FOG')               # movups [..], xmm0
 
     def test_data_is_data(self):
         for name, v in self.nums.items():

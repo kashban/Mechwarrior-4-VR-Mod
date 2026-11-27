@@ -9,14 +9,14 @@ with depth. Single player only.
 WHAT YOU NEED
 -------------
 - MechWarrior 4: Mercenaries with MekTek MekPak 3.1c
-- MW4Engine DX11 (mw4hook.dll), build 20261107_ea16ef2. With another build parts of MW4VR switch
+- MW4Engine DX11 (mw4hook.dll), build 20261125_d0cbae4. With another build parts of MW4VR switch
   themselves off (mw4vr.log tells, lines beginning "abi:").
 - A VR headset with a 32-bit OpenXR runtime. Tested with a Quest 3 over Virtual Desktop (VDXR) and over
   SteamVR (the Steam Link app in the headset). Meta Quest Link's own runtime does not work: see below.
 - A fast graphics card: every frame is drawn twice.
 
 Where to get them:
-  MW4Engine DX11         https://www.moddb.com/mods/mw4-mercenaries-dx11-renderer-overhaul   (v1.0.7)
+  MW4Engine DX11         https://www.moddb.com/mods/mw4-mercenaries-dx11-renderer-overhaul   (v1.0.8)
   MechWarrior 5: Mercenaries, for its cockpits only (optional):
       Epic Games Store   https://store.epicgames.com/p/mechwarrior-5
       Steam              https://store.steampowered.com/app/784080
@@ -239,14 +239,14 @@ Nur Einzelspieler.
 VORAUSSETZUNGEN
 ---------------
 - MechWarrior 4: Mercenaries mit MekTek MekPak 3.1c
-- MW4Engine DX11 (mw4hook.dll), Build 20261107_ea16ef2. Bei einem anderen Build schalten sich Teile
+- MW4Engine DX11 (mw4hook.dll), Build 20261125_d0cbae4. Bei einem anderen Build schalten sich Teile
   von MW4VR selbst ab (steht in mw4vr.log, Zeilen mit "abi:").
 - VR-Headset mit 32-Bit-OpenXR-Laufzeit. Getestet mit Quest 3 über Virtual Desktop (VDXR) und über
   SteamVR (Steam Link App im Headset). Die eigene Laufzeit von Meta Quest Link geht nicht: siehe unten.
 - Schnelle Grafikkarte: jedes Bild wird zweimal gezeichnet.
 
 Bezugsquellen:
-  MW4Engine DX11         https://www.moddb.com/mods/mw4-mercenaries-dx11-renderer-overhaul   (v1.0.7)
+  MW4Engine DX11         https://www.moddb.com/mods/mw4-mercenaries-dx11-renderer-overhaul   (v1.0.8)
   MechWarrior 5: Mercenaries, nur für dessen Cockpits (optional):
       Epic Games Store   https://store.epicgames.com/p/mechwarrior-5
       Steam              https://store.steampowered.com/app/784080
