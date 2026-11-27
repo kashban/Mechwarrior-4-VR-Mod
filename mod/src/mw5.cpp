@@ -38,6 +38,19 @@ static const float g_m5Part[M5_PARTS][4] = {{0.320f, 0.770f, 0.690f, 0.990f}, {0
                                             {0.820f, 0.772f, 1.005f, 1.000f}, {0.000f, 0.000f, 0.243f, 0.108f},
                                             {0.716f, 0.000f, 1.000f, 0.124f}, {0.243f, 0.000f, 0.716f, 0.120f}};
 static const float g_m5LanceMenu = 0.435f; // the lance list with its open orders menu reaches this far down
+// ... or further: under a list of seven mechs the menu begins lower, and its last orders hung below the part - they
+// stood far ahead in the view, cut off from the rest. How far down the menu reaches now, as found in the HUD image
+// (vr.cpp, wideProbe); 0: not below g_m5LanceMenu.
+static float g_m5LanceDown;
+// That answer comes a picture or more late: a menu just opened stood far ahead for so long, before it was the
+// part's. So the far HUD leaves the rows a menu can reach (under seven mechs: down to here) to the part - unless
+// something else was found in them, a message of the game's: that is shown far, as before.
+static const float g_m5LanceHold = 0.60f;
+static bool g_m5LanceOther;
+void mw5LanceColumn(float *u, float *v) { *u = 0.5f * (g_m5Part[3][0] + g_m5Part[3][2]), *v = g_m5LanceMenu; }
+void mw5LanceDown(float v, bool other) { g_m5LanceDown = v, g_m5LanceOther = other; }
+float mw5LanceHoldTo() { return g_m5LanceHold; }
+static float mw5LanceBottom() { return max(g_m5LanceMenu, g_m5LanceDown); }
 static const float g_m5WeaponsLeft =
     0.700f; // where the weapon list's frame begins (its part for a monitor begins inside it)
 static const float g_m5GlassDef[M5_PARTS][3] = {{0, -17, 11}, {-26, -14, 8}, {26, -14, 8},
@@ -91,7 +104,19 @@ static UINT g_m5HudW, g_m5HudH;
 static int g_m5Screens;
 static float g_m5Rect[MW5_SCREENS][4]; // u0 v0 u1 v1 of the HUD image; u1 <= u0: dark
 static float g_m5Alt[MW5_SCREENS][6];  // a second part (u0 v0 u1 v1) and its probe point (u v); u1 <= u0: none
-static float g_m5Turn[MW5_SCREENS];    // degrees the monitor's picture is turned clockwise within the monitor
+// ... as shown now: the lance list's is as long as its open orders menu (under seven mechs the menu's end hung
+// below the part: cut off on the monitor, and shown far ahead). The monitor shows the longer part whole, smaller.
+// The zoom window in the monitors' HUD image (u0 v0 u1 v1, with a rim for the game's frame of it; u1 <= u0: none).
+// It opens over the middle and reaches into the parts beside it: its corner stood on the lance list's monitor. A
+// monitor leaves it out, unless the window's middle lies in its part.
+static float g_m5Hole[4];
+static void mw5AltNow(int s, float *a) {
+    float u, v;
+    mw5LanceColumn(&u, &v);
+    memcpy(a, g_m5Alt[s], sizeof g_m5Alt[s]);
+    a[3] = mcAltBottom(a, u, 0.5f * (g_m5Part[3][1] + g_m5Part[3][3]), g_m5LanceDown);
+}
+static float g_m5Turn[MW5_SCREENS]; // degrees the monitor's picture is turned clockwise within the monitor
 static float g_m5ScreenGain = 1, g_m5RedBoost = 6;
 static int g_mw5ScreensWanted = 1;
 static bool g_mw5Own;      // this cockpit has a settings file of its own
@@ -111,9 +136,9 @@ cbuffer C : register(b13) {
     float4 lamp;          // xyz: towards the lamp (mesh space); w: the share of the depth range kept for the mesh alone
     float4 par;           // emissive, ambient, linear output, > 0: a monitor
     float4 scr;           // a monitor: the part of the HUD image, u0 v0 u1 v1
-    float4 scr2;          // z: gain; w: dark red times this at most
+    float4 scr2;          // z: gain; w: dark red times this at most; xy: see alt2
     float4 alt;           // a second part, shown while the HUD image is not empty at the probe point (z <= x: none)
-    float4 alt2;          // zw: the probe point
+    float4 alt2;          // zw: the probe point; scr2.xy .. alt2.xy: left out of the part (the zoom window; x <= x: none)
     float4 rot;           // the monitor's uv (about its middle) -> the part's (about its middle): xy the row for u, zw for v
     float4 rot2;          // as rot, for the second part
     float4 eye;           // xyz: the eye in the mesh; w > 0: painted metal, as strongly
@@ -168,7 +193,9 @@ float4 ps(VSOut i) : SV_Target {
         }
         float2 q = float2(dot(i.uv - 0.5, f.xy), dot(i.uv - 0.5, f.zw));
         float3 h = 0;
-        if (r.z > r.x && abs(q.x) < 0.5 && abs(q.y) < 0.5) h = th.SampleLevel(sm, lerp(r.xy, r.zw, q + 0.5), 0).rgb * scr2.z;
+        float2 uv = lerp(r.xy, r.zw, q + 0.5);
+        bool hole = alt2.x > scr2.x && uv.x > scr2.x && uv.x < alt2.x && uv.y > scr2.y && uv.y < alt2.y;
+        if (r.z > r.x && abs(q.x) < 0.5 && abs(q.y) < 0.5 && !hole) h = th.SampleLevel(sm, uv, 0).rgb * scr2.z;
         // dark red (an enemy's weapon list: black letters on a translucent red bar, dim without the scene behind it): brighter
         // (a weapon's state is its bar's colour - green, yellow, red: the red stays clearly red, less of its green)
         if (scr2.w > 1 && h.r > 0.06 && h.r > 1.6 * h.g && h.r > 1.6 * h.b) {
@@ -893,12 +920,26 @@ int mw5GlassItems(GlassItem *out) {
         if (mw5PartOnMonitor(p)) continue;
         GlassItem &it = out[n++];
         memcpy(it.base, r, sizeof it.base), memcpy(it.rc, r, sizeof it.rc);
-        if (p == 3) it.rc[3] = g_m5LanceMenu;
+        if (p == 3) it.rc[3] = mw5LanceBottom();
         if (p == 4) it.rc[0] = g_m5WeaponsLeft, it.rc[3] = g_m5LanceMenu; // the list is as long as the mech has weapons
         if (p == 5) it.base[3] = it.rc[3] = g_vr.hudTop, it.rc[2] = g_m5WeaponsLeft;
         it.right = g[0], it.up = g[1], it.width = g[2], it.dist = g[3];
     }
     return n;
+}
+
+// the far HUD's left column begins below this row, while the lance list is on the glass or on a monitor that shows
+// its menu (0: no such row)
+float mw5LanceHold() {
+    if (g_m5LanceOther) return 0;
+    const int mon = mw5MonitorOf(3);
+    if (mon >= 0) {
+        float a[6];
+        mw5AltNow(mon, a);
+        return a[2] > a[0] && a[3] > g_m5Alt[mon][1] ? g_m5LanceHold : 0;
+    }
+    if (!(mw5Active() && g_m5GlassOn) && !mw5Plain()) return 0;
+    return mw5G(3)[2] > 0.5f ? g_m5LanceHold : 0;
 }
 
 // the parts of the HUD image's top strip (above v = T) the monitors show, as spans of u in rising order
@@ -913,7 +954,11 @@ int mw5TopSpans(float T, float (*iv)[2]) {
 float mw5LeftAltBottom(float L) {
     float v = 0;
     for (int i = 0; i < g_m5N; ++i)
-        if (g_m5[i].screen) v = mcLeftAlt(g_m5Alt[g_m5[i].screen - 1], L, v);
+        if (g_m5[i].screen) {
+            float a[6];
+            mw5AltNow(g_m5[i].screen - 1, a);
+            v = mcLeftAlt(a, L, v);
+        }
     return v;
 }
 
@@ -1225,6 +1270,14 @@ void mw5HudCopy(ID3D11DeviceContext *c, ID3D11Texture2D *hud) {
         }
     }
     if (g_m5Hud) c->CopyResource(g_m5Hud, hud);
+    memset(g_m5Hole, 0, sizeof g_m5Hole);
+    for (int i = 0; g_m5Hud && g_hudCamFrame == g_frame && g_hudW && g_hudH && i < g_hudCamN; ++i) {
+        const HudCamRect &r = g_hudCams[i];
+        const float u0 = (float)r.x / g_hudW, u1 = (float)(r.x + r.w) / g_hudW, rim = 0.003f;
+        if (!(u0 + u1 > 0.6f && u0 + u1 < 1.4f)) continue; // (core.h, mcZoomWindow: the window about the middle)
+        g_m5Hole[0] = u0 - rim, g_m5Hole[1] = (float)r.y / g_hudH - rim, g_m5Hole[2] = u1 + rim,
+        g_m5Hole[3] = (float)(r.y + r.h) / g_hudH + rim;
+    }
 }
 
 // at a CPU-path draw of the main camera's pass for an eye (our replacement shader is bound): once per pass
@@ -1508,11 +1561,15 @@ void mw5Draw(ID3D11DeviceContext *c, Mw5PFN_DrawIdx draw, int ckTris) {
                 cb[28] = r[0] * ku, cb[29] = r[1], cb[30] = (have ? r[2] : r[0]) * ku, cb[31] = r[3];
                 cb[34] = g_m5ScreenGain, cb[35] = g_m5RedBoost;
                 mcTurnFit(g.aspect, ar, g_m5Turn[g.screen - 1], cb + 44);
-                const float *a = g_m5Alt[g.screen - 1];
+                float a[6];
+                mw5AltNow(g.screen - 1, a);
                 bool haveA = have && a[2] > a[0] && a[3] > a[1];
                 float aa = haveA ? (a[2] - a[0]) * pw / ((a[3] - a[1]) * g_m5HudH) : 1;
                 cb[36] = a[0] * ku, cb[37] = a[1], cb[38] = (haveA ? a[2] : a[0]) * ku, cb[39] = a[3];
                 cb[42] = a[4] * ku, cb[43] = a[5];
+                const float *o = g_m5Hole, ou = 0.5f * (o[0] + o[2]), ov = 0.5f * (o[1] + o[3]);
+                const bool out = have && o[2] > o[0] && !mcHolds(r, ou, ov) && !(haveA && mcHolds(a, ou, ov));
+                cb[32] = out ? o[0] * ku : 0, cb[33] = o[1], cb[40] = out ? o[2] * ku : 0, cb[41] = o[3];
                 mcTurnFit(g.aspect, aa, g_m5Turn[g.screen - 1], cb + 48);
                 sv[2] = have ? g_m5HudSrv : nullptr;
                 if (!put()) continue;
@@ -1872,7 +1929,7 @@ void mw5HighlightDraw(ID3D11DeviceContext *c) {
     } else {
         if (!(mw5G(p)[2] > 0.5f)) return; // hidden
         memcpy(rc, g_m5Part[p], sizeof rc);
-        if (p == 3) rc[3] = g_m5LanceMenu;
+        if (p == 3) rc[3] = mw5LanceBottom();
         if (p == 4) rc[0] = g_m5WeaponsLeft, rc[3] = g_m5LanceMenu;
         if (p == 5) rc[3] = g_vr.hudTop, rc[2] = g_m5WeaponsLeft;
     }
