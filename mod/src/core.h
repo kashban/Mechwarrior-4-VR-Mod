@@ -472,6 +472,13 @@ struct McHud {
 // the point u v lies in the rectangle r (not on its edge)
 static inline bool mcHolds(const float *r, float u, float v) { return r[0] < u && u < r[2] && r[1] < v && v < r[3]; }
 
+// A monitor's second part a (the lance list with its open orders menu) that shows the point u v (the list's
+// middle): how far down it reaches while the menu reaches down to `down` - the part grows with it, and the monitor
+// shows the whole of it, smaller. Any other part: as far as it is set.
+static inline float mcAltBottom(const float *a, float u, float v, float down) {
+    return mcHolds(a, u, v) ? fmaxf(a[3], down) : a[3];
+}
+
 // degrees as -180 < d <= 180 (a whole turn is none; what is no number: 0)
 static inline float mcTurnNorm(float d) {
     if (!(d > -1e6f && d < 1e6f)) return 0;
@@ -567,7 +574,10 @@ static inline void mcHudRectsWith(const McHud &h, McRects &q, bool shrink) {
     for (int g = 0; g < h.nGlass;
          ++g) { // the parts on the glass, each with the windows in it (the target's view) over it
         const float *r = h.glass[g];
-        mcAdd(q, r[0], r[1], r[2], r[3], (float)(MC_GLASS + g));
+        // (without the zoom window: it opens over the middle and reaches into the lists beside it - a corner of
+        // the zoomed picture stood on their panes. A part that holds the window's middle keeps it.)
+        const bool own = cut && mcHolds(r, 0.5f * (zr[0] + zr[2]), 0.5f * (zr[1] + zr[3]));
+        mcAddCut(q, own ? nullptr : cut, r[0], r[1], r[2], r[3], (float)(MC_GLASS + g));
         for (int i = 0; i < h.nCam; ++i) {
             const float *c = h.cam[i];
             if (mcHolds(r, 0.5f * (c[0] + c[2]), 0.5f * (c[1] + c[3])))
@@ -594,6 +604,24 @@ static inline bool mcWideBand(const unsigned char *l, const unsigned char *m, co
     if (best * 256 < n || best * 5 > n) return false;
     *r0 = at, *r1 = at + best;
     return true;
+}
+// What hangs below a part of the HUD image (the lance orders' menu below the lance list): one column of the image
+// through the part, its alpha by rows. From the row `from` on (the part's lower edge) the rows that hold something,
+// gaps of up to `gap` rows passed over (between a text's lines). The row after the last of them; `from`: nothing
+// hangs there (nor where the edge lies above the column).
+static inline int mcHangsTo(const unsigned char *col, int n, int from, int gap) {
+    if (from < 0) return from;
+    int last = from;
+    for (int i = last; i < n && i - last <= gap; ++i)
+        if (col[i] >= MC_WIDE_ALPHA) last = i + 1;
+    return last;
+}
+// true: one of the column's rows from..to-1 holds something (what stands below the menu, and is not a part of it)
+static inline bool mcColumnHolds(const unsigned char *col, int n, int from, int to) {
+    if (from < 0) return false;
+    for (int i = from; i < to && i < n; ++i)
+        if (col[i] >= MC_WIDE_ALPHA) return true;
+    return false;
 }
 // a part put into the list at a place (what stood there and after it moves on); false: a sliver, or no room
 static inline bool mcInsert(McRects &q, int at, float u0, float v0, float u1, float v1, float kind) {

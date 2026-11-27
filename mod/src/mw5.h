@@ -23,6 +23,15 @@ int mw5GlassItems(GlassItem *out);
 int mw5TopSpans(float T, float (*iv)[2]);
 // the left side column of the HUD image (u < L): how far down the monitors' second parts reach (0: none)
 float mw5LeftAltBottom(float L);
+// The lance list on the glass or on a monitor, with its open orders menu: the column of the HUD image (u) that tells
+// how far down the menu reaches, and the row (v) the part ends at without being told. mw5LanceDown: it reaches down to
+// v now (0: no further than that row); other: something else stands below it, above the row mw5LanceHoldTo.
+// mw5LanceHold: the far HUD's left column begins below this row (0: where it would anyway) - the answer about the
+// menu comes pictures late, and until then the far HUD would show the menu's end.
+void mw5LanceColumn(float *u, float *v);
+void mw5LanceDown(float v, bool other);
+float mw5LanceHoldTo();
+float mw5LanceHold();
 // at Present, with the HUD image of this frame complete
 void mw5HudCopy(ID3D11DeviceContext *c, ID3D11Texture2D *hud);
 extern unsigned g_m5PassFrame[2];

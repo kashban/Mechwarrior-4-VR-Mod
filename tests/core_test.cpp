@@ -744,6 +744,31 @@ static void testHudGlass() {
     h.nGlass = 0;
     mcHudRects(h, q);
     CHECK(q.n == 6);
+    // the zoom window reaches into the lists beside the middle: left out of their panes (with its frame), each
+    // pane in two pieces then. A part that holds the window's middle keeps it, the window over it.
+    McHud z = hud();
+    z.screens = true;
+    const float lance[4] = {0, 0, 0.243f, 0.435f}, weapons[4] = {0.7f, 0, 1, 0.435f},
+                mid[4] = {0.46f, 0.5f, 0.5f, 0.7f};
+    memcpy(z.glass[0], lance, sizeof lance), memcpy(z.glass[1], weapons, sizeof weapons);
+    memcpy(z.glass[2], mid, sizeof mid);
+    z.nGlass = 3;
+    setCam(z, 0.228f, 0.35f, 0.75f, 0.67f); // (its middle: 0.489 0.51)
+    mcHudRects(z, q);
+    const float pane[][5] = {
+        {0, 0, 0.243f, 0.33f, MC_GLASS},         {0, 0.33f, 0.208f, 0.435f, MC_GLASS},
+        {0.7f, 0, 1, 0.33f, MC_GLASS + 1},       {0.77f, 0.33f, 1, 0.435f, MC_GLASS + 1},
+        {0.46f, 0.5f, 0.5f, 0.7f, MC_GLASS + 2}, {0.228f, 0.35f, 0.75f, 0.67f, MC_GLASS_OPAQUE + 2}};
+    int at = 0;
+    while (at < q.n && q.rc[at][4] < MC_GLASS) ++at;
+    CHECK(q.n - at == 6);
+    for (int i = 0; i < 6 && q.n - at == 6; ++i)
+        for (int k = 0; k < 5; ++k) CHECK(nearly(q.rc[at + i][k], pane[i][k], 1e-6f));
+    z.nCam = 0; // no zoom window: the panes whole
+    mcHudRects(z, q);
+    at = 0;
+    while (at < q.n && q.rc[at][4] < MC_GLASS) ++at;
+    CHECK(q.n - at == 3 && q.rc[at][3] == 0.435f && q.rc[at + 1][0] == 0.7f);
 }
 
 // v turned by the quaternion q (x y z w)
@@ -1680,6 +1705,57 @@ static void testAutoLimits() {
 }
 
 // ---------------------------------------------------------------- the cockpit's sway from its place
+static void testAltBottom() {
+    // a monitor's second part grows with the menu it shows; a part elsewhere, or none, stays as set
+    const float a[4] = {0, 0, 0.243f, 0.435f}, none[4] = {};
+    CHECK(mcAltBottom(a, 0.12f, 0.05f, 0) == 0.435f);
+    CHECK(mcAltBottom(a, 0.12f, 0.05f, 0.4f) == 0.435f);
+    CHECK(mcAltBottom(a, 0.12f, 0.05f, 0.58f) == 0.58f);
+    CHECK(mcAltBottom(a, 0.5f, 0.05f, 0.58f) == 0.435f);
+    CHECK(mcAltBottom(none, 0.12f, 0.05f, 0.58f) == 0);
+}
+
+static void testHangs() {
+    // what hangs below a part: the rows that hold something from the part's edge on, short gaps passed over
+    unsigned char c[1024] = {};
+    CHECK(mcHangsTo(c, 1024, 100, 10) == 100); // nothing
+    for (int i = 100; i < 300; ++i) c[i] = MC_WIDE_ALPHA;
+    CHECK(mcHangsTo(c, 1024, 100, 10) == 300);
+    CHECK(mcHangsTo(c, 1024, 200, 10) == 300);
+    c[150] = MC_WIDE_ALPHA - 1; // (a row with too little alpha is a gap)
+    CHECK(mcHangsTo(c, 1024, 100, 0) == 150);
+    CHECK(mcHangsTo(c, 1024, 100, 1) == 300);
+    // ... something further down does not belong to it, unless the gap is short enough
+    for (int i = 320; i < 340; ++i) c[i] = 255;
+    CHECK(mcHangsTo(c, 1024, 100, 10) == 300);
+    CHECK(mcHangsTo(c, 1024, 100, 19) == 300);
+    CHECK(mcHangsTo(c, 1024, 100, 20) == 340);
+    // ... nor something that begins below the edge by more than a gap
+    CHECK(mcHangsTo(c, 1024, 60, 10) == 60);
+    CHECK(mcHangsTo(c, 1024, 90, 10) == 300);
+    // the column's ends
+    for (int i = 1000; i < 1024; ++i) c[i] = 255;
+    CHECK(mcHangsTo(c, 1024, 1000, 10) == 1024);
+    CHECK(mcHangsTo(c, 1024, 1024, 10) == 1024);
+    CHECK(mcHangsTo(c, 1024, 2000, 10) == 2000);
+    CHECK(mcHangsTo(c, 1024, -5, 10) == -5);
+    c[0] = c[1] = 255;
+    CHECK(mcHangsTo(c, 1024, -1, 10) == -1);
+    CHECK(mcHangsTo(c, 1024, 0, 10) == 2);
+    // what else stands in a run of rows: c holds 0..1, 100..149, 151..299, 320..339, 1000..1023
+    CHECK(mcColumnHolds(c, 1024, 300, 320) == false);
+    CHECK(mcColumnHolds(c, 1024, 300, 321) == true);
+    CHECK(mcColumnHolds(c, 1024, 339, 400) == true);
+    CHECK(mcColumnHolds(c, 1024, 340, 400) == false);
+    CHECK(mcColumnHolds(c, 1024, 150, 151) == false); // (too little alpha)
+    CHECK(mcColumnHolds(c, 1024, 149, 150) == true);  // (just enough)
+    CHECK(mcColumnHolds(c, 1024, 320, 320) == false); // (no rows)
+    CHECK(mcColumnHolds(c, 1024, 0, 1) == true);
+    CHECK(mcColumnHolds(c, 1024, -1, 2) == false); // (the edge above the column: no answer)
+    CHECK(mcColumnHolds(c, 1024, 340, 5000) == true);
+    CHECK(mcColumnHolds(c, 1000, 340, 5000) == false); // (not beyond the column's end)
+}
+
 static void testBand() {
     // the band: the rows where all three columns hold something, the longest run
     unsigned char l[1024] = {}, m[1024] = {}, r[1024] = {};
@@ -2098,7 +2174,7 @@ static void testRec() {
 int main() {
     testRec();
     testM4(), testM4Inv(), testProj(), testEyeStep(), testStereo(), testAuto(), testAutoLimits(), testAutoChange(),
-        testAutoMission(), testShape(), testHold(), testBand(), testFogCut();
+        testAutoMission(), testShape(), testHold(), testBand(), testHangs(), testAltBottom(), testFogCut();
     testHolds(), testTurnNorm(), testTurnFit(), testEyeInMesh(), testHudCross(), testHudGlass(), testGlassPose(),
         testGlassScale(), testGlassAim();
     testGridMark(), testGridPlace(), testGridTri(), testGridCells(), testGridFree(), testGridRim(), testGridFit();

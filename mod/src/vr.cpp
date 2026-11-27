@@ -688,7 +688,8 @@ static void fadeProbe(ID3D11DeviceContext *ctx, ID3D11Texture2D *hud) {
 }
 
 // A band right across the HUD's image (a hint of the game's: core.h, mcWideBand): three columns of the image are
-// read back, a frame late and without waiting, like the sheet's points.
+// read back, a frame late and without waiting, like the sheet's points. And a fourth, through the lance list: how
+// far down its open orders menu reaches (core.h, mcHangsTo).
 static float g_wideBand[2];
 static unsigned g_wideFrame = ~0u; // the frame the band was last found in
 static void wideProbe(ID3D11DeviceContext *ctx, ID3D11Texture2D *hud) {
@@ -696,7 +697,7 @@ static void wideProbe(ID3D11DeviceContext *ctx, ID3D11Texture2D *hud) {
     static UINT stageN, y0, n, H;
     static bool pending;
     static unsigned copyFrame;
-    static std::vector<uint8_t> a[3];
+    static std::vector<uint8_t> a[4];
     D3D11_TEXTURE2D_DESC d;
     hud->GetDesc(&d);
     int f = (int)d.Format;
@@ -706,11 +707,34 @@ static void wideProbe(ID3D11DeviceContext *ctx, ID3D11Texture2D *hud) {
         if (SUCCEEDED(
                 ORIG(MechPFN_Map, ctx, VT_Ctx_Map)(ctx, stage, 0, D3D11_MAP_READ, D3D11_MAP_FLAG_DO_NOT_WAIT, &m)) &&
             m.pData) {
-            for (int c = 0; c < 3; ++c) {
+            for (int c = 0; c < 4; ++c) {
                 a[c].resize(n);
                 for (UINT i = 0; i < n; ++i) a[c][i] = ((const uint8_t *)m.pData)[(size_t)i * m.RowPitch + c * 4 + 3];
             }
             ORIG(MechPFN_Unmap, ctx, VT_Ctx_Unmap)(ctx, stage, 0);
+            if (g_frame - copyFrame <= 3 && H) { // the lance orders' menu: from the list's part down
+                float lu, lv;
+                mw5LanceColumn(&lu, &lv);
+                const int from = (int)(lv * H) - (int)y0, to = mcHangsTo(a[3].data(), (int)n, from, (int)(H / 100));
+                static bool was, wasOther;
+                const bool now = from >= 0 && to > from;
+                const float down = now ? ((float)(y0 + to) + 2) / H : 0;
+                // (what stands below the menu, or below the part without one: not the menu's)
+                const bool other = mcColumnHolds(a[3].data(), (int)n, to, (int)(mw5LanceHoldTo() * H) - (int)y0);
+                if (now != was) {
+                    if (now)
+                        logf("hud: frame %u: the lance orders' menu reaches below the list's part, down to %.3f - the "
+                             "part is as long as the menu",
+                             g_frame, down);
+                    else
+                        logf("hud: frame %u: the lance orders' menu is gone", g_frame);
+                }
+                if (other != wasOther)
+                    logf("hud: frame %u: below the lance list %s", g_frame,
+                         other ? "stands something else - the far HUD shows those rows" : "nothing else stands now");
+                was = now, wasOther = other;
+                mw5LanceDown(down, other);
+            }
             int r0, r1;
             if (g_frame - copyFrame <= 3 && H && mcWideBand(a[0].data(), a[1].data(), a[2].data(), (int)n, &r0, &r1)) {
                 if (g_wideFrame == ~0u || g_frame - g_wideFrame > 3)
@@ -729,12 +753,14 @@ static void wideProbe(ID3D11DeviceContext *ctx, ID3D11Texture2D *hud) {
         if (stage) stage->Release();
         stage = nullptr;
         D3D11_TEXTURE2D_DESC s = d;
-        s.Width = 3, s.Height = stageN = bottom - top, s.MipLevels = 1, s.ArraySize = 1;
+        s.Width = 4, s.Height = stageN = bottom - top, s.MipLevels = 1, s.ArraySize = 1;
         s.Usage = D3D11_USAGE_STAGING, s.BindFlags = 0, s.CPUAccessFlags = D3D11_CPU_ACCESS_READ, s.MiscFlags = 0;
         if (FAILED(g_dev->CreateTexture2D(&s, nullptr, &stage)) || !stage) return;
     }
-    const float us[3] = {g_vr.hudLeft, 0.5f * (g_vr.hudLeft + g_vr.hudRight), g_vr.hudRight};
-    for (UINT c = 0; c < 3; ++c) {
+    float lu, lv;
+    mw5LanceColumn(&lu, &lv);
+    const float us[4] = {g_vr.hudLeft, 0.5f * (g_vr.hudLeft + g_vr.hudRight), g_vr.hudRight, lu};
+    for (UINT c = 0; c < 4; ++c) {
         UINT x = min((UINT)(us[c] * g_hudW), d.Width - 1);
         D3D11_BOX b = {x, top, 0, x + 1, bottom, 1};
         ctx->CopySubresourceRegion(stage, 0, c, 0, 0, hud, 0, &b);
@@ -1264,6 +1290,7 @@ void vrOnPresent(IDXGISwapChain *swap, int eye) {
                     hd.rightAlt = mcRightAlt(r, hd.R, hd.rightAlt);
                 }
             }
+            hd.leftAlt = max(hd.leftAlt, mw5LanceHold()); // (a menu just opened: mw5.h)
         }
         memcpy(hd.twist, g_vr.twist, sizeof hd.twist);
         hd.twistDv = g_vr.twistDv;
