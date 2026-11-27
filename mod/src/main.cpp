@@ -32,9 +32,9 @@ static HRESULT STDMETHODCALLTYPE H_FinishCommandList(ID3D11DeviceContext *c, BOO
 
 typedef INT(STDMETHODCALLTYPE *PFN_Begin)(ID3DUserDefinedAnnotation *, LPCWSTR);
 // The water's planar reflection (the scene drawn again, mirrored) is drawn once per frame: mw4hook clears its
-// "wanted" flag (a byte at mw4hook+0x43d3e0, asked at +0x9e5f0) when the first pass has used it, and the second
+// "wanted" flag (a byte at mw4hook+0x4473e0, asked at +0xa4750) when the first pass has used it, and the second
 // eye's water shows the sky alone. When the right eye's pass comes to the water the flag is set again if the
-// left eye's pass had it. Only where mw4hook's code is as known (build 20261107_ea16ef2). [vr] water_both_eyes=0: not.
+// left eye's pass had it. Only where mw4hook's code is as known (build 20261125_d0cbae4). [vr] water_both_eyes=0: not.
 static void waterBothEyes() {
     static int want = -1, ok = -1;
     static uint8_t *h;
@@ -389,12 +389,12 @@ static BOOL WINAPI fakeGetClientRect(HWND h, RECT *r) {
 }
 
 // The mouse. mw4hook hooks the game's GetCursorPos, SetCursorPos and ClipCursor and maps between the
-// screen and the game's picture with the picture's rectangle inside the window (mw4hook.dll+0x4931dc).
+// screen and the game's picture with the picture's rectangle inside the window (mw4hook.dll+0x49d3ec).
 // With a render size larger than the window that rectangle is in render pixels, the cursor in window
 // pixels: the lower part of the menus cannot be reached, and mw4hook's own ClipCursor (which keeps
 // the cursor in the picture while the window is in front) is larger than the window, so a click
 // beside it takes the focus away. mw4hook calls the real functions through three pointers
-// (+0x4c7310, +0x4c7314, +0x4c7318); they are replaced: the cursor's position is scaled about the
+// (+0x4d2258, +0x4d225c, +0x4d2260); they are replaced: the cursor's position is scaled about the
 // window's corner by render size / window size on the way in, and back on the way out.
 typedef BOOL(WINAPI *PFN_GetCursorPos)(POINT *);
 typedef BOOL(WINAPI *PFN_SetCursorPos)(int, int);
@@ -464,7 +464,7 @@ void mouseInstall() {
     __try {
         void **pg = (void **)(base + HK_PTR_GETCURSORPOS), **ps = (void **)(base + HK_PTR_SETCURSORPOS),
              **pc = (void **)(base + HK_PTR_CLIPCURSOR);
-        // this build? "mov eax, [mw4hook+0x4c7310]" in its GetCursorPos, "mov eax, [mw4hook+0x4c7318]" in its clip
+        // this build? "mov eax, [mw4hook+0x4d2258]" in its GetCursorPos, "mov eax, [mw4hook+0x4d2260]" in its clip
         const uint8_t *i1 = base + HK_AT_GETCURSORPOS, *i2 = base + HK_AT_CLIPCURSOR;
         if (i1[0] != 0xA1 || *(uint32_t *)(i1 + 1) != (uint32_t)(uintptr_t)pg || i2[0] != 0xA1 ||
             *(uint32_t *)(i2 + 1) != (uint32_t)(uintptr_t)pc) {
@@ -554,7 +554,7 @@ static void renderSizeSet(int want) {
     uint8_t *base = hkBase();
     if (!base) return;
     __try {
-        // this build of mw4hook? "mov [mw4hook+0x4b90d8], eax" where the width is stored
+        // this build of mw4hook? "mov [mw4hook+0x4c3308], eax" where the width is stored
         const uint8_t *ins = base + HK_AT_WIDTH_STORE;
         if (ins[0] != 0xA3 || *(uint32_t *)(ins + 1) != (uint32_t)(uintptr_t)(base + HK_OUT_WIDTH)) {
             logf("render: mw4hook.dll is not the build this was made for - render_height ignored");
@@ -586,10 +586,10 @@ static void renderSizeSet(int want) {
         if (!VirtualProtect(slot, sizeof *slot, PAGE_READWRITE, &old)) return;
         *slot = (void *)fakeGetClientRect;
         VirtualProtect(slot, sizeof *slot, old, &old);
-        // the picture's size the battles are drawn at (mw4hook.dll+0x4931c8 / +0x4931cc, kept once it is
+        // the picture's size the battles are drawn at (mw4hook.dll+0x49d3d8 / +0x49d3dc, kept once it is
         // worked out; the function at +0x14700 hands it out): the same
         LONG *pic = (LONG *)(base + HK_PICTURE);
-        const uint8_t *rd = base + HK_AT_PICTURE_READ; // "mov eax, [mw4hook+0x4931c8]"
+        const uint8_t *rd = base + HK_AT_PICTURE_READ; // "mov eax, [mw4hook+0x49d3d8]"
         bool picOk = rd[0] == 0xA1 && *(uint32_t *)(rd + 1) == (uint32_t)(uintptr_t)pic;
         if (picOk && ((pic[0] == real.right && pic[1] == real.bottom) || (pic[0] == 0 && pic[1] == 0))) {
             pic[0] = w;

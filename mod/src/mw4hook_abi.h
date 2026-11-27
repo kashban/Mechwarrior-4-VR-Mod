@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------------------------
 // Everything this mod knows about the insides of the two programs it reaches into:
 //
-//   mw4hook.dll   the MW4Engine DX11 renderer mod (not ours), build 20261107_ea16ef2
+//   mw4hook.dll   the MW4Engine DX11 renderer mod (not ours), build 20261125_d0cbae4
 //   MW4Mercs.exe  MechWarrior 4: Mercenaries, MekTek MekPak 3.1c
 //
 // Addresses, offsets, shader hashes and the names of mw4hook's annotation labels live here and
@@ -15,32 +15,32 @@
 
 // --- mw4hook.dll: data (offsets from its base) ---
 enum : uint32_t {
-    HK_SCREEN_MODE = 0x43e1c0,   // LONG[2]: the game's screen mode (what the cursor is mapped to)
-    HK_WATER_REFLECT = 0x43d3e0, // byte: the water's planar reflection is wanted in this pass
-    HK_PICTURE = 0x4931c8,       // LONG[2]: the size the battles are drawn at
-    HK_PICTURE_KNOWN = 0x4931d9, // byte: its picture's rectangle is worked out
-    HK_PICTURE_RECT = 0x4931dc,  // LONG[4]: its picture's rectangle in render pixels (what the cursor is mapped with)
-    HK_OUT_WINDOW = 0x4b90cc,    // HWND: its output window
-    HK_OUT_RECT = 0x4b90d0,      // RECT: its output size
-    HK_OUT_WIDTH = 0x4b90d8,     // (the RECT's right)
-    HK_PTR_GETCURSORPOS = 0x4c7310, // the real functions its cursor mapping calls through
-    HK_PTR_SETCURSORPOS = 0x4c7314,
-    HK_PTR_CLIPCURSOR = 0x4c7318,
-    HK_PTR_DRAWSHAPE =
-        0x4b4084, // the game's MLRClipper::DrawShape as mw4hook calls it (for shapes it leaves to the game)
-    HK_IAT_GETCLIENTRECT = 0x210308, // import slot
+    HK_SCREEN_MODE = 0x4483c8,   // LONG[2]: the game's screen mode (what the cursor is mapped to)
+    HK_WATER_REFLECT = 0x4473e0, // byte: the water's planar reflection is wanted in this pass
+    HK_PICTURE = 0x49d3d8,       // LONG[2]: the size the battles are drawn at
+    HK_PICTURE_KNOWN = 0x49d3e9, // byte: its picture's rectangle is worked out
+    HK_PICTURE_RECT = 0x49d3ec,  // LONG[4]: its picture's rectangle in render pixels (what the cursor is mapped with)
+    HK_OUT_WINDOW = 0x4c32fc,    // HWND: its output window
+    HK_OUT_RECT = 0x4c3300,      // RECT: its output size
+    HK_OUT_WIDTH = 0x4c3308,     // (the RECT's right)
+    HK_PTR_GETCURSORPOS = 0x4d2258, // the real functions its cursor mapping calls through
+    HK_PTR_SETCURSORPOS = 0x4d225c,
+    HK_PTR_CLIPCURSOR = 0x4d2260,
+    // the game's MLRClipper::DrawShape as mw4hook calls it (for shapes it leaves to the game)
+    HK_PTR_DRAWSHAPE = 0x4be294,
+    HK_IAT_GETCLIENTRECT = 0x21830c, // import slot
 };
 // --- mw4hook.dll: code that is checked before the data above is trusted ---
 enum : uint32_t {
-    HK_AT_PICTURE_READ = 0x14710, // mov eax, [HK_PICTURE]
-    HK_AT_WIDTH_STORE = 0x4e60a,  // mov [HK_OUT_WIDTH], eax
-    HK_AT_SIZE_CALL = 0x571a9,    // call [HK_IAT_GETCLIENTRECT]
-    HK_AT_WATER_CHECK = 0x9e5f0,  // cmp byte ptr [HK_WATER_REFLECT], 0
-    HK_AT_GETCURSORPOS = 0xbb953, // mov eax, [HK_PTR_GETCURSORPOS]
-    HK_AT_CLIPCURSOR = 0xbc0fd,   // mov eax, [HK_PTR_CLIPCURSOR]
-    HK_AT_DRAWSHAPE = 0x2834c,    // call [HK_PTR_DRAWSHAPE]
-    HK_AT_FOG = 0x275ee,          // movups [HK_FOG], xmm0 (the deferred view keeps what it last told of the fog)
-    HK_FOG = 0x43c8c8,            // 5 floats; [3] the fog's start, [4] its end (m; both 0: no fog)
+    HK_AT_PICTURE_READ = 0x14d20, // mov eax, [HK_PICTURE]
+    HK_AT_WIDTH_STORE = 0x4edca,  // mov [HK_OUT_WIDTH], eax
+    HK_AT_SIZE_CALL = 0x579e9,    // call [HK_IAT_GETCLIENTRECT]
+    HK_AT_WATER_CHECK = 0xa4750,  // cmp byte ptr [HK_WATER_REFLECT], 0
+    HK_AT_GETCURSORPOS = 0xc1a93, // mov eax, [HK_PTR_GETCURSORPOS]
+    HK_AT_CLIPCURSOR = 0xc223d,   // mov eax, [HK_PTR_CLIPCURSOR]
+    HK_AT_DRAWSHAPE = 0x28a18,    // call [HK_PTR_DRAWSHAPE]
+    HK_AT_FOG = 0x27c7e,          // movups [HK_FOG], xmm0 (the deferred view keeps what it last told of the fog)
+    HK_FOG = 0x4468c8,            // 5 floats; [3] the fog's start, [4] its end (m; both 0: no fog)
 };
 // --- mw4hook.dll: shaders (hashes of their bytecode) ---
 static const uint64_t HK_VS_TL = 0xad8cee09478ddb12ull;       // the CPU path's screen-space vertex shader
@@ -108,7 +108,7 @@ struct AbiBuild {
     uint32_t image; // SizeOfImage
     const char *name;
 };
-static const AbiBuild HK_KNOWN = {0x6aef4435, 0x58a000, "20261107_ea16ef2"};
+static const AbiBuild HK_KNOWN = {0x6b06a117, 0x596000, "20261125_d0cbae4"};
 static const AbiBuild GM_KNOWN = {0x4ddc5ee1, 0xf40000, "MekPak 3.1c"};
 
 // the player's vehicle, found the way mw4hook finds it: node = [GM_PLAYER_KEY] ^ [[GM_PLAYER_REF]],

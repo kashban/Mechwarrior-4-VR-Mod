@@ -29,7 +29,7 @@ renderer mod and needs it.
 ## Requirements
 
 - MechWarrior 4: Mercenaries, MekTek MekPak 3.1c
-- MW4Engine DX11 (https://www.moddb.com/mods/mw4-mercenaries-dx11-renderer-overhaul), **build 20261107_ea16ef2**, that is v1.0.7 (the mod checks the build and switches parts of itself off with
+- MW4Engine DX11 (https://www.moddb.com/mods/mw4-mercenaries-dx11-renderer-overhaul), **build 20261125_d0cbae4** (the mod checks the build and switches parts of itself off with
   any other)
 - A VR headset with a 32-bit OpenXR runtime. Tested with a Quest 3 over Virtual Desktop (VDXR) and over SteamVR
   (the Steam Link app). Meta Quest Link's own runtime does not work.
