@@ -119,7 +119,8 @@ it is saved.
   picture with black beside it, or a 16:9 part of it; `--down 1`: the lower part, with the dashboard).
   `--fit flat` makes an ordinary video without 3D of that 16:9 part of one eye (`--eye right`: the other one;
   3840 x 2160, `--height 1080` or `1440` for less) - for a trailer, or where no headset is at hand.
-  `--from` / `--to` for a part. It needs ffmpeg.
+  `--from` / `--to` for a part. It needs ffmpeg, which reads and writes the video with the graphics card where
+  it can (`--hwaccel none`, `--encoder libx265`: the processor instead).
 - **Sharper:** `render_height=3840` (read at the start) renders each eye at 3840 x 3840 and makes a video of
   7680 x 3840. That is 2.2 times the pixels for every picture of the game, not only for the video.
 - Settings in `mw4vr.ini`: `rec_fps`, `rec_bitrate_mbps`, `rec_hud` (0: the eyes' pictures without the HUD's

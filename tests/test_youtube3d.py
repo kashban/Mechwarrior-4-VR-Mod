@@ -79,7 +79,7 @@ class Sphere(unittest.TestCase):
 
 class Command(unittest.TestCase):
     def args(self, **kw):
-        a = argparse.Namespace(start=None, end=None, encoder='hevc_nvenc')
+        a = argparse.Namespace(start=None, end=None, encoder='hevc_nvenc', hwaccel='auto')
         a.__dict__.update(kw)
         return a
 
@@ -90,6 +90,12 @@ class Command(unittest.TestCase):
         self.assertEqual(c[c.index('-maxrate') + 1], '80M')
         self.assertEqual(c[c.index('-tag:v') + 1], 'hvc1')
         self.assertNotIn('-ss', c)
+
+    def test_what_reads_the_video(self):
+        c = youtube3d.command('in.mp4', 'out.mp4', 'G', 3840 * 2160, self.args())
+        self.assertEqual(c[c.index('-hwaccel') + 1], 'auto')
+        self.assertLess(c.index('-hwaccel'), c.index('-i'))
+        self.assertNotIn('-hwaccel', youtube3d.command('i', 'o', 'G', 3840 * 2160, self.args(hwaccel='none')))
 
     def test_part_and_size(self):
         c = youtube3d.command('in.mp4', 'out.mp4', 'G', 7680 * 4320, self.args(start=12.5, end=95, encoder='libx264'))
