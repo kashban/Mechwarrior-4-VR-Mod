@@ -3,7 +3,7 @@ or into an ordinary 16:9 video of one eye.
 
     python tools/video/youtube3d.py <mw4vr_videos/mw4vr_....mp4> [--fit vr180|whole|fill|flat] [--height 4096]
                                     [--fov 100.7] [--down 0.3] [--eye right] [--from 12.5] [--to 95]
-                                    [--out file.mp4] [--encoder hevc_nvenc]
+                                    [--out file.mp4] [--encoder hevc_nvenc] [--hwaccel auto]
 
 YouTube knows a video as 3D by two boxes in the .mp4 (Google's "Spherical Video V2": st3d says left | right, sv3d
 says which part of a sphere the picture is); this script writes them. A mark in an .mkv is not enough.
@@ -18,6 +18,9 @@ says which part of a sphere the picture is); this script writes them. A mark in 
 --height: the picture's height. vr180: by default what keeps the video's sharpness, 4096 at most (8192 x 4096).
 whole and fill: 2160 (3840 x 2160, the default) or 4320 (7680 x 4320, for a video of render_height 3200 and more).
 flat: 1080, 1440 or 2160 (3840 x 2160, the default).
+--hwaccel: what reads the video's pictures. auto (the default) lets ffmpeg take the graphics card where it can and
+the processor where not - a flat video is made in about half the time, a vr180 one hardly sooner (laying the
+picture onto the sphere is the processor's work). none: the processor alone. Or one of ffmpeg's names (cuda, ...).
 Needs ffmpeg and ffprobe.
 """
 
@@ -131,6 +134,8 @@ def graph(left: str, right: str) -> str:
 def command(src: str, dst: str, filters: str, pixels: int, a: argparse.Namespace) -> list[str]:
     """The call of ffmpeg: filters is the filter graph, pixels the size of a picture it makes."""
     cmd = ['ffmpeg', '-hide_banner', '-y']
+    if a.hwaccel != 'none':
+        cmd += ['-hwaccel', a.hwaccel]
     if a.start is not None:
         cmd += ['-ss', '%g' % a.start]
     if a.end is not None:
@@ -275,6 +280,9 @@ def main(argv: list[str]) -> int:
     p.add_argument('--to', dest='end', type=float, help='seconds: where to end')
     p.add_argument('--out', help='the file to write (default: beside the video, <name>_3d_<fit>_<height>.mp4)')
     p.add_argument('--encoder', default='hevc_nvenc', help='an ffmpeg video encoder (hevc_nvenc, libx265, ...)')
+    p.add_argument(
+        '--hwaccel', default='auto', help="what decodes the video: auto, none, or one of ffmpeg's (cuda, d3d11va, ...)"
+    )
     a = p.parse_args(argv)
     if not os.path.exists(a.video):
         print('no such file: %s' % a.video)
